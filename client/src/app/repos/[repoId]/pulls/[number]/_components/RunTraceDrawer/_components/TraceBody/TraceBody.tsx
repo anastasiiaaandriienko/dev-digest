@@ -7,7 +7,16 @@ import { useTranslations } from "next-intl";
 import { Badge } from "@devdigest/ui";
 import type { RunTrace, FindingRecord } from "@devdigest/shared";
 import { PROMPT_COLORS } from "../../constants";
-import { formatSeconds, formatTokens } from "../../helpers";
+import { droppedFromLog, formatSeconds, formatTokens, groundingTone, type GroundingTone } from "../../helpers";
+import type { IconName } from "@devdigest/ui";
+
+/** Grounding badge per tone (client spec §6): all passed / some dropped / nothing or failed. */
+const GROUNDING_TONE: Record<GroundingTone, { c: string; bg: string; icon: IconName }> = {
+  ok: { c: "var(--ok)", bg: "var(--ok-bg)", icon: "Check" },
+  warn: { c: "var(--warn)", bg: "var(--warn-bg)", icon: "AlertTriangle" },
+  muted: { c: "var(--text-muted)", bg: "var(--bg-hover)", icon: "Info" },
+};
+import { formatCost } from "@/lib/format";
 import { s } from "../../styles";
 import { TraceSection } from "../TraceSection";
 import { ToolCallRow } from "../ToolCallRow";
@@ -18,6 +27,10 @@ import { Row, Stat } from "../atoms";
 export function TraceBody({ trace, findings }: { trace: RunTrace; findings: FindingRecord[] }) {
   const t = useTranslations("runs");
   const stats = trace.stats;
+  const logLines = React.useMemo(() => trace.log.map((l) => ({ m: l.msg })), [trace.log]);
+  const dropped = React.useMemo(() => droppedFromLog(logLines), [logLines]);
+  // A run that logged an error never produced a meaningful grounding result.
+  const tone = groundingTone(stats.grounding, trace.log.some((l) => l.kind === "error"));
   return (
     <>
       <TraceSection icon="Settings" title={t("trace.configuration")}>
@@ -55,19 +68,23 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
         icon="Gauge"
         title={t("trace.stats")}
         right={
-          <Badge color="var(--ok)" bg="var(--ok-bg)" icon="Check">
-            {stats.grounding}
-          </Badge>
+          <span data-testid="grounding-badge" data-tone={tone}>
+            <Badge color={GROUNDING_TONE[tone].c} bg={GROUNDING_TONE[tone].bg} icon={GROUNDING_TONE[tone].icon}>
+              {stats.grounding}
+            </Badge>
+          </span>
         }
       >
         <div style={s.statsRow}>
           <Stat label={t("trace.stat.duration")} val={formatSeconds(stats.duration_ms)} />
           <Stat label={t("trace.stat.tokens")} val={formatTokens(stats.tokens_in, stats.tokens_out)} />
+          {/* Missing key (a pre-L01 trace) and null both mean unknown → "n/a". */}
+          <Stat label={t("trace.stat.cost")} val={formatCost(stats.cost_usd, { unknown: t("trace.costUnknown") })} />
           <Stat label={t("trace.stat.findings")} val={stats.findings} />
         </div>
       </TraceSection>
 
-      <FindingsSection findings={findings} />
+      <FindingsSection findings={findings} dropped={dropped} />
 
       <TraceSection icon="FileText" title={t("trace.promptAssembly")} defaultOpen={false}>
         <PromptBlock label={t("trace.prompt.system")} text={trace.prompt_assembly.system} color={PROMPT_COLORS.system} />

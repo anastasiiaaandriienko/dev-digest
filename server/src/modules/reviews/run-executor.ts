@@ -5,7 +5,7 @@ import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
-import { REVIEW_STRATEGY } from './constants.js';
+import { RECONCILE_DEADLINE_MS, REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 
@@ -15,6 +15,33 @@ export class RunCancelledError extends Error {
     super('Run cancelled');
     this.name = 'RunCancelledError';
   }
+}
+
+/** The success claim found the run no longer `running` (reaped, deleted, …). */
+export class RunNotRunningError extends Error {
+  constructor(status: string | null) {
+    super(`Run is no longer running (status=${status ?? 'missing'})`);
+    this.name = 'RunNotRunningError';
+  }
+}
+
+/** What reconciliation established about a run's terminal state. */
+type TerminalOutcome =
+  | { kind: 'cancelled' | 'failed' | 'done' | 'missing' }
+  | { kind: 'ended'; status: string | null }
+  | { kind: 'unknown'; error: string };
+
+/**
+ * Reject if `p` has not settled within `ms`. A client-side backstop only: it
+ * does not cancel the underlying query (the repository's SET LOCAL timeouts
+ * bound it server-side).
+ */
+function withDeadline<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([p, deadline]).finally(() => clearTimeout(timer));
 }
 
 /** Minimal structured logger (pino-compatible: (obj, msg)) for runtime logs. */
@@ -72,22 +99,20 @@ export class ReviewRunExecutor {
     // Pre-work failure (e.g. diff load) fails EVERY queued run. The error was
     // already emitted via runLog (fanned out → in each run's buffer); here we
     // mark the rows failed and persist the buffered log so it survives a reload.
+    // Guarded (spec §3.5): a run already cancelled keeps its status, and the
+    // buffer trace is written only when this call moved the run to `failed`.
     const failAll = async (msg: string) => {
       for (const { runId, agent } of jobs) {
-        await this.repo
-          .completeAgentRun(runId, {
-            status: 'failed',
-            durationMs: 0,
-            tokensIn: 0,
-            tokensOut: 0,
-            findingsCount: 0,
-            grounding: '0/0 passed',
-            error: msg,
-          })
-          .catch(() => undefined);
-        await this.repo
-          .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed'))
-          .catch(() => undefined);
+        const r = await withDeadline(
+          this.repo.recordRunFailed(runId, { durationMs: 0, error: msg }),
+          RECONCILE_DEADLINE_MS,
+        ).catch(() => 'noop' as const);
+        if (r === 'transitioned') {
+          await withDeadline(
+            this.repo.insertRunTraceIfAbsent(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed')),
+            RECONCILE_DEADLINE_MS,
+          ).catch(() => undefined);
+        }
         this.container.runBus.complete(runId);
       }
     };
@@ -210,28 +235,9 @@ export class ReviewRunExecutor {
           if (this.container.runBus.isCancelled(runId)) throw new RunCancelledError();
         },
       });
-      const { tokensIn, tokensOut, grounding } = outcome;
+      const { tokensIn, tokensOut, grounding, costUsd } = outcome;
 
       const keptFindings = outcome.review.findings;
-
-      // ---- Persist review + findings ----------------------------------------
-      const review = await this.repo.insertReview({
-        workspaceId,
-        prId: pull.id,
-        agentId: agent.id,
-        runId,
-        kind: 'review',
-        verdict: outcome.review.verdict,
-        summary: outcome.review.summary,
-        score: outcome.review.score,
-        model: agent.model,
-      });
-      const findingRows = await this.repo.insertFindings(review.id, keptFindings);
-      runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);
-
-      // Mark the commit this review ran against so the PR list can tell
-      // reviewed / needs-review (head moved) / stale apart.
-      await this.repo.markReviewed(pull.id, pull.headSha);
 
       const durationMs = Date.now() - start;
 
@@ -239,19 +245,9 @@ export class ReviewRunExecutor {
       // the timeline colors on, NOT the model's self-reported verdict.
       const blockers = countBlockers(keptFindings, agent.ciFailOn);
 
-      // ---- Observability: agent_runs + ONE run_traces document --------------
-      await this.repo.completeAgentRun(runId, {
-        status: 'done',
-        durationMs,
-        tokensIn,
-        tokensOut,
-        findingsCount: findingRows.length,
-        grounding,
-        score: outcome.review.score,
-        blockers,
-        error: null,
-      });
-
+      // The trace is built BEFORE the transaction, so its log ends here: the
+      // "Persisted review" / "Run complete" lines are published only after the
+      // commit and are not claimed by the persisted trace (spec §3.6, D1).
       const trace: RunTrace = {
         config: {
           agent: agent.name,
@@ -265,8 +261,10 @@ export class ReviewRunExecutor {
           duration_ms: durationMs,
           tokens_in: tokensIn,
           tokens_out: tokensOut,
-          findings: findingRows.length,
+          findings: keptFindings.length,
           grounding,
+          // reviewer-core's figure as is: a number, or null when unknown (never 0).
+          cost_usd: costUsd,
         },
         prompt_assembly: outcome.assembly,
         tool_calls: outcome.chunks.map((c) => ({
@@ -282,35 +280,142 @@ export class ReviewRunExecutor {
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
       };
+
+      // ---- ONE transaction: done + review + findings + reviewed sha + trace --
+      // `markReviewed` records the commit this review ran against so the PR list
+      // can tell reviewed / needs-review (head moved) / stale apart.
+      const result = await this.repo.finalizeDoneRun({
+        runId,
+        review: {
+          workspaceId,
+          prId: pull.id,
+          agentId: agent.id,
+          runId,
+          kind: 'review',
+          verdict: outcome.review.verdict,
+          summary: outcome.review.summary,
+          score: outcome.review.score,
+          model: agent.model,
+        },
+        findings: keptFindings,
+        reviewedSha: { prId: pull.id, sha: pull.headSha },
+        completion: {
+          durationMs,
+          tokensIn,
+          tokensOut,
+          findingsCount: keptFindings.length,
+          grounding,
+          score: outcome.review.score,
+          blockers,
+        },
+        trace,
+      });
+      if (!result.finalized) {
+        // Lost the claim: the run is no longer `running` (cancelled, reaped or
+        // deleted). Nothing was written; reconciliation below decides the rest.
+        if (result.currentStatus === 'cancelled') throw new RunCancelledError();
+        throw new RunNotRunningError(result.currentStatus);
+      }
+
+      // Committed — only now publish success (spec §3.6).
+      runLog.result(`Persisted review ${result.review.id} with ${result.findings.length} finding(s)`);
       runLog.info('Run complete; trace persisted');
-      await this.repo.saveRunTrace(runId, trace);
       this.container.runBus.complete(runId);
 
-      return { review, findings: findingRows, grounding, raw: outcome.review };
+      return { review: result.review, findings: result.findings, grounding, raw: outcome.review };
     } catch (err) {
-      // Failure/cancel: persist status + the error text + the log-so-far so the
-      // run (and WHY it failed) is visible on the UI after a reload.
-      const cancelled = err instanceof RunCancelledError;
-      const status = cancelled ? 'cancelled' : 'failed';
-      const msg = cancelled ? 'Cancelled by user' : (err as Error).message;
-      runLog.error(cancelled ? 'Run cancelled by user' : `Run failed: ${msg}`);
-      await this.repo
-        .completeAgentRun(runId, {
-          status,
-          durationMs: Date.now() - start,
-          tokensIn: 0,
-          tokensOut: 0,
-          findingsCount: 0,
-          grounding: '0/0 passed',
-          error: msg,
-        })
-        .catch(() => undefined);
-      await this.repo
-        .saveRunTrace(runId, this.traceFromBuffer(runId, pull, agent, '0/0 passed', Date.now() - start))
-        .catch(() => undefined);
+      // Failure/cancel — including an ambiguous commit. The terminal event is
+      // chosen from the guarded DB write, never from the exception alone.
+      await this.reconcileTerminal(runId, pull, agent, runLog, err, Date.now() - start);
       this.container.runBus.complete(runId);
       throw err;
     }
+  }
+
+  /**
+   * Persist the terminal state of a run that did not finish successfully, then
+   * publish the matching event and (if this call wrote the state) the buffer
+   * trace. Guarded: never rewrites a terminal status, so a run whose success
+   * transaction actually committed stays `done` with its trace. Bounded by
+   * RECONCILE_DEADLINE_MS (plus per-statement DB timeouts in the repository).
+   * Spec §3.5–§3.7.
+   */
+  private async reconcileTerminal(
+    runId: string,
+    pull: PullRow,
+    agent: AgentRow,
+    runLog: RunLogger,
+    err: unknown,
+    durationMs: number,
+  ): Promise<void> {
+    const cancelled = err instanceof RunCancelledError;
+    const msg = cancelled ? 'Cancelled by user' : (err as Error).message;
+
+    let outcome: TerminalOutcome;
+    try {
+      outcome = await withDeadline(
+        this.settleTerminal(runId, cancelled, msg, durationMs),
+        RECONCILE_DEADLINE_MS,
+      );
+    } catch (e) {
+      outcome = { kind: 'unknown', error: (e as Error).message };
+    }
+
+    switch (outcome.kind) {
+      case 'cancelled':
+        runLog.error('Run cancelled by user');
+        break;
+      case 'failed':
+        runLog.error(`Run failed: ${msg}`);
+        break;
+      case 'done':
+        runLog.info('Run complete (confirmed after a persistence error)');
+        break;
+      case 'ended':
+        runLog.info(`Run already ended with status ${outcome.status ?? 'unknown'}`);
+        break;
+      case 'missing':
+        runLog.info('Run no longer exists');
+        break;
+      case 'unknown':
+        runLog.error(`Run outcome unknown: ${outcome.error}`);
+        break;
+    }
+
+    // Only when THIS call wrote the terminal state; built after the event above
+    // so the persisted log ends with it. Insert-only: never replaces a trace.
+    if (outcome.kind === 'cancelled' || outcome.kind === 'failed') {
+      const trace = this.traceFromBuffer(runId, pull, agent, '0/0 passed', durationMs);
+      await withDeadline(this.repo.insertRunTraceIfAbsent(runId, trace), RECONCILE_DEADLINE_MS).catch(
+        () => undefined,
+      );
+    }
+  }
+
+  /** The DB half of reconcileTerminal: guarded write, then (if no-op) a status read. */
+  private async settleTerminal(
+    runId: string,
+    cancelled: boolean,
+    msg: string,
+    durationMs: number,
+  ): Promise<TerminalOutcome> {
+    if (cancelled) {
+      const r = await this.repo.recordRunCancelled(runId, { durationMs });
+      if (r !== 'noop') return { kind: 'cancelled' };
+    } else {
+      const r = await this.repo.recordRunFailed(runId, { durationMs, error: msg });
+      if (r === 'transitioned') return { kind: 'failed' };
+    }
+    const current = await this.repo.getRunStatus(runId);
+    if (!current) return { kind: 'missing' };
+    if (current.status === 'done') return { kind: 'done' };
+    if (current.status === 'cancelled' && !cancelled) {
+      // Cancelled by the user while this run failed for another reason: keep
+      // the status, fill in the cancellation metadata once (spec §3.5 B).
+      const r = await this.repo.recordRunCancelled(runId, { durationMs });
+      if (r !== 'noop') return { kind: 'cancelled' };
+    }
+    return { kind: 'ended', status: current.status };
   }
 
   /**
@@ -421,7 +526,7 @@ export class ReviewRunExecutor {
         pr: pull.number,
         source: 'local',
       },
-      stats: { duration_ms: durationMs, tokens_in: 0, tokens_out: 0, findings: 0, grounding },
+      stats: { duration_ms: durationMs, tokens_in: 0, tokens_out: 0, findings: 0, grounding, cost_usd: null },
       prompt_assembly: { system: agent.systemPrompt, skills: null, memory: null, specs: null, user: '' },
       tool_calls: [],
       raw_output: '',

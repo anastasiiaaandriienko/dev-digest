@@ -3,7 +3,7 @@
 "use client";
 
 import React from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useMutationState, useQueryClient } from "@tanstack/react-query";
 import { api, API_BASE } from "../api";
 import { notify } from "../toast";
 import type {
@@ -56,18 +56,56 @@ export function usePrReviews(prId: string | null | undefined) {
   });
 }
 
+/** PR-list query key: one repo's list when known, every repo's list otherwise. */
+function pullsKey(repoId: string | null | undefined) {
+  return repoId ? ["pulls", repoId] : ["pulls"];
+}
+
 /** Delete one run from the PR's run history (+ its trace). */
-export function useDeleteRun(prId: string | null | undefined) {
+export function useDeleteRun(prId: string | null | undefined, repoId?: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (runId: string) => api.del<{ ok: boolean }>(`/runs/${runId}`),
     // Deleting a run also deletes the review it produced (server-side), so drop
-    // both the timeline and the Review Runs list from cache.
+    // both the timeline and the Review Runs list from cache. The PR list's cost
+    // total (L01) drops with it.
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      qc.invalidateQueries({ queryKey: pullsKey(repoId) });
     },
   });
+}
+
+/** Ids of runs that were `running` in `prev` and are now settled in `next`. */
+export function settledRunIds(
+  prev: RunSummary[] | undefined,
+  next: RunSummary[] | undefined,
+): string[] {
+  if (!prev || !next) return [];
+  const wasRunning = new Set(prev.filter((r) => r.status === "running").map((r) => r.run_id));
+  return next.filter((r) => wasRunning.has(r.run_id) && r.status !== "running").map((r) => r.run_id);
+}
+
+/**
+ * L01 cost refresh. When a run in the PR's history leaves `running` — seen via
+ * the SSE-driven `pr-runs` invalidation or via its 4 s poll — its cost has
+ * just landed: refetch the PR list (cost total) and that run's trace (Cost
+ * stat). The timeline itself is the `pr-runs` data that triggered this.
+ */
+export function useRefreshCostOnRunSettled(
+  runs: RunSummary[] | undefined,
+  repoId: string | null | undefined,
+) {
+  const qc = useQueryClient();
+  const prev = React.useRef<RunSummary[] | undefined>(undefined);
+  React.useEffect(() => {
+    const settled = settledRunIds(prev.current, runs);
+    prev.current = runs;
+    if (settled.length === 0) return;
+    qc.invalidateQueries({ queryKey: pullsKey(repoId) });
+    for (const runId of settled) qc.invalidateQueries({ queryKey: ["run-trace", runId] });
+  }, [runs, repoId, qc]);
 }
 
 /** Request cancellation of an in-flight run (takes effect at the next step). */
@@ -135,29 +173,105 @@ export function useRunReview() {
   });
 }
 
-// ---- Finding actions (accept/dismiss) ----
+// ---- Finding actions (accept / reject = server "dismiss") ----
+
+/** Mutation key of finding decisions; per-card status is read back by it. */
+export const FINDING_ACTION_KEY = ["finding-action"] as const;
+
+export interface FindingActionVars {
+  findingId: string;
+  action: FindingActionKind;
+  reply?: string;
+  prId?: string;
+}
+
+type DecisionFields = Pick<ReviewRecord["findings"][number], "accepted_at" | "dismissed_at">;
+
+/** Set one finding's decision timestamps in a cached reviews list (pure). */
+export function patchFinding(
+  reviews: ReviewRecord[] | undefined,
+  findingId: string,
+  fields: DecisionFields,
+): ReviewRecord[] | undefined {
+  if (!reviews) return reviews;
+  return reviews.map((r) =>
+    r.findings.some((f) => f.id === findingId)
+      ? { ...r, findings: r.findings.map((f) => (f.id === findingId ? { ...f, ...fields } : f)) }
+      : r,
+  );
+}
+
+/** The timestamps a decision leaves behind; accept and dismiss exclude each other (server-side too). */
+export function decisionFields(action: FindingActionKind, at: string): DecisionFields | null {
+  if (action === "accept") return { accepted_at: at, dismissed_at: null };
+  if (action === "dismiss") return { accepted_at: null, dismissed_at: at };
+  return null;
+}
+
 export function useFindingAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      findingId,
-      action,
-      reply,
-      prId: _prId,
-    }: {
-      findingId: string;
-      action: FindingActionKind;
-      reply?: string;
-      prId?: string;
-    }) =>
+    mutationKey: FINDING_ACTION_KEY,
+    mutationFn: ({ findingId, action, reply }: FindingActionVars) =>
       api.post<{ finding: ReviewRecord["findings"][number]; memoryId?: string }>(
         `/findings/${findingId}/${action}`,
         reply ? { reply } : undefined,
       ),
-    onSuccess: (_d, { prId }) => {
+    // Optimistic: the card, the accordion's blocker count, the PR-list popover
+    // and the Trace drawer all read ["reviews", prId], so they update at once.
+    onMutate: async ({ findingId, action, prId }) => {
+      const fields = decisionFields(action, new Date().toISOString());
+      if (!prId || !fields) return undefined;
+      const key = ["reviews", prId];
+      await qc.cancelQueries({ queryKey: key });
+      const before = qc
+        .getQueryData<ReviewRecord[]>(key)
+        ?.flatMap((r) => r.findings)
+        .find((f) => f.id === findingId);
+      qc.setQueryData<ReviewRecord[]>(key, (old) => patchFinding(old, findingId, fields));
+      return before ? { key, previous: { accepted_at: before.accepted_at, dismissed_at: before.dismissed_at } } : undefined;
+    },
+    // Roll back ONLY this finding (other in-flight decisions keep their state).
+    // The global MutationCache onError already shows the error toast.
+    onError: (_err, { findingId }, ctx) => {
+      if (ctx) qc.setQueryData<ReviewRecord[]>(ctx.key, (old) => patchFinding(old, findingId, ctx.previous));
+    },
+    onSettled: (_d, _e, { prId }) => {
       if (prId) qc.invalidateQueries({ queryKey: ["reviews", prId] });
     },
   });
+}
+
+export type DecisionStatus = "pending" | "error" | "success";
+
+/** Latest decision status per finding id, across every mounted panel. */
+export function useFindingDecisionStatus(): Map<string, DecisionStatus> {
+  const rows = useMutationState({
+    filters: { mutationKey: FINDING_ACTION_KEY },
+    select: (m) => ({
+      id: (m.state.variables as FindingActionVars | undefined)?.findingId,
+      status: m.state.status,
+      at: m.state.submittedAt,
+    }),
+  });
+  return React.useMemo(() => latestDecisionStatus(rows), [rows]);
+}
+
+/** Reduce mutation rows to the most recent status per finding (pure). */
+export function latestDecisionStatus(
+  rows: readonly { id?: string; status: string; at: number }[],
+): Map<string, DecisionStatus> {
+  const latest = new Map<string, { status: string; at: number }>();
+  for (const r of rows) {
+    if (!r.id) continue;
+    const prev = latest.get(r.id);
+    if (!prev || r.at >= prev.at) latest.set(r.id, { status: r.status, at: r.at });
+  }
+  const out = new Map<string, DecisionStatus>();
+  for (const [id, { status }] of latest) {
+    if (status === "pending" || status === "error" || status === "success") out.set(id, status);
+  }
+  return out;
 }
 
 /**

@@ -12,9 +12,12 @@ import {
   EvalRun,
   MemoryItem,
   RunTrace,
+  RunStats,
+  RunSummary,
   Settings,
   Repo,
   PrDetail,
+  PrMeta,
 } from '@devdigest/shared';
 
 /**
@@ -206,5 +209,64 @@ describe('platform DTOs', () => {
         commits: [],
       }),
     ).not.toThrow();
+  });
+});
+
+// L01 cost badge (specs/review-run-cost.md §5, T8): number, null and — where the
+// field is optional — missing all parse; null is never coerced to 0.
+describe('L01 cost contracts', () => {
+  const stats = { duration_ms: 1, tokens_in: 1, tokens_out: 1, findings: 0, grounding: '0/0 passed' };
+  const summary = {
+    run_id: 'r1',
+    agent_id: null,
+    agent_name: null,
+    provider: null,
+    model: null,
+    status: 'done',
+    error: null,
+    duration_ms: 1,
+    tokens_in: 1,
+    tokens_out: 1,
+    findings_count: 0,
+    grounding: null,
+    ran_at: null,
+    score: null,
+    blockers: null,
+  };
+  const pr = {
+    number: 482,
+    title: 't',
+    author: 'a',
+    branch: 'b',
+    base: 'main',
+    head_sha: 'sha',
+    additions: 0,
+    deletions: 0,
+    files_count: 0,
+    status: 'open',
+  };
+
+  it('RunStats.cost_usd: number, 0, null and missing (old traces) parse', () => {
+    expect(RunStats.parse({ ...stats, cost_usd: 0.001 }).cost_usd).toBe(0.001);
+    expect(RunStats.parse({ ...stats, cost_usd: 0 }).cost_usd).toBe(0);
+    expect(RunStats.parse({ ...stats, cost_usd: null }).cost_usd).toBeNull();
+    expect(RunStats.parse(stats).cost_usd).toBeUndefined();
+    expect(RunStats.safeParse({ ...stats, cost_usd: -1 }).success).toBe(false);
+  });
+
+  it('RunSummary.cost_usd is required-but-nullable (the runs endpoint always sends it)', () => {
+    expect(RunSummary.parse({ ...summary, cost_usd: 0.002 }).cost_usd).toBe(0.002);
+    expect(RunSummary.parse({ ...summary, cost_usd: null }).cost_usd).toBeNull();
+    expect(RunSummary.safeParse(summary).success).toBe(false);
+  });
+
+  it('PrMeta.cost_usd / cost_partial: list-only, number / null / missing parse', () => {
+    expect(PrMeta.parse({ ...pr, cost_usd: 0.42, cost_partial: true })).toMatchObject({
+      cost_usd: 0.42,
+      cost_partial: true,
+    });
+    expect(PrMeta.parse({ ...pr, cost_usd: null, cost_partial: false }).cost_usd).toBeNull();
+    expect(PrMeta.parse(pr).cost_usd).toBeUndefined();
+    expect(PrMeta.safeParse({ ...pr, cost_partial: 'yes' }).success).toBe(false);
   });
 });

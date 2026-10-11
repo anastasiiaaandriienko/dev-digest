@@ -12,9 +12,12 @@ import type { FindingRecord } from "@devdigest/shared";
 import { useRunTrace } from "@/lib/hooks/trace";
 import { useRunEvents } from "@/lib/hooks/reviews";
 import { DRAWER_WIDTH, LOG_HEIGHT, TABS } from "./constants";
-import { eventsToLog, traceLog } from "./helpers";
+import { eventsToLog, findingsFromLog, isFindingLogLine, traceLog } from "./helpers";
 import { s } from "./styles";
 import { TraceBody } from "./_components/TraceBody";
+import { LogFindings } from "./_components/LogFindings";
+import { PhaseStepper } from "../PhaseStepper";
+import { phasesFrom } from "@/lib/run-phases";
 
 export interface RunTraceDrawerProps {
   runId: string;
@@ -25,6 +28,8 @@ export interface RunTraceDrawerProps {
   findings?: FindingRecord[];
   /** When true, the drawer defaults to the live log and streams SSE. */
   running?: boolean;
+  /** The run's persisted status (agent_runs.status), for the phase stepper. */
+  runStatus?: string | null;
   onClose: () => void;
 }
 
@@ -39,6 +44,7 @@ export default function RunTraceDrawer({
   prNumber,
   findings = [],
   running = false,
+  runStatus = null,
   onClose,
 }: RunTraceDrawerProps) {
   const t = useTranslations("runs");
@@ -62,6 +68,22 @@ export default function RunTraceDrawer({
   // When historical, fall back to the trace's persisted log for the Live-log tab.
   const persistedLog: LogLine[] = traceLog(trace);
   const shownLog = running ? log : persistedLog;
+  // L01: findings context for the log tab, and an optional narrowing of the
+  // log to finding-related lines (the LiveLogStream filter input still applies).
+  const [onlyFindingLines, setOnlyFindingLines] = React.useState(false);
+  const logFindings = findingsFromLog(shownLog);
+  const visibleLog = onlyFindingLines ? shownLog.filter((l) => isFindingLogLine(l.m)) : shownLog;
+
+  // L01 lifecycle phases from the same lines the log shows. While the stream is
+  // open the run is running; afterwards the persisted status wins, except a
+  // stale "running" (the run list polls) — then the log's own end lines decide.
+  const phaseLines = shownLog.map((l) => ({ kind: l.k, msg: l.m }));
+  const phaseStatus = stillRunning
+    ? "running"
+    : runStatus === "running" && running && !liveRunning
+      ? null
+      : runStatus;
+  const phases = phasesFrom(phaseLines, phaseStatus);
 
   const prCtx = prNumber != null ? `${t("drawer.pr", { number: prNumber })} · ` : "";
   const subtitle = `${prCtx}${stillRunning ? t("drawer.running") : t("drawer.completed")}`;
@@ -86,6 +108,9 @@ export default function RunTraceDrawer({
         </div>
       }
     >
+      <div style={{ paddingTop: 12 }}>
+        <PhaseStepper result={phases} />
+      </div>
       <Tabs tabs={[...TABS]} value={tab} onChange={setTab} pad="0" />
       <div style={s.tabBody}>
         {tab === "trace" ? (
@@ -99,7 +124,15 @@ export default function RunTraceDrawer({
             <div style={s.emptyNote}>{t("drawer.noTrace")}</div>
           )
         ) : (
-          <LiveLogStream log={shownLog} running={stillRunning} height={LOG_HEIGHT} />
+          <>
+            <LogFindings
+              findings={findings}
+              summary={logFindings}
+              onlyFindings={onlyFindingLines}
+              onOnlyFindingsChange={setOnlyFindingLines}
+            />
+            <LiveLogStream log={visibleLog} running={stillRunning} height={LOG_HEIGHT} />
+          </>
         )}
       </div>
     </Drawer>

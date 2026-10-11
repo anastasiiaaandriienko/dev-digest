@@ -18,8 +18,11 @@
    - the **Review runs** accordions (verdict, counts, score, findings).
 5. When the run finishes, the SSE stream closes. The page then invalidates the run
    lists and refetches reviews, and the timeline row shows its outcome badge.
-6. `?trace=<runId>` opens the Trace drawer, with a Trace tab and a Live log tab.
-7. A finding is accepted or dismissed by clicking its button, or with the `a`/`d` keys.
+6. `?trace=<runId>` opens the Trace drawer: the five-phase stepper on top, then a
+   Trace tab and a Live log tab.
+7. A finding is accepted or rejected by clicking **Accept** / **Reject**, or with
+   the `a`/`d` keys. Reject calls the existing `dismiss` action; the card's tag
+   reads "rejected".
 
 ## 2. Existing e2e coverage
 
@@ -38,8 +41,8 @@ These are seeded, read-only checks; no review is executed.
 - The seeded PR has no diff patches and no clone.
 - The server has no deterministic LLM mode.
 - The seed has no `agent_runs` or `run_traces` rows.
-- Accept and Dismiss write to the DB, and every flow shares one seeded DB and one
-  browser session.
+- Accept and Reject (`dismiss`) write to the DB, and every flow shares one seeded
+  DB and one browser session.
 
 **Copy the existing flows depend on.** Keep it stable, or update the flows in the same change:
 
@@ -88,9 +91,9 @@ Unless stated otherwise, every flow below is read-only and starts from `open {BA
 | F2 | `09-run-timeline-cost` | E1 | PR #482 → Agent runs; the timeline row shows the run's outcome badge and the formatted cost |
 | F3 | `10-trace-drawer` | E1 | click the run's trace icon → URL `trace=`; text "Cost" and the formatted value; the drawer's Findings section lists "Hardcoded Stripe secret key in commit" |
 | F4 | `11-severity-filter` | the client feature only | Agent runs → the severity chips show "1" (critical) and "1" (warning); click the WARNING chip → "N+1 query in user list endpoint" is visible and the Stripe finding is gone (`wait --text` the visible one, then `find text … ` must fail; see the note below) |
-| F5 | `12-findings-popover` | the client feature (P1) | hover the PR #482 row's score (`find text "#482" hover`) → the popover shows "Hardcoded Stripe secret key in commit" and "Open findings" |
-| F6 | `13-execution-phases` | E1 (trace log seeded) | open the trace → Live log tab → the five phase labels are visible with the `done` state |
-| F7 | `14-accept-reject` | E1, plus run **last** or on its own seed | expand a finding → click "Reject" → the "dismissed" tag is visible; `open` again → still dismissed (persisted) |
+| F5 | `12-findings-popover` | the client feature (P1) | hover the PR #482 **row** (`find text "Add rate limiting to public API endpoints" hover`); the popover opens after a 250 ms hover delay, so `wait --text` for it → the popover shows "Hardcoded Stripe secret key in commit" and "Open findings →". The title is a real link and clicking it still navigates (covered by 02/04). Keyboard access (the title link, and the FINDINGS button that opens the popover and moves focus into it) is covered by component tests, not by this runner. |
+| F6 | `13-execution-phases` | E1 (trace log seeded) | open the trace → the phase stepper sits **above the drawer's Trace / Live log tabs** (visible on either tab) → the five labels "Initiation", "Planning", "Implementation", "Validation", "Completion" are visible; for a `done` run each is "completed", except Planning, which shows "skipped" when the seeded log contains "Repo intel disabled for this agent — skipping context enrichment" |
+| F7 | `14-accept-reject` | the seeded review (no E1); run **last** or on its own seed | expand a finding → click "Reject" → the "rejected" tag is visible (the label is "Reject"; it calls the existing `dismiss` action) → `open` again → still "rejected" (persisted) |
 
 **Notes:**
 - **Unverified commands.** The existing specs use only the `open`, `wait`,

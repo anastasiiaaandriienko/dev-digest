@@ -21,6 +21,8 @@ export type ReviewRow = typeof t.reviews.$inferSelect;
 import * as reviewRepo from './repository/review.repo.js';
 import * as runRepo from './repository/run.repo.js';
 import * as pullRepo from './repository/pull.repo.js';
+import { RECONCILE_DB_TIMEOUT_MS } from './constants.js';
+export type { FinalizeDoneRunInput, FinalizeDoneRunResult } from './repository/run.repo.js';
 
 export class ReviewRepository {
   constructor(private db: Db) {}
@@ -180,5 +182,45 @@ export class ReviewRepository {
 
   getRunTrace(runId: string): Promise<RunTrace | undefined> {
     return runRepo.getRunTrace(this.db, runId);
+  }
+
+  // ---- L01 Step 2: transactional success + guarded terminal writes --------
+
+  /** done + review + findings + last_reviewed_sha + trace in ONE transaction. */
+  finalizeDoneRun(input: runRepo.FinalizeDoneRunInput): Promise<runRepo.FinalizeDoneRunResult> {
+    return runRepo.finalizeDoneRun(this.db, input);
+  }
+
+  // The reconciliation calls below each run in a short transaction with
+  // SET LOCAL timeouts, so a lock left by an ambiguous commit cannot block them.
+
+  recordRunFailed(
+    runId: string,
+    values: { durationMs: number; error: string },
+  ): Promise<'transitioned' | 'noop'> {
+    return runRepo.withLocalTimeouts(this.db, RECONCILE_DB_TIMEOUT_MS, (tx) =>
+      runRepo.recordRunFailed(tx, runId, values),
+    );
+  }
+
+  recordRunCancelled(
+    runId: string,
+    values: { durationMs: number },
+  ): Promise<'transitioned' | 'annotated' | 'noop'> {
+    return runRepo.withLocalTimeouts(this.db, RECONCILE_DB_TIMEOUT_MS, (tx) =>
+      runRepo.recordRunCancelled(tx, runId, values),
+    );
+  }
+
+  insertRunTraceIfAbsent(runId: string, trace: RunTrace): Promise<boolean> {
+    return runRepo.withLocalTimeouts(this.db, RECONCILE_DB_TIMEOUT_MS, (tx) =>
+      runRepo.insertRunTraceIfAbsent(tx, runId, trace),
+    );
+  }
+
+  getRunStatus(runId: string): Promise<{ status: string | null } | undefined> {
+    return runRepo.withLocalTimeouts(this.db, RECONCILE_DB_TIMEOUT_MS, (tx) =>
+      runRepo.getRunStatus(tx, runId),
+    );
   }
 }

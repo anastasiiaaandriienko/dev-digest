@@ -30,6 +30,8 @@ export const s = {
     textOverflow: "ellipsis",
     color: hover ? "var(--accent-text)" : "var(--text-primary)",
   }),
+  /** The PR title link: looks like the old title text (colour comes from rowTitle). */
+  rowTitleLink: { color: "inherit", textDecoration: "none" } satisfies CSSProperties,
   rowNumber: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
   authorCell: {
     display: "flex",
@@ -40,6 +42,11 @@ export const s = {
   } satisfies CSSProperties,
   sizeBadgeBorder: (color: string): CSSProperties => ({ border: `1px solid ${color}` }),
   scoreCell: { display: "flex", alignItems: "center" } satisfies CSSProperties,
+  costCell: (known: boolean): CSSProperties => ({
+    fontSize: 12.5,
+    color: known ? "var(--text-secondary)" : "var(--text-muted)",
+    whiteSpace: "nowrap",
+  }),
   updatedCell: {
     fontSize: 12,
     color: "var(--text-muted)",

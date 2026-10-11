@@ -30,6 +30,7 @@ function run(o: Partial<RunSummary>): RunSummary {
     ran_at: "2026-06-11T18:44:34.000Z",
     score: null,
     blockers: null,
+    cost_usd: null,
     ...o,
   };
 }
@@ -71,5 +72,37 @@ describe("RunHistory — outcome badge", () => {
   it("a running run reads 'running'", () => {
     renderRuns([run({ status: "running", score: null, blockers: null })]);
     expect(screen.getByText("running")).toBeInTheDocument();
+  });
+});
+
+describe("RunHistory — L01 cost badge", () => {
+  it("a done run shows its cost with 3 significant digits, never $0.00", () => {
+    renderRuns([run({ status: "done", cost_usd: 0.001 })]);
+    expect(screen.getByTestId("run-cost")).toHaveTextContent("$0.001");
+  });
+
+  it("a done run with a known zero cost shows $0.00", () => {
+    renderRuns([run({ status: "done", cost_usd: 0 })]);
+    expect(screen.getByTestId("run-cost")).toHaveTextContent("$0.00");
+  });
+
+  it("a done run with an unknown cost shows —", () => {
+    renderRuns([run({ status: "done", cost_usd: null })]);
+    expect(screen.getByTestId("run-cost")).toHaveTextContent("—");
+  });
+
+  it.each(["failed", "cancelled", "running"])("a %s run shows — even if a cost is present", (status) => {
+    renderRuns([run({ status, cost_usd: 0.5, error: status === "failed" ? "boom" : null })]);
+    expect(screen.getByTestId("run-cost")).toHaveTextContent("—");
+  });
+
+  it("each row shows its own cost (done $0.001, failed —)", () => {
+    renderRuns([
+      run({ run_id: "done-run", status: "done", cost_usd: 0.001, ran_at: "2026-06-11T18:44:34.000Z" }),
+      run({ run_id: "failed-run", status: "failed", error: "boom", cost_usd: null, ran_at: "2026-06-11T18:40:00.000Z" }),
+    ]);
+    // Rows are newest-first: the done run, then the failed run.
+    const cells = screen.getAllByTestId("run-cost").map((el) => el.textContent);
+    expect(cells).toEqual(["$0.001", "—"]);
   });
 });

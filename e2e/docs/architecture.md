@@ -121,5 +121,6 @@ agent-browser ──CDP──▶ Chrome ──HTTP──▶ Next.js (web) ──
   seeded `pr_files` have no patches and the repo has no clone, and the server has
   no test-mode or mock LLM. Live progress (SSE), run completion, the timeline and
   the Trace drawer are therefore **not covered** end to end.
-- **Finding actions aren't covered either.** No flow clicks Accept or Dismiss,
-  because those calls would change the DB.
+- **Finding actions aren't covered either.** No flow clicks Accept or Reject
+  (the "Reject" button calls the `dismiss` action), because those calls would
+  change the DB. See flow F7 in [../specs/review-flow.md](../specs/review-flow.md).
