@@ -1,0 +1,27 @@
+# server — Engineering Insights
+
+Verified, non-obvious knowledge for `server/`. Append-only; maintained via the `engineering-insights` skill.
+
+### 2026-10-11 — Client copy of @devdigest/shared lags the server copy; diff before reusing a contract in the client
+- **Category:** Codebase Patterns
+- **Status:** verified
+- **Discovery:** `server/src/vendor/shared` (used by server + reviewer-core) and `client/src/vendor/shared` are hand-maintained copies with no sync check, and the client copy is behind: in every differing file the server side has the newer additions. Concretely, the client's `PluginAgent.provider` rejects `'openrouter'`, although `agents.provider` and the shared `Provider` enum allow it — so an OpenRouter agent would fail client-side validation once plugin export/import (L08) uses this schema.
+- **Evidence:** `server/src/vendor/shared/contracts/productionize.ts:36` (`PluginAgent.provider`) — `z.enum(['openai', 'anthropic', 'openrouter'])`; `client/src/vendor/shared/contracts/productionize.ts:36` — `z.enum(['openai', 'anthropic'])`; `client/src/vendor/shared/contracts/knowledge.ts:155` (`Provider`) already includes `'openrouter'`; `server/src/db/schema/agents.ts:15` allows `'openrouter'`; `client/src/vendor/shared/adapters.ts:77` (`LLMProvider.id`) also lacks `'openrouter'` vs `server/src/vendor/shared/adapters.ts:83`. `diff -rq client/src/vendor/shared server/src/vendor/shared` → 5 differing files: `adapters.ts`, `contracts/eval-ci.ts`, `contracts/knowledge.ts`, `contracts/productionize.ts`, `contracts/trace.ts` (`trace.ts`: comments only). `PluginAgent` has no consumers outside `vendor/shared` yet (grep).
+- **Guidance:** Treat the server copy as the newer one. Before using a shared schema in the client, `diff` the two files; when changing a contract, update both copies in the same change and re-run `diff -rq`. Prefer `Provider` over re-declared provider enums.
+- **Cross-package:** `client/` consumes the stale copy (types + runtime Zod validation); `reviewer-core/` aliases the server copy (`reviewer-core/tsconfig.json`), so it is unaffected.
+
+### 2026-10-11 — Review runs bypass JobRunner; restart recovery is only a boot-time "running → failed" reaper
+- **Category:** Codebase Patterns
+- **Status:** verified
+- **Discovery:** `agent_runs` rows are inserted directly as `'running'` (there is no `queued` state) and executed fire-and-forget in-process, NOT via `JobRunner`/`jobs`. On restart nothing resumes: `buildApp` awaits a reaper that flips every `'running'` row to `'failed'` without `error`, `durationMs` or a `run_traces` row, and the reaper assumes a single API instance per DB. The in-memory `RunBus` is empty after restart, so an SSE subscriber to a pre-restart run gets no replay and no `done` (stream stays open until the client disconnects).
+- **Evidence:** `server/src/modules/reviews/repository/run.repo.ts:134` (`createAgentRun`) — `status: 'running'`; `server/src/modules/reviews/service.ts:133` (`runReview`) — `void this.executor.executeRuns(...)`; `server/src/modules/reviews/repository/run.repo.ts:104` (`reapStaleRunningRuns`) — `.set({ status: 'failed' })` only; `server/src/app.ts:78-81` — single-instance NOTE + awaited reap before routes; `server/src/platform/sse.ts:93` (`onDone`) — fires only if `completed.has(runId)` (in-memory); `server/src/db/schema/runs.ts:21` — `status: text('status')` (no enum/check); `server/src/platform/jobs.ts:59` (`JobRunner.enqueue`) — `jobs` rows have no reaper either.
+- **Guidance:** Don't add a `queued` state or a resume path without also changing the reaper (it would reap/miss them). If you touch the reaper, set an `error` (e.g. "server restarted") so the UI can explain the failure. Multi-replica deployment needs per-instance ownership/heartbeats first. Reviews/findings are persisted before `completeAgentRun`, so a crash in between leaves a review attached to a run later reaped as `failed`.
+- **Cross-package:** `client/` relies on `/pulls/:id/runs/active` (DB status) as the source of truth for in-flight runs.
+
+### 2026-10-11 — Cancelling a live run clears its own cancel flag; a finished runner can overwrite 'cancelled'
+- **Category:** What Doesn't Work
+- **Status:** verified
+- **Discovery:** `ReviewService.cancelRun` calls `runBus.cancel(runId)`, awaits the DB update, then `runBus.complete(runId)` — and `complete()` deletes the run from the `cancelled` set. A live runner only checks the flag at `checkCancelled()` before each LLM chunk, so unless that checkpoint happens during the awaited DB update it never sees the cancel; the run keeps going and `completeAgentRun` (unconditional `WHERE id = runId`) then overwrites `'cancelled'` with `'done'`/`'failed'`. Verified by code read, not by a test.
+- **Evidence:** `server/src/modules/reviews/service.ts:85-90` (`cancelRun`); `server/src/platform/sse.ts:79` (`RunBus.complete`) — `this.cancelled.delete(runId)`; `reviewer-core/src/review/run.ts:164` — sole `checkCancelled` checkpoint; `server/src/modules/reviews/repository/run.repo.ts:159-172` (`completeAgentRun`) — no status guard; `server/src/modules/reviews/run-executor.ts:209-211` — `isCancelled` check.
+- **Guidance:** When changing cancel/recovery logic, keep the cancel flag until the runner exits (or track it separately from `complete`), and guard terminal writes with `status = 'running'` so terminal states aren't overwritten. Add an `.it.test.ts` covering cancel-during-run before relying on it.
+- **Cross-package:** `reviewer-core/` owns the checkpoint placement (`reviewPullRequest`).
