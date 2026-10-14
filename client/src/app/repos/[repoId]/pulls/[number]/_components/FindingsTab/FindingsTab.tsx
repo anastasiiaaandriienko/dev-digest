@@ -12,6 +12,8 @@ import type { UseMutationResult } from "@tanstack/react-query";
 interface FindingsTabProps {
   prId: string | null;
   liveRunIds: string[];
+  /** Agent name per live run id (labels the phase steppers). */
+  liveRunLabels?: Record<string, string | null | undefined>;
   reviewRunning: boolean;
   lethalTrifecta: FindingRecord[];
   runs: ReviewRecord[];
@@ -29,6 +31,7 @@ interface FindingsTabProps {
 export function FindingsTab({
   prId,
   liveRunIds,
+  liveRunLabels,
   reviewRunning,
   lethalTrifecta,
   runs,
@@ -96,7 +99,7 @@ export function FindingsTab({
           >
             Live review
           </SectionLabel>
-          <RunStatus runIds={liveRunIds} onDone={onRunDone} />
+          <RunStatus runIds={liveRunIds} labels={liveRunLabels} onDone={onRunDone} />
         </div>
       )}
 

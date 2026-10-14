@@ -75,10 +75,15 @@ export const s = {
   } satisfies CSSProperties,
   actions: {
     display: "flex",
+    alignItems: "center",
     gap: 8,
     marginTop: 14,
     flexWrap: "wrap",
   } satisfies CSSProperties,
+  decisionStatus: (status: "pending" | "error" | "success"): CSSProperties => ({
+    fontSize: 12,
+    color: status === "error" ? "var(--crit)" : status === "success" ? "var(--ok)" : "var(--text-muted)",
+  }),
   composer: {
     marginTop: 12,
     display: "flex",

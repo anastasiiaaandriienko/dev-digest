@@ -1,10 +1,15 @@
 {
   "finding": {
     "accepted": "accepted",
-    "dismissed": "dismissed",
+    "dismissed": "rejected",
     "suggestedFix": "Suggested fix",
     "accept": "Accept",
-    "dismiss": "Dismiss",
+    "dismiss": "Reject",
+    "decision": {
+      "pending": "Saving decision…",
+      "error": "Couldn’t save the decision. Try again.",
+      "success": "Decision saved"
+    },
     "learn": "Learn",
     "replyToAuthor": "Reply to author",
     "replyPlaceholder": "Reply to the author about this finding…",
@@ -29,7 +34,23 @@
   "panel": {
     "hideLowConfidence": "Hide low confidence",
     "noMatchTitle": "No findings match",
-    "noMatchBody": "Adjust the filters above, or run a review to generate findings."
+    "noMatchBody": "Adjust the filters above, or run a review to generate findings.",
+    "noFindingsTitle": "No findings",
+    "noFindingsBody": "This review run reported no findings.",
+    "showing": "Showing {shown} of {total} findings",
+    "showAll": "Show all findings"
+  },
+  "severity": {
+    "CRITICAL": "Critical",
+    "WARNING": "Warning",
+    "SUGGESTION": "Suggestion",
+    "INFO": "Info",
+    "all": "All",
+    "allHint": "Show findings of every severity",
+    "addHint": "Show {severity} findings",
+    "removeHint": "Stop filtering by {severity}",
+    "filterLabel": "Filter findings by severity",
+    "summaryLabel": "Findings by severity"
   },
   "runReview": {
     "runAll": "Run all enabled agents",
@@ -38,6 +59,24 @@
     "runReview": "Run Review",
     "mergedWarning": "Already merged — review is informational",
     "mergedTooltip": "This PR is already merged; running a review won’t affect the merged code."
+  },
+  "phases": {
+    "label": "Review lifecycle phases",
+    "initiation": "Initiation",
+    "planning": "Planning",
+    "implementation": "Implementation",
+    "validation": "Validation",
+    "completion": "Completion",
+    "state": {
+      "pending": "pending",
+      "active": "in progress",
+      "completed": "completed",
+      "skipped": "skipped",
+      "failed": "failed",
+      "cancelled": "cancelled"
+    },
+    "fileProgress": "file {started} of {total}",
+    "failedNoLog": "The run failed before it logged any phase (for example, the server restarted)."
   },
   "runStatus": {
     "elapsed": "Running · {count} agent(s)",
@@ -91,8 +130,33 @@
       "author": "Author",
       "size": "Size",
       "score": "Score",
+      "cost": "Cost",
       "status": "Status",
       "updated": "Updated"
+    },
+    "costHint": "Total cost of this PR’s successful review runs. OpenAI/Anthropic costs are estimates.",
+    "costPartialHint": "Lower bound: some successful runs have no known cost. OpenAI/Anthropic costs are estimates.",
+    "costUnknownHint": "Cost unknown: no successful run with a known cost yet.",
+    "findings": {
+      "short": "FINDINGS",
+      "label": "Show findings summary",
+      "popoverLabel": "Findings of PR #{number}",
+      "notReviewed": "Not reviewed yet",
+      "loading": "Loading findings…",
+      "error": "Couldn’t load findings. Try again later.",
+      "noReview": "No review found for this PR.",
+      "empty": "The latest review reported no findings.",
+      "agent": "Agent",
+      "countsLabel": "Findings by severity in the latest review",
+      "total": "{count, plural, one {# finding} other {# findings}} in the latest review",
+      "openCriticals": "{count, plural, one {# open critical} other {# open criticals}}",
+      "more": "+{count} more",
+      "open": "Open findings →",
+      "verdict": {
+        "approve": "Approve",
+        "request_changes": "Request changes",
+        "comment": "Comment"
+      }
     },
     "filesCount": "{count} files",
     "errorTitle": "Couldn’t load pull requests",
@@ -104,6 +168,8 @@
   "timeline": {
     "goToReview": "Jump to this run’s findings below",
     "openTrace": "Open run trace & logs",
-    "deleteRun": "Delete run"
+    "deleteRun": "Delete run",
+    "cost": "Run cost (USD)",
+    "costUnavailable": "No cost: the run did not complete successfully, or its cost is unknown."
   }
 }

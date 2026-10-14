@@ -170,6 +170,12 @@ export const PrMeta = z.object({
   updated_at: z.string().nullish(),
   // Latest-review score (list endpoint only; null/absent until reviewed).
   score: z.number().int().nullish(),
+  // Total USD cost of the PR's `done` runs with a known cost (L01; list endpoint
+  // only). null/absent = unknown or no priced run — never shown as $0.00.
+  cost_usd: z.number().nullable().optional(),
+  // true when at least one `done` run has an unknown cost, so cost_usd is a
+  // lower bound (L01; list endpoint only). Absent = not computed.
+  cost_partial: z.boolean().optional(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 

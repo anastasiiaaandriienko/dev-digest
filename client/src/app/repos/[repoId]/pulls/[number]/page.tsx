@@ -17,7 +17,14 @@ import { DiffTab } from "./_components/DiffTab";
 import RunTraceDrawer from "./_components/RunTraceDrawer";
 import { usePullDetail, usePulls } from "../../../../../lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePrReviews, useCancelRun, usePrActiveRuns, usePrRuns, useDeleteRun } from "../../../../../lib/hooks/reviews";
+import {
+  usePrReviews,
+  useCancelRun,
+  usePrActiveRuns,
+  usePrRuns,
+  useDeleteRun,
+  useRefreshCostOnRunSettled,
+} from "../../../../../lib/hooks/reviews";
 import { useActiveRepo, useRepoNotFound } from "../../../../../lib/repo-context";
 import { ApiError } from "../../../../../lib/api";
 import { githubPrUrl } from "../../../../../lib/github-urls";
@@ -44,7 +51,9 @@ export default function PRDetailPage() {
   const qc = useQueryClient();
   const { data: activeRuns } = usePrActiveRuns(prId);
   const { data: prRuns } = usePrRuns(prId);
-  const deleteRun = useDeleteRun(prId);
+  // L01: a run settling refreshes the PR list cost total and its trace.
+  useRefreshCostOnRunSettled(prRuns, repoId);
+  const deleteRun = useDeleteRun(prId, repoId);
   const liveRunIds = (activeRuns ?? []).map((r) => r.run_id);
   const reviewRunning = liveRunIds.length > 0;
   const cancel = useCancelRun();
@@ -140,6 +149,7 @@ export default function PRDetailPage() {
           <FindingsTab
             prId={prId}
             liveRunIds={liveRunIds}
+            liveRunLabels={Object.fromEntries((activeRuns ?? []).map((r) => [r.run_id, r.agent_name]))}
             reviewRunning={reviewRunning}
             lethalTrifecta={lethalTrifecta}
             runs={runs}
@@ -177,6 +187,9 @@ export default function PRDetailPage() {
           prNumber={pr.number}
           findings={runs.find((r) => r.run_id === traceRunId)?.findings ?? []}
           agentName={runs.find((r) => r.run_id === traceRunId)?.agent_name ?? null}
+          // A live run opens on the Live log tab and streams SSE (no 404 trace).
+          running={liveRunIds.includes(traceRunId)}
+          runStatus={prRuns?.find((r) => r.run_id === traceRunId)?.status ?? null}
           onClose={() => setParam("trace", null)}
         />
       )}

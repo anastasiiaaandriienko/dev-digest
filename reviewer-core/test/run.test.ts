@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { LLMProvider, StructuredResult } from '@devdigest/shared';
 import { MockLLMProvider, MockGitClient } from '../../server/src/adapters/mocks.js';
+import { parseUnifiedDiff } from '../../server/src/adapters/git/diff-parser.js';
 import { reviewPullRequest } from '../src/index.js';
 
 /**
@@ -134,5 +135,68 @@ describe('reviewPullRequest (engine)', () => {
     await reviewPullRequest({ systemPrompt: 's', model: 'm', diff, llm: recorder, sessionId: 'sess-abc' });
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.every((s) => s === 'sess-abc')).toBe(true);
+  });
+
+  // L01 (server/specs/review-run-cost.md T9): a run's cost is the sum over its
+  // chunks, and ONE unknown chunk makes the whole run unknown — never 0.
+  describe('costUsd across map-reduce chunks', () => {
+    const TWO_FILE_DIFF = parseUnifiedDiff(
+      [
+        'diff --git a/src/a.ts b/src/a.ts',
+        '--- a/src/a.ts',
+        '+++ b/src/a.ts',
+        '@@ -1,1 +1,2 @@',
+        ' const a = 1;',
+        '+const b = 2;',
+        'diff --git a/src/b.ts b/src/b.ts',
+        '--- a/src/b.ts',
+        '+++ b/src/b.ts',
+        '@@ -1,1 +1,2 @@',
+        ' const c = 1;',
+        '+const d = 2;',
+      ].join('\n'),
+    );
+    const clean = { verdict: 'approve', summary: 'ok', score: 100, findings: [] };
+
+    /** Returns the given per-call costs in order. */
+    function costs(...perCall: (number | null)[]): LLMProvider {
+      let i = 0;
+      return {
+        id: 'openrouter',
+        async completeStructured<T>(req: { model: string }): Promise<StructuredResult<T>> {
+          const costUsd = perCall[i++] ?? null;
+          return { data: clean as unknown as T, model: req.model, tokensIn: 1, tokensOut: 1, costUsd, raw: '', attempts: 1 };
+        },
+        async listModels() {
+          return [];
+        },
+        async complete() {
+          throw new Error('not used');
+        },
+        async embed() {
+          return [];
+        },
+      };
+    }
+
+    const run = (llm: LLMProvider) =>
+      reviewPullRequest({ systemPrompt: 's', model: 'm', diff: TWO_FILE_DIFF, llm, strategy: 'map-reduce' });
+
+    it('sums known chunk costs', async () => {
+      const outcome = await run(costs(0.001, 0.002));
+      expect(outcome.mode).toBe('map-reduce');
+      expect(outcome.chunks).toHaveLength(2);
+      expect(outcome.costUsd).toBeCloseTo(0.003, 10);
+    });
+
+    it('one unknown chunk makes the run cost null, not a partial sum', async () => {
+      const outcome = await run(costs(0.001, null));
+      expect(outcome.costUsd).toBeNull();
+    });
+
+    it('free chunks sum to a known 0, not null', async () => {
+      const outcome = await run(costs(0, 0));
+      expect(outcome.costUsd).toBe(0);
+    });
   });
 });

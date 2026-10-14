@@ -29,6 +29,7 @@ export function FindingCard({
   defaultExpanded,
   onAction,
   pending,
+  decision,
   repoFullName,
   headSha,
 }: {
@@ -36,7 +37,10 @@ export function FindingCard({
   focused?: boolean;
   defaultExpanded?: boolean;
   onAction?: (action: FindingActionKind, reply?: string) => void;
+  /** Disable the decision buttons (e.g. while a request is in flight). */
   pending?: boolean;
+  /** Latest decision request status for THIS finding. */
+  decision?: "pending" | "error" | "success";
   repoFullName?: string | null;
   headSha?: string | null;
 }) {
@@ -50,6 +54,7 @@ export function FindingCard({
   const accepted = !!f.accepted_at;
   const dismissed = !!f.dismissed_at;
   const muted = accepted || dismissed;
+  const busy = !!pending || decision === "pending";
 
   return (
     <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
@@ -89,12 +94,15 @@ export function FindingCard({
           )}
 
           <div style={s.actions}>
+            {/* Reject = the server's "dismiss". A button for the decision the
+                finding already has is disabled: there is no undo in L01. */}
             <Button
               kind="secondary"
               size="sm"
               icon="Check"
-              disabled={pending}
+              disabled={busy || accepted}
               active={accepted}
+              aria-pressed={accepted}
               onClick={() => onAction?.("accept")}
             >
               {t("finding.accept")}
@@ -103,12 +111,18 @@ export function FindingCard({
               kind="ghost"
               size="sm"
               icon="X"
-              disabled={pending}
+              disabled={busy || dismissed}
               active={dismissed}
+              aria-pressed={dismissed}
               onClick={() => onAction?.("dismiss")}
             >
               {t("finding.dismiss")}
             </Button>
+            {decision && (
+              <span role="status" aria-live="polite" style={s.decisionStatus(decision)}>
+                {t(`finding.decision.${decision}`)}
+              </span>
+            )}
           </div>
         </div>
       )}

@@ -49,12 +49,53 @@ describe("FindingCard (smoke, both themes)", () => {
     });
   });
 
-  it("fires accept/dismiss actions", () => {
+  it("fires accept / reject actions (A1: labels are Accept / Reject; Reject = dismiss)", () => {
     const onAction = vi.fn();
     renderWithIntl(<FindingCard f={FINDING} defaultExpanded onAction={onAction} />);
-    fireEvent.click(screen.getByText("Accept"));
+    fireEvent.click(screen.getByRole("button", { name: messages.finding.accept }));
     expect(onAction).toHaveBeenCalledWith("accept");
-    fireEvent.click(screen.getByText("Dismiss"));
+    fireEvent.click(screen.getByRole("button", { name: messages.finding.dismiss }));
     expect(onAction).toHaveBeenCalledWith("dismiss");
+    expect(messages.finding.dismiss).toBe("Reject");
+    expect(screen.queryByText("Dismiss")).not.toBeInTheDocument();
+  });
+});
+
+describe("FindingCard — decision states", () => {
+  const accept = () => screen.getByRole("button", { name: messages.finding.accept });
+  const reject = () => screen.getByRole("button", { name: messages.finding.dismiss });
+
+  it("an accepted finding: tag shown, Accept pressed + disabled (no undo), Reject available", () => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, accepted_at: "t" }} defaultExpanded onAction={() => {}} />);
+    expect(screen.getByText(messages.finding.accepted)).toBeInTheDocument();
+    expect(accept()).toBeDisabled();
+    expect(accept()).toHaveAttribute("aria-pressed", "true");
+    expect(reject()).toBeEnabled();
+  });
+
+  it("a rejected finding: 'rejected' tag, Reject disabled, Accept available", () => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, dismissed_at: "t" }} defaultExpanded onAction={() => {}} />);
+    expect(screen.getByText(messages.finding.dismissed)).toBeInTheDocument();
+    expect(reject()).toBeDisabled();
+    expect(accept()).toBeEnabled();
+  });
+
+  it("pending: both disabled and 'Saving decision…' is announced", () => {
+    renderWithIntl(<FindingCard f={FINDING} defaultExpanded decision="pending" onAction={() => {}} />);
+    expect(accept()).toBeDisabled();
+    expect(reject()).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(messages.finding.decision.pending);
+  });
+
+  it("error: the message shows and the buttons are usable again", () => {
+    renderWithIntl(<FindingCard f={FINDING} defaultExpanded decision="error" onAction={() => {}} />);
+    expect(screen.getByRole("status")).toHaveTextContent(messages.finding.decision.error);
+    expect(accept()).toBeEnabled();
+    expect(reject()).toBeEnabled();
+  });
+
+  it("success: 'Decision saved'", () => {
+    renderWithIntl(<FindingCard f={{ ...FINDING, accepted_at: "t" }} defaultExpanded decision="success" onAction={() => {}} />);
+    expect(screen.getByRole("status")).toHaveTextContent(messages.finding.decision.success);
   });
 });
