@@ -243,6 +243,8 @@ describe('grounding the model answer', () => {
   it('snippetAround is bounded', () => {
     expect(snippetAround(['a', 'b', 'c', 'd', 'e', 'f'], 1)).toBe('a\nb\nc');
     expect(snippetAround(['x'.repeat(2000)], 1).length).toBe(601);
+    // Blank edge lines (e.g. after the file's last newline) are dropped; inner blanks stay.
+    expect(snippetAround(['', '{', '  "strict": true', '', '}', ''], 3)).toBe('{\n  "strict": true\n\n}');
   });
 
   it('normalizeRule matches the 0011 backfill (trim, collapse whitespace, lowercase)', () => {
@@ -299,8 +301,8 @@ describe('repo-conventions skill draft', () => {
     expect(d.convention_ids).toEqual(['2', '3', '1']);
     expect(d.evidence_files).toEqual(['src/a.ts', 'src/e.ts']);
     expect(d.body.indexOf('## Naming')).toBeLessThan(d.body.indexOf('## Error handling'));
-    expect(d.body).toContain('Example: `src/a.ts:3`');
-    expect(d.body).toContain('Example: `src/a.ts`\n');
+    expect(d.body).toContain('  - Example: `src/a.ts:3`');
+    expect(d.body).toContain('  - Example: `src/a.ts`\n');
     expect(d.body).toContain('\n`````\nthrow x ```` y\n`````');
   });
 

@@ -54,7 +54,12 @@ const UNSAFE_RULE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\
 export function snippetAround(lines: readonly string[], line: number): string {
   const from = Math.max(0, line - 1 - SNIPPET_CONTEXT_LINES);
   const to = Math.min(lines.length, line + SNIPPET_CONTEXT_LINES);
-  const text = lines.slice(from, to).join('\n');
+  // Blank lines at the edges carry no evidence (e.g. the empty line after a file's last newline).
+  let a = from;
+  let b = to;
+  while (a < b && !lines[a]!.trim()) a++;
+  while (b > a && !lines[b - 1]!.trim()) b--;
+  const text = lines.slice(a, b).join('\n');
   return text.length > MAX_SNIPPET_CHARS ? `${text.slice(0, MAX_SNIPPET_CHARS)}…` : text;
 }
 
@@ -193,7 +198,8 @@ export function buildSkillDraft(repoFullName: string, accepted: readonly Convent
     }
     lines.push('', `- ${c.rule}`);
     if (c.evidencePath) {
-      lines.push(`  Example: \`${c.evidencePath}${c.evidenceLine ? `:${c.evidenceLine}` : ''}\``);
+      // A nested item, so Markdown never runs it into the rule text.
+      lines.push(`  - Example: \`${c.evidencePath}${c.evidenceLine ? `:${c.evidenceLine}` : ''}\``);
       if (c.evidenceSnippet) {
         const fence = fenceFor(c.evidenceSnippet);
         // Fences start at column 0: the shared content check exempts code only there.
