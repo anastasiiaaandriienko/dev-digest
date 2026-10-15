@@ -38,8 +38,7 @@ export function SeverityChips({
           return (
             <span key={k} style={s.readOnly(SEV[k].c, SEV[k].bg, counts[k] === 0)} data-severity={k}>
               <I size={12} />
-              {t(`severity.${k}`)}
-              <span className="tnum">{counts[k]}</span>
+              <span className="tnum">{t(`severity.pill.${k}`, { count: counts[k] })}</span>
             </span>
           );
         })}
@@ -75,10 +74,7 @@ export function SeverityChips({
             title={t(active ? "severity.removeHint" : "severity.addHint", { severity: t(`severity.${k}`) })}
           >
             <I size={13} style={{ color: SEV[k].c }} />
-            {t(`severity.${k}`)}
-            <span className="tnum" style={s.count}>
-              {counts[k]}
-            </span>
+            <span className="tnum">{t(`severity.pill.${k}`, { count: counts[k] })}</span>
           </button>
         );
       })}
