@@ -1,5 +1,6 @@
-/* MarkdownEditor — the skill body editor (design: Skill Editor · Config): a
-   file header (name.md, "unsaved", ~token count) over a monospace editing area
+/* MarkdownEditor — shared Markdown body editor (design: CodeEditor, used by
+   Skill Editor · Config and "Create skill from conventions"): a file header
+   (name.md, "unsaved", ~token count) over a monospace editing area
    with line numbers and per-line Markdown colouring.
    How it works: a plain <textarea> with transparent text sits exactly on top of
    a highlighted copy of the same text. Both use the same font metrics and
@@ -36,7 +37,7 @@ export function MarkdownEditor({
   label: string;
   height?: number;
 }) {
-  const t = useTranslations("skills");
+  const t = useTranslations("common");
   const [focused, setFocused] = React.useState(false);
   const kinds = React.useMemo(() => classifyLines(value), [value]);
   const lines = value.split("\n");
@@ -50,11 +51,11 @@ export function MarkdownEditor({
         </span>
         {dirty && (
           <span data-testid="body-unsaved">
-            <Badge color="var(--text-muted)">{t("detail.config.unsaved")}</Badge>
+            <Badge color="var(--text-muted)">{t("markdownEditor.unsaved")}</Badge>
           </span>
         )}
         <span className="mono tnum" style={s.tokens} data-testid="body-tokens">
-          {t("detail.config.tokens", { tokens: approxTokens(value) })}
+          {t("markdownEditor.tokens", { tokens: approxTokens(value) })}
         </span>
       </div>
       <div style={s.scroll(height)}>

@@ -18,7 +18,7 @@ import { useUpdateSkill } from "@/lib/hooks/skills";
 import { notify } from "@/lib/toast";
 import { SKILL_TYPES } from "../../../../../constants";
 import { validateSkillForm, type SkillFormField } from "../../../../../helpers";
-import { MarkdownEditor } from "./_components/MarkdownEditor";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import { bodyStats, changedFields, formFrom, type ConfigForm, type ConfigGuard } from "./helpers";
 import { useConfigGuard, useOutsideEnabled } from "./hooks";
 import { s } from "./styles";

@@ -1,6 +1,7 @@
 /**
  * Create skill from conventions (HW2 #41, #42, #51): explanation, the editable
- * server draft (name / description / type / enabled / body with preview),
+ * server draft (name / description / type / enabled / body in the shared
+ * code editor, with preview),
  * optional agent, Cancel / Create; 409 and 422 land on the field and keep
  * every edit. Hooks are mocked.
  */
@@ -11,6 +12,7 @@ import type { ConventionSkillDraft } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
 import messages from "../../../../../../../messages/en/conventions.json";
 import skillsMessages from "../../../../../../../messages/en/skills.json";
+import common from "../../../../../../../messages/en/common.json";
 
 type DraftQ = { data?: ConventionSkillDraft; isLoading: boolean; isError: boolean; error?: Error };
 let draftQ: DraftQ;
@@ -49,7 +51,7 @@ function renderModal() {
   const onClose = vi.fn();
   const onCreated = vi.fn();
   render(
-    <NextIntlClientProvider locale="en" messages={{ conventions: messages, skills: skillsMessages }}>
+    <NextIntlClientProvider locale="en" messages={{ conventions: messages, skills: skillsMessages, common }}>
       <CreateConventionSkillModal repoId="r1" repoName="acme/api" onClose={onClose} onCreated={onCreated} />
     </NextIntlClientProvider>,
   );
@@ -62,7 +64,7 @@ describe("CreateConventionSkillModal", () => {
   it("explains the source and pre-fills every field from the draft", () => {
     renderModal();
     expect(screen.getByRole("dialog")).toHaveTextContent(M.title);
-    expect(screen.getByText(/Merged from 2 accepted conventions in acme\/api/)).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveTextContent("Merged from 2 accepted conventions in acme/api");
     expect(field(M.name)).toHaveValue("repo-conventions");
     expect(field(M.description)).toHaveValue(DRAFT.description);
     expect(field(M.type)).toHaveValue("convention");
@@ -70,6 +72,16 @@ describe("CreateConventionSkillModal", () => {
     expect(field(M.body)).toHaveValue(DRAFT.body);
     expect(field(M.agent)).toHaveValue("");
     expect(screen.getByRole("button", { name: M.cancel })).toBeInTheDocument();
+  });
+
+  it("the body is edited in the code editor: file name, token count, 'unsaved' after an edit", () => {
+    renderModal();
+    const editor = screen.getByTestId("skill-body-editor");
+    expect(editor).toHaveTextContent("repo-conventions.md");
+    expect(screen.getByTestId("body-tokens")).toHaveTextContent(/~\d+ tokens/);
+    expect(screen.queryByTestId("body-unsaved")).toBeNull();
+    fireEvent.change(field(M.body), { target: { value: DRAFT.body + "\n- extra" } });
+    expect(screen.getByTestId("body-unsaved")).toHaveTextContent(common.markdownEditor.unsaved);
   });
 
   it("the body can be edited and previewed as Markdown", () => {

@@ -15,6 +15,7 @@ import { AppShell } from "@/components/app-shell";
 import { RepoNotFound } from "@/components/repo-not-found";
 import { useConventions, useStartConventionScan, useUpdateConvention } from "@/lib/hooks/conventions";
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
+import { notify } from "@/lib/toast";
 import { ConventionCard, evidenceUrl } from "../ConventionCard";
 import { CreateConventionSkillModal } from "../CreateConventionSkillModal";
 import { SKELETON_CARDS } from "./constants";
@@ -30,7 +31,10 @@ export function ConventionsView({ repoId }: { repoId: string }) {
   const update = useUpdateConvention(repoId);
   const [creating, setCreating] = React.useState(false);
 
-  const repoName = repos.find((r) => r.id === repoId)?.full_name ?? t("page.repoFallback");
+  const repo = repos.find((r) => r.id === repoId);
+  // Design: "Conventions in payments-api" — the short name; owner/name stays in the tooltip.
+  const repoName = repo?.name ?? t("page.repoFallback");
+  const [deselecting, setDeselecting] = React.useState(false);
   const crumb = [{ label: t("page.crumbLab") }, { label: t("page.crumbConventions") }];
   if (repoNotFound) {
     return (
@@ -52,11 +56,34 @@ export function ConventionsView({ repoId }: { repoId: string }) {
     if (scan?.status !== "done" || !scan.finished_at) return t("page.subtitle");
     const when = ago(scan.finished_at);
     const files = scan.sample_files.length;
-    const last = scan.model ? t("page.lastScan", { when, files, model: scan.model }) : t("page.lastScanNoModel", { when, files });
-    return `${last} · ${t("page.scanAdded", { count: scan.candidates_added ?? 0 })}`;
+    const detected = t("page.detected", { when, files });
+    const added = t("page.scanAdded", { count: scan.candidates_added ?? 0 });
+    return scan.model ? `${detected} · ${scan.model} · ${added}` : `${detected} · ${added}`;
   };
   const runScan = (rescan: boolean) => start.mutate(rescan);
   const decide = (id: string) => (patch: ConventionUpdate) => update.mutateAsync({ id, patch });
+  /**
+   * "Deselect all": every ACCEPTED rule goes back to pending (its persisted
+   * status), so none is in the next skill draft. Nothing is rejected or
+   * deleted; each rule can be accepted again. Stops at the first failure (the
+   * global toast says why; the rest stay accepted).
+   */
+  const deselectAll = async () => {
+    const accepted = candidates.filter((c) => c.status === "accepted");
+    setDeselecting(true);
+    let moved = 0;
+    try {
+      for (const c of accepted) {
+        await update.mutateAsync({ id: c.id, patch: { status: "pending" } });
+        moved++;
+      }
+    } catch {
+      // Toasted globally; the rules not yet moved stay accepted.
+    } finally {
+      setDeselecting(false);
+      if (moved > 0) notify.success(t("page.deselected", { count: moved }));
+    }
+  };
 
   return (
     <AppShell crumb={crumb}>
@@ -66,7 +93,7 @@ export function ConventionsView({ repoId }: { repoId: string }) {
       <div style={s.page}>
         <div style={s.header}>
           <div style={s.grow}>
-            <h1 style={s.title}>
+            <h1 style={s.title} title={repo?.full_name}>
               {t("page.headingPrefix")}
               <span className="mono" style={s.repo}>
                 {repoName}
@@ -146,6 +173,18 @@ export function ConventionsView({ repoId }: { repoId: string }) {
         {candidates.length > 0 && (
           <>
             <div style={s.toolbar}>
+              {counts.accepted > 0 && (
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  icon="X"
+                  onClick={deselectAll}
+                  disabled={deselecting}
+                  title={t("page.deselectAllHint")}
+                >
+                  {deselecting ? t("page.deselecting") : t("page.deselectAll")}
+                </Button>
+              )}
               <span style={s.count} data-testid="accepted-count">
                 {t("page.acceptedCount", { accepted: counts.accepted, total: candidates.length })}
               </span>
@@ -160,7 +199,13 @@ export function ConventionsView({ repoId }: { repoId: string }) {
             </div>
             <ul style={s.list} aria-label={t("page.candidatesLabel")}>
               {candidates.map((c) => (
-                <ConventionCard key={c.id} candidate={c} evidenceHref={evidenceUrl(c, data?.source)} onUpdate={decide(c.id)} />
+                <ConventionCard
+                  key={c.id}
+                  candidate={c}
+                  evidenceHref={evidenceUrl(c, data?.source)}
+                  onUpdate={decide(c.id)}
+                  busy={deselecting}
+                />
               ))}
             </ul>
           </>

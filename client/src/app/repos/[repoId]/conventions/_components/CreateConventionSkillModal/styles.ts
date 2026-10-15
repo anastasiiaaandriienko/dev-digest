@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { BODY_EDITOR_HEIGHT } from "./constants";
 
 /** Co-located styles for CreateConventionSkillModal (design: N7 CreateSkillModal). */
 export const s = {
@@ -26,13 +27,14 @@ export const s = {
     lineHeight: 1.5,
   } satisfies CSSProperties,
   infoIcon: { color: "var(--accent)", flexShrink: 0 } satisfies CSSProperties,
+  infoStrong: { color: "var(--text-primary)" } satisfies CSSProperties,
+  infoRepo: { color: "var(--accent-text)" } satisfies CSSProperties,
   row: { display: "flex", gap: 14 } satisfies CSSProperties,
   grow: { flex: 1, minWidth: 0 } satisfies CSSProperties,
   toggle: { display: "flex", alignItems: "center", height: 36 } satisfies CSSProperties,
-  editor: { marginTop: 10 } satisfies CSSProperties,
+  // Same height as the editor, so Edit ↔ Preview does not jump.
   preview: {
-    minHeight: 240,
-    maxHeight: 360,
+    height: BODY_EDITOR_HEIGHT,
     overflow: "auto",
     padding: "12px 14px",
     borderRadius: 7,

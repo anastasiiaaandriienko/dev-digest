@@ -1,20 +1,23 @@
 /* CreateConventionSkillModal — "Create skill" on the Conventions page (HW2 #41,
    #42, #51): explains that the skill is merged from the ACCEPTED conventions,
-   loads the server-built draft and lets the user edit name, description, type,
-   enabled and the Markdown body (Write / Preview) and optionally attach it to
-   an agent. A taken name (409) or a field the server refuses (422) is shown on
+   loads the server-built draft (accepted conventions only) and lets the user
+   edit name, description, type, enabled and the Markdown body — in the shared
+   MarkdownEditor (file name, line numbers, token count, "unsaved"), with a
+   Preview toggle for the rendered Markdown — and optionally attach it to an
+   agent. A taken name (409) or a field the server refuses (422) is shown on
    that field; nothing the user typed is lost. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Button, FormField, Icon, Markdown, Modal, SelectInput, Skeleton, Tabs, TextInput, Textarea, Toggle } from "@devdigest/ui";
+import { Button, FormField, Icon, Markdown, Modal, SelectInput, Skeleton, TextInput, Toggle } from "@devdigest/ui";
 import type { ConventionSkillResult, SkillType } from "@devdigest/shared";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import { useAgents } from "@/lib/hooks/agents";
 import { useConventionSkillDraft, useCreateConventionSkill } from "@/lib/hooks/conventions";
 import { notify } from "@/lib/toast";
 import { SKILL_TYPES } from "@/lib/skill-meta";
-import { BODY_ROWS, MODAL_WIDTH } from "./constants";
+import { BODY_EDITOR_HEIGHT, MODAL_WIDTH } from "./constants";
 import { errorsFromApi, validateForm, type SkillForm, type SkillFormErrors } from "./helpers";
 import { s } from "./styles";
 
@@ -36,7 +39,7 @@ export function CreateConventionSkillModal({
   const create = useCreateConventionSkill(repoId);
   const [form, setForm] = React.useState<SkillForm | null>(null);
   const [errors, setErrors] = React.useState<SkillFormErrors>({});
-  const [tab, setTab] = React.useState("write");
+  const [previewing, setPreviewing] = React.useState(false);
 
   // Start from the server draft once; later refetches never overwrite the user's edits.
   React.useEffect(() => {
@@ -62,7 +65,7 @@ export function CreateConventionSkillModal({
     const checked = validateForm(form);
     if (!checked.ok) {
       setErrors(checked.errors);
-      if (checked.errors.body) setTab("write");
+      if (checked.errors.body) setPreviewing(false);
       return;
     }
     try {
@@ -125,7 +128,18 @@ export function CreateConventionSkillModal({
           <>
             <div style={s.info}>
               <Icon.Wrench size={15} style={s.infoIcon} />
-              <span>{t("explanation", { count, repo: repoName })}</span>
+              <span>
+                {t.rich("explanation", {
+                  count,
+                  repo: repoName,
+                  b: (chunks) => <b style={s.infoStrong}>{chunks}</b>,
+                  code: (chunks) => (
+                    <span className="mono" style={s.infoRepo}>
+                      {chunks}
+                    </span>
+                  ),
+                })}
+              </span>
             </div>
             <FormField label={t("name")} required hint={error("name") ?? t("nameHint")}>
               <TextInput value={form.name} onChange={(v) => set("name", v)} aria-label={t("name")} mono />
@@ -152,6 +166,32 @@ export function CreateConventionSkillModal({
                 </FormField>
               </div>
             </div>
+            <FormField
+              label={t("body")}
+              required
+              hint={error("body") ?? t("bodyHint")}
+              right={
+                <Button kind="ghost" size="sm" icon={previewing ? "Edit" : "Eye"} onClick={() => setPreviewing((p) => !p)}>
+                  {previewing ? t("edit") : t("preview")}
+                </Button>
+              }
+            >
+              {previewing ? (
+                <div style={s.preview} data-testid="convention-skill-preview">
+                  {form.body.trim() ? <Markdown>{form.body}</Markdown> : <span style={s.muted}>{t("previewEmpty")}</span>}
+                </div>
+              ) : (
+                <MarkdownEditor
+                  value={form.body}
+                  onChange={(v) => set("body", v)}
+                  filename={`${form.name.trim() || draft.data?.name || "skill"}.md`}
+                  dirty={form.body !== draft.data?.body}
+                  invalid={!!errors.body}
+                  label={t("body")}
+                  height={BODY_EDITOR_HEIGHT}
+                />
+              )}
+            </FormField>
             <FormField label={t("agent")} hint={error("agentId") ?? t("agentHint")}>
               <SelectInput
                 value={form.agentId}
@@ -160,26 +200,6 @@ export function CreateConventionSkillModal({
                 mono={false}
                 options={[{ value: "", label: t("noAgent") }, ...(agents.data ?? []).map((a) => ({ value: a.id, label: a.name }))]}
               />
-            </FormField>
-            <FormField label={t("body")} required hint={error("body") ?? t("bodyHint")}>
-              <Tabs
-                tabs={[
-                  { key: "write", label: t("write") },
-                  { key: "preview", label: t("preview") },
-                ]}
-                value={tab}
-                onChange={setTab}
-                pad="0"
-              />
-              <div style={s.editor}>
-                {tab === "write" ? (
-                  <Textarea value={form.body} onChange={(v) => set("body", v)} rows={BODY_ROWS} aria-label={t("body")} mono />
-                ) : (
-                  <div style={s.preview} data-testid="convention-skill-preview">
-                    {form.body.trim() ? <Markdown>{form.body}</Markdown> : <span style={s.muted}>{t("previewEmpty")}</span>}
-                  </div>
-                )}
-              </div>
             </FormField>
           </>
         )}

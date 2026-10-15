@@ -6,11 +6,12 @@
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import React from "react";
-import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { ConventionCandidate, ConventionScan, ConventionsState } from "@devdigest/shared";
 import messages from "../../../../../../../messages/en/conventions.json";
 import skillsMessages from "../../../../../../../messages/en/skills.json";
+import common from "../../../../../../../messages/en/common.json";
 
 type Q = { data?: ConventionsState; isLoading: boolean; isError: boolean; refetch: () => void };
 let query: Q;
@@ -27,12 +28,13 @@ vi.mock("@/lib/hooks/conventions", () => ({
 }));
 vi.mock("@/lib/hooks/agents", () => ({ useAgents: () => ({ data: [] }) }));
 vi.mock("@/lib/repo-context", () => ({
-  useActiveRepo: () => ({ repos: [{ id: "r1", full_name: "acme/payments-api" }] }),
+  useActiveRepo: () => ({ repos: [{ id: "r1", name: "payments-api", full_name: "acme/payments-api" }] }),
   useRepoNotFound: () => notFound,
 }));
 vi.mock("@/components/app-shell", () => ({ AppShell: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("@/components/repo-not-found", () => ({ RepoNotFound: () => <div>repo not found</div> }));
-vi.mock("@/lib/toast", () => ({ notify: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+const success = vi.fn();
+vi.mock("@/lib/toast", () => ({ notify: { success: (m: string) => success(m), error: vi.fn(), info: vi.fn() } }));
 
 import { ConventionsView } from "./ConventionsView";
 
@@ -91,11 +93,12 @@ afterEach(() => {
   cleanup();
   startScan.mockReset();
   updateAsync.mockReset();
+  success.mockReset();
 });
 
 function renderView() {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ conventions: messages, skills: skillsMessages }}>
+    <NextIntlClientProvider locale="en" messages={{ conventions: messages, skills: skillsMessages, common }}>
       <ConventionsView repoId="r1" />
     </NextIntlClientProvider>,
   );
@@ -107,7 +110,9 @@ const rescanBtn = () => screen.getByRole("button", { name: P.rescan });
 describe("ConventionsView — header and scans (HW2 #45)", () => {
   it("shows the repo and two separate actions: Run Scan first, ReScan disabled", () => {
     renderView();
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Conventions in acme/payments-api");
+    // Design: "Conventions in payments-api" — the short name; owner/name in the tooltip.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Conventions in payments-api");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveAttribute("title", "acme/payments-api");
     expect(runBtn()).toBeEnabled();
     expect(rescanBtn()).toBeDisabled();
     fireEvent.click(runBtn());
@@ -127,7 +132,7 @@ describe("ConventionsView — header and scans (HW2 #45)", () => {
     query = state({ scan: scan(), candidates: [cand("a")], counts: { pending: 1, accepted: 0, rejected: 0 } });
     renderView();
     expect(screen.getByTestId("scan-summary")).toHaveTextContent(
-      "Last scan 3 hours ago · 3 sample files · deepseek/deepseek-v4 · 2 new candidates",
+      "Detected from 3 sample files · last scan 3 hours ago · deepseek/deepseek-v4 · 2 new candidates",
     );
     expect(runBtn()).toBeDisabled();
     fireEvent.click(rescanBtn());
@@ -221,5 +226,56 @@ describe("ConventionsView — candidates (HW2 #46–#48, #50)", () => {
     query = state({ scan: scan(), candidates: [], counts: { pending: 0, accepted: 0, rejected: 3 } });
     renderView();
     expect(screen.getByText(P.noPending.title)).toBeInTheDocument();
+  });
+});
+
+describe("ConventionsView — Deselect all (design: N7 toolbar)", () => {
+  it("is shown only while something is accepted", () => {
+    query = state({ scan: scan(), candidates: [cand("a"), cand("b")], counts: { pending: 2, accepted: 0, rejected: 0 } });
+    renderView();
+    expect(screen.queryByRole("button", { name: P.deselectAll })).toBeNull();
+  });
+
+  it("moves every ACCEPTED rule back to pending — never rejects or deletes — and says so", async () => {
+    updateAsync.mockResolvedValue(undefined);
+    query = state({
+      scan: scan(),
+      candidates: [cand("a", "accepted"), cand("b"), cand("c", "accepted")],
+      counts: { pending: 1, accepted: 2, rejected: 0 },
+    });
+    renderView();
+    const btn = screen.getByRole("button", { name: P.deselectAll });
+    expect(btn).toHaveAttribute("title", P.deselectAllHint);
+    fireEvent.click(btn);
+    await waitFor(() => expect(success).toHaveBeenCalledWith("2 rules moved back to pending — nothing was rejected or deleted."));
+    expect(updateAsync.mock.calls.map((c) => c[0])).toEqual([
+      { id: "a", patch: { status: "pending" } },
+      { id: "c", patch: { status: "pending" } },
+    ]);
+  });
+
+  it("while it runs, the cards' Accept / Reject / Edit wait (no racing decisions)", async () => {
+    let release!: () => void;
+    updateAsync.mockImplementation(() => new Promise<void>((r) => (release = r)));
+    query = state({ scan: scan(), candidates: [cand("a", "accepted")], counts: { pending: 0, accepted: 1, rejected: 0 } });
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: P.deselectAll }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Reject: Rule a" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Edit: Rule a" })).toBeDisabled();
+    release();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Reject: Rule a" })).toBeEnabled());
+  });
+
+  it("a failure stops at that rule; the ones not reached stay accepted", async () => {
+    updateAsync.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("500"));
+    query = state({
+      scan: scan(),
+      candidates: [cand("a", "accepted"), cand("b", "accepted"), cand("c", "accepted")],
+      counts: { pending: 0, accepted: 3, rejected: 0 },
+    });
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: P.deselectAll }));
+    await waitFor(() => expect(success).toHaveBeenCalledWith("1 rule moved back to pending — nothing was rejected or deleted."));
+    expect(updateAsync).toHaveBeenCalledTimes(2); // "c" was never sent
   });
 });

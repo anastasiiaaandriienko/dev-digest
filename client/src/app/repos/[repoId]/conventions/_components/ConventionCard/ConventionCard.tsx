@@ -19,12 +19,15 @@ export function ConventionCard({
   candidate,
   evidenceHref,
   onUpdate,
+  busy = false,
 }: {
   candidate: ConventionCandidate;
   /** Opens the evidence on GitHub in a new tab; without it file:line is plain text. */
   evidenceHref?: string | null;
   /** Persist a decision or an edit; rejects when the server refused it. */
   onUpdate: (patch: Patch) => Promise<unknown>;
+  /** A page-wide change (Deselect all) is running: decisions wait for it. */
+  busy?: boolean;
 }) {
   const t = useTranslations("conventions");
   const c = candidate;
@@ -146,6 +149,7 @@ export function ConventionCard({
             full
             aria-pressed={accepted}
             aria-label={accepted ? t("card.unacceptLabel", { rule: short }) : t("card.acceptLabel", { rule: short })}
+            disabled={busy}
             onClick={() => onUpdate({ status: accepted ? "pending" : "accepted" }).catch(() => undefined)}
           >
             {accepted ? t("card.accepted") : t("card.accept")}
@@ -156,11 +160,12 @@ export function ConventionCard({
             icon="X"
             full
             aria-label={t("card.rejectLabel", { rule: short })}
+            disabled={busy}
             onClick={() => onUpdate({ status: "rejected" }).catch(() => undefined)}
           >
             {t("card.reject")}
           </Button>
-          <Button kind="ghost" size="sm" icon="Edit" full aria-label={t("card.editLabel", { rule: short })} onClick={startEdit}>
+          <Button kind="ghost" size="sm" icon="Edit" full aria-label={t("card.editLabel", { rule: short })} onClick={startEdit} disabled={busy}>
             {t("card.edit")}
           </Button>
         </div>

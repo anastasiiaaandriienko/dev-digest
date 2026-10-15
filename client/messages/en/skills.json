@@ -109,8 +109,6 @@
       "dangerTitle": "Delete skill",
       "dangerBody": "Removes it from every agent that uses it and deletes its version history. This can’t be undone.",
       "delete": "Delete",
-      "unsaved": "unsaved",
-      "tokens": "~{tokens, number} tokens",
       "saveNote": "Saving snapshots the body as <b>v{version}</b>",
       "saveNoteMeta": "Metadata only — the body stays <b>v{version}</b>"
     },

@@ -6,7 +6,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import messages from "../../../../../../../../../../messages/en/skills.json";
+import messages from "../../../messages/en/common.json";
 import { MarkdownEditor } from "./MarkdownEditor";
 
 afterEach(cleanup);
@@ -14,7 +14,7 @@ afterEach(cleanup);
 function renderEditor(props: Partial<React.ComponentProps<typeof MarkdownEditor>> = {}) {
   const onChange = vi.fn();
   render(
-    <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ common: messages }}>
       <MarkdownEditor value={"# Title\n\n- item"} onChange={onChange} filename="rule.md" dirty={false} label="Skill body" {...props} />
     </NextIntlClientProvider>,
   );
@@ -41,7 +41,7 @@ describe("MarkdownEditor", () => {
     expect(screen.queryByTestId("body-unsaved")).toBeNull();
     cleanup();
     renderEditor({ dirty: true });
-    expect(screen.getByTestId("body-unsaved")).toHaveTextContent(messages.detail.config.unsaved);
+    expect(screen.getByTestId("body-unsaved")).toHaveTextContent(messages.markdownEditor.unsaved);
   });
 
   it("typing goes to onChange; the textarea is labelled and marks invalid input", () => {

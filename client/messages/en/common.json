@@ -26,5 +26,9 @@
     "saving": "Saving…",
     "discard": "Discard changes",
     "cancel": "Cancel"
+  },
+  "markdownEditor": {
+    "unsaved": "unsaved",
+    "tokens": "~{tokens, number} tokens"
   }
 }

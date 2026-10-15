@@ -4,6 +4,7 @@ import { act, render, screen, cleanup, fireEvent, waitFor } from "@testing-libra
 import { NextIntlClientProvider } from "next-intl";
 import type { Skill } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/skills.json";
+import common from "../../../../../../../../messages/en/common.json";
 
 const mutateAsync = vi.fn();
 let isPending = false;
@@ -38,7 +39,7 @@ const SKILL: Skill = {
 function renderTab(skill: Skill = SKILL) {
   const onDelete = vi.fn();
   render(
-    <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ skills: messages, common }}>
       <ConfigTab skill={skill} onDelete={onDelete} />
     </NextIntlClientProvider>,
   );
@@ -131,7 +132,7 @@ describe("ConfigTab — body editor (design: code editor)", () => {
 
     const body = screen.getByRole("textbox", { name: C.body });
     fireEvent.change(body, { target: { value: "# Rule\nNo removed fields.\n- new line" } });
-    expect(screen.getByTestId("body-unsaved")).toHaveTextContent(C.unsaved);
+    expect(screen.getByTestId("body-unsaved")).toHaveTextContent(common.markdownEditor.unsaved);
     expect(editor.textContent).toContain("3"); // a third line number
     expect(screen.getByText(/Saving snapshots the body as/)).toHaveTextContent("v4");
 
@@ -152,7 +153,7 @@ describe("ConfigTab — unsaved-edits guard (switching skills)", () => {
   function renderGuarded() {
     const guardRef: React.MutableRefObject<ConfigGuard | null> = { current: null };
     const r = render(
-      <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+      <NextIntlClientProvider locale="en" messages={{ skills: messages, common }}>
         <ConfigTab skill={SKILL} onDelete={vi.fn()} guardRef={guardRef} />
       </NextIntlClientProvider>,
     );
@@ -226,7 +227,7 @@ describe("ConfigTab — unsaved-edits guard (switching skills)", () => {
     const guardRef: React.MutableRefObject<ConfigGuard | null> = { current: null };
     const onDirtyChange = vi.fn();
     const ui = (skill: Skill) => (
-      <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+      <NextIntlClientProvider locale="en" messages={{ skills: messages, common }}>
         <ConfigTab skill={skill} onDelete={vi.fn()} guardRef={guardRef} onDirtyChange={onDirtyChange} />
       </NextIntlClientProvider>
     );
@@ -240,7 +241,7 @@ describe("ConfigTab — unsaved-edits guard (switching skills)", () => {
   it("reports dirty changes to the page (and false again after Cancel)", () => {
     const onDirtyChange = vi.fn();
     render(
-      <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+      <NextIntlClientProvider locale="en" messages={{ skills: messages, common }}>
         <ConfigTab skill={SKILL} onDelete={vi.fn()} onDirtyChange={onDirtyChange} />
       </NextIntlClientProvider>,
     );
