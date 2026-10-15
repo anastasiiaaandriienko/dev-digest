@@ -3,22 +3,67 @@
     "crumbLab": "Skills Lab",
     "crumbSkills": "Skills",
     "heading": "Skills",
+    "subtitle": "Markdown rule sets your review agents follow. Click a skill to preview it.",
     "addSkill": "Add Skill",
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
     "menu": {
+      "createFromScratch": "Create from scratch",
       "fromFile": "Import from file",
       "fromUrl": "Import from URL",
-      "community": "Search community skills…"
+      "community": "Search community skills…",
+      "comingSoon": "Coming soon"
     },
     "empty": {
       "title": "No skills yet",
-      "body": "Import a skill from a file, a URL, or the community catalog.",
-      "cta": "Import from file"
+      "body": "Create your first skill: a Markdown rule set an agent applies when it reviews a PR.",
+      "cta": "Create skill"
+    },
+    "noMatch": {
+      "title": "No matching skills",
+      "body": "No skill name or description matches “{query}”."
     },
     "selectPrompt": {
       "title": "Select a skill",
       "body": "Pick a skill on the left to preview its body."
+    }
+  },
+  "card": {
+    "noDescription": "No description",
+    "agents": "{count, plural, =0 {no agents} one {# agent} other {# agents}}",
+    "toggleLabel": "Enable {name}",
+    "openPreview": "Preview {name}"
+  },
+  "previewDrawer": {
+    "subtitle": "{type} skill · {source}",
+    "status": "Status",
+    "usedBy": "Used by",
+    "version": "Version",
+    "source": "Source",
+    "body": "Skill body",
+    "notFound": "This skill no longer exists."
+  },
+  "create": {
+    "title": "Create skill",
+    "subtitle": "A skill is a Markdown rule set. The body is the only text sent to the model.",
+    "name": "Name",
+    "namePlaceholder": "breaking-change",
+    "description": "Description",
+    "descriptionPlaceholder": "What this skill makes the agent check",
+    "type": "Type",
+    "body": "Skill body (Markdown)",
+    "bodyPlaceholder": "# Rule\nDescribe what the reviewer must flag, with a good / bad example.",
+    "write": "Write",
+    "preview": "Preview",
+    "previewEmpty": "Nothing to preview yet.",
+    "cancel": "Cancel",
+    "submit": "Create skill",
+    "creating": "Creating…",
+    "created": "Created skill \"{name}\".",
+    "errors": {
+      "name": "Enter a name (up to 120 characters).",
+      "description": "Keep the description under 2000 characters.",
+      "body": "Enter the skill body in Markdown."
     }
   },
   "detail": {

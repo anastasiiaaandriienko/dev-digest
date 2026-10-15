@@ -45,3 +45,19 @@ Verified, non-obvious knowledge for `client/`. Append-only; maintained via the `
 - **Evidence:** `client/src/app/page.tsx:17` (`router.replace(\`/repos/${repos[0]!.id}/pulls\`)`); `server/src/modules/pulls/routes.ts:42` (local-first sync comment in the `GET /repos/:id/pulls` handler). In Chrome, navigating to `http://localhost:3000` landed on `/repos/cad150ca-…/pulls`, and the Network tab showed `GET :3001/repos/…/pulls` 200.
 - **Guidance:** Treat any visit to `/` as "sync GitHub PRs". For a read-only check, use the API directly or a hermetic stack (e2e uses mock GitHub), and tell the person beforehand when the DB must not change.
 - **Cross-package:** `server/` (sync in the pulls route), `e2e/` (flows that open `/`).
+
+### 2026-10-15 — Every page under AppShell, not just `/`, fetches the active repo's PR list (and so syncs GitHub)
+- **Category:** Codebase Patterns
+- **Status:** verified
+- **Extends:** "Opening `/` silently syncs GitHub PRs: the home page redirects to the first repo's PR list"
+- **Discovery:** `useShellContext` calls `usePulls(repoId)` to show the sidebar PR badge. Once a repo is active, any AppShell page (for example `/skills` or `/agents`) sends `GET /repos/:id/pulls`, which syncs from GitHub and writes to the DB. With no repo in the DB, `repoId` is null and the page only sends `GET /repos`.
+- **Evidence:** `client/src/components/app-shell/hooks/useShellContext.ts:28` (`usePulls(repoId)`). On an isolated stack (Postgres with only a workspace and user, API :3101, web :3100), loading `/skills?preview=…` produced exactly two API requests: `GET :3101/repos` and `GET :3101/skills`.
+- **Guidance:** For a read-only browser check of a non-PR page, opening the deep link is not enough. Use a database with no repos (or a mock GitHub), or the visit can still sync PRs.
+- **Cross-package:** `server/` (sync in `GET /repos/:id/pulls`).
+
+### 2026-10-15 — A runtime (non-type) import from the `@devdigest/shared` barrel breaks `next build`
+- **Category:** What Doesn't Work
+- **Status:** verified
+- **Discovery:** The vendored barrel re-exports with ESM `.js` specifiers (`export * from './contracts/findings.js'`). Next's webpack does not map `.js` to `.ts`, so the first value import (a Zod schema used for validation) failed the build with `Module not found: Can't resolve './contracts/findings.js'`. `pnpm typecheck` and Vitest both passed, so only the build caught it. Until now the client had imported only types from the barrel, and those are erased at compile time.
+- **Evidence:** `client/src/vendor/shared/index.ts:17` (`export * from './contracts/findings.js'`). `pnpm build` failed while `client/src/app/skills/_components/CreateSkillModal/helpers.ts` imported `SkillCreate` from `"@devdigest/shared"`. Importing from the contract file instead, `"@devdigest/shared/contracts/knowledge"` (`helpers.ts:4`, which imports only `zod`), made the build pass.
+- **Guidance:** Keep barrel imports `import type`. For runtime schemas, import the specific contract file through the `@devdigest/shared/*` alias, and check that it has no `.js` relative imports. Always run `pnpm build`, not just typecheck and tests, after adding a value import from `vendor/shared`. Making the barrel usable at runtime (for example a webpack `extensionAlias`) would be a config change that needs approval.
