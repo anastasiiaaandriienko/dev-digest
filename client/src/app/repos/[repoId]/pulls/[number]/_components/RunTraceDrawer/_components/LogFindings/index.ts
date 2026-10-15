@@ -1,0 +1,1 @@
+export { LogFindings } from "./LogFindings";
