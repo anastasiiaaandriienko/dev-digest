@@ -239,5 +239,19 @@ export const AgentSkillLink = z.object({
   agent_id: z.string(),
   skill_id: z.string(),
   order: z.number().int(),
+  // Per-agent switch; a disabled link keeps its order but stays out of the prompt.
+  enabled: z.boolean(),
 });
 export type AgentSkillLink = z.infer<typeof AgentSkillLink>;
+
+// PUT /agents/:id/skills — the agent's FULL ordered skill list (array order =
+// prompt order). Replaces the previous set atomically; omitted skills are detached.
+export const AgentSkillsSet = z.object({
+  skills: z
+    .array(z.object({ skill_id: z.string().uuid(), enabled: z.boolean().default(true) }))
+    .max(200)
+    .refine((items) => new Set(items.map((i) => i.skill_id)).size === items.length, {
+      message: 'Each skill can be attached once',
+    }),
+});
+export type AgentSkillsSet = z.infer<typeof AgentSkillsSet>;

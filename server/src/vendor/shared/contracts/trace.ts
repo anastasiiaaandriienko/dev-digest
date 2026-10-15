@@ -36,6 +36,19 @@ export const ToolCall = z.object({
 });
 export type ToolCall = z.infer<typeof ToolCall>;
 
+/** One skill as applied to a run prompt (HW2 #19/#20): a run-time snapshot of
+    what was sent, in prompt order — not a lookup of the skill today. */
+export const AppliedSkill = z.object({
+  skill_id: z.string(),
+  name: z.string(),
+  version: z.number().int(),
+  /** 0-based position in the Skills section (agent_skills order among applied skills). */
+  order: z.number().int().nonnegative(),
+  /** Tokens of this skill block alone (tiktoken). */
+  tokens: z.number().int().nonnegative(),
+});
+export type AppliedSkill = z.infer<typeof AppliedSkill>;
+
 export const PromptAssembly = z.object({
   system: z.string(),
   skills: z.string().nullish(),
@@ -48,6 +61,12 @@ export const PromptAssembly = z.object({
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
+  /** Skills applied to this run, in prompt order (enabled for the agent AND
+      globally). Absent in traces written before HW2 #19. */
+  skill_blocks: z.array(AppliedSkill).nullish(),
+  /** Tokens of the Skills section ONLY (tiktoken), not the whole prompt. null
+      when no skill was applied; absent in older traces. */
+  skills_tokens: z.number().int().nonnegative().nullish(),
   user: z.string(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;

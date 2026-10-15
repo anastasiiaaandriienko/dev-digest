@@ -81,6 +81,9 @@ class FakeRepo {
   }
 }
 
+/** No DB here ({} as Db): the agent has no skills linked (HW2 #14 adds this lookup). */
+const NO_SKILLS = { effectiveSkills: async () => [] } as unknown as Container['agentsRepo'];
+
 function setup(opts: { llm?: MockLLMProvider; git?: GitClient } = {}) {
   const container = new Container(config(), {} as Db, {
     git: opts.git ?? new MockGitClient({ diff: DIFF }),
@@ -90,7 +93,7 @@ function setup(opts: { llm?: MockLLMProvider; git?: GitClient } = {}) {
   const executor = new ReviewRunExecutor(
     container,
     repo as unknown as ReviewRepository,
-    container.agentsRepo,
+    NO_SKILLS,
   );
   const runId = randomUUID();
   const run = () =>

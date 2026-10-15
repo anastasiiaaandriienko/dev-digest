@@ -72,6 +72,9 @@ function fakeRepo(opts: { finalize?: Fin; prFilesError?: Error } = {}) {
   return { repo: repo as unknown as ReviewRepository, traces, finalizeInputs };
 }
 
+/** No DB here ({} as Db): the agent has no skills linked (HW2 #14 adds this lookup). */
+const NO_SKILLS = { effectiveSkills: async () => [] } as unknown as Container['agentsRepo'];
+
 function setup(o: {
   llm?: MockLLMProvider;
   git?: GitClient;
@@ -87,7 +90,7 @@ function setup(o: {
     ...(o.repoIntel ? { repoIntel: o.repoIntel as never } : {}),
   });
   const fake = fakeRepo({ finalize: o.finalize, prFilesError: o.prFilesError });
-  const executor = new ReviewRunExecutor(container, fake.repo, container.agentsRepo);
+  const executor = new ReviewRunExecutor(container, fake.repo, NO_SKILLS);
   const runId = randomUUID();
   const lines = () => container.runBus.buffer(runId).map((e) => ({ kind: e.kind, msg: e.msg }));
   const run = () => executor.executeRuns('ws', pullRow(), repoRow(), [{ agent: agentRow(o.agent), runId }]);
