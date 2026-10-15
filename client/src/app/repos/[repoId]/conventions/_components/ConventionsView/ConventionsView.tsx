@@ -15,7 +15,7 @@ import { AppShell } from "@/components/app-shell";
 import { RepoNotFound } from "@/components/repo-not-found";
 import { useConventions, useStartConventionScan, useUpdateConvention } from "@/lib/hooks/conventions";
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
-import { ConventionCard } from "../ConventionCard";
+import { ConventionCard, evidenceUrl } from "../ConventionCard";
 import { CreateConventionSkillModal } from "../CreateConventionSkillModal";
 import { SKELETON_CARDS } from "./constants";
 import { relativeAgo, scanActions } from "./helpers";
@@ -160,7 +160,7 @@ export function ConventionsView({ repoId }: { repoId: string }) {
             </div>
             <ul style={s.list} aria-label={t("page.candidatesLabel")}>
               {candidates.map((c) => (
-                <ConventionCard key={c.id} candidate={c} onUpdate={decide(c.id)} />
+                <ConventionCard key={c.id} candidate={c} evidenceHref={evidenceUrl(c, data?.source)} onUpdate={decide(c.id)} />
               ))}
             </ul>
           </>

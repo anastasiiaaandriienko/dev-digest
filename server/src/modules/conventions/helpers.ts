@@ -32,6 +32,38 @@ export function fingerprintRule(rule: string): string {
   return createHash('sha256').update(normalizeRule(rule)).digest('hex');
 }
 
+/** Stable round-robin over groups (groups in first-appearance order, items keep their order). */
+function roundRobin<T>(items: readonly T[], key: (item: T) => string): T[] {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const k = key(item);
+    const list = groups.get(k);
+    if (list) list.push(item);
+    else groups.set(k, [item]);
+  }
+  const lists = [...groups.values()];
+  const out: T[] = [];
+  for (let i = 0; out.length < items.length; i++) {
+    for (const list of lists) if (i < list.length) out.push(list[i]!);
+  }
+  return out;
+}
+
+/**
+ * HW2 #39 — choose `n` sample files from repo-intel's ranked list, spread over
+ * the repo's top-level folders (`server/`, `client/`, root files) and, inside
+ * each, over parent folders, so one package or one folder cannot fill all the
+ * slots. Rank order decides within a folder and which folder comes first.
+ * Top-level dot-folders (`.claude/`, `.github/`) hold tooling and reference
+ * material, not the house style, and are left out (as for config files).
+ */
+export function spreadSampleFiles(ranked: readonly string[], n: number): string[] {
+  const paths = [...new Set(ranked.map((p) => p.replace(/\\/g, '/')))].filter((p) => !/^\.[^/]*\//.test(p));
+  const parent = (p: string) => p.slice(0, p.lastIndexOf('/') + 1);
+  const top = (p: string) => (p.includes('/') ? p.slice(0, p.indexOf('/')) : '');
+  return roundRobin(roundRobin(paths, parent), top).slice(0, Math.max(0, n));
+}
+
 /** A candidate that passed grounding, ready to store. */
 export interface GroundedCandidate {
   rule: string;

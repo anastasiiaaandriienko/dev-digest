@@ -4,16 +4,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ConventionSkillCreate, ConventionUpdate } from '@devdigest/shared';
 import type { ConventionRow } from '../src/db/rows.js';
-import { MAX_FILE_BYTES, MAX_TOTAL_BYTES } from '../src/modules/conventions/constants.js';
+import { MAX_CONFIG_FILES, MAX_FILE_BYTES, MAX_TOTAL_BYTES } from '../src/modules/conventions/constants.js';
 import {
   buildSkillDraft,
   fingerprintRule,
   groundCandidates,
   normalizeRule,
   snippetAround,
+  spreadSampleFiles,
 } from '../src/modules/conventions/helpers.js';
 import { buildExtractionMessages, escapeBlockTags, formatSampleFile } from '../src/modules/conventions/prompt.js';
 import {
+  findConfigFiles,
   readCloneFile,
   redactSecrets,
   selectConventionSamples,
@@ -182,6 +184,94 @@ describe('safe reading of the clone', () => {
       files: [],
       skipped: [{ path: '.', reason: 'repository clone not found' }],
     });
+  });
+});
+
+describe('sampling a monorepo (configs in package folders, files spread over packages)', () => {
+  let mono: string;
+  beforeAll(() => {
+    mono = mkdtempSync(join(tmpdir(), 'dd-conv-mono-'));
+    writeFileSync(join(mono, '.editorconfig'), 'root = true\n');
+    for (const pkg of ['client', 'server', 'reviewer-core', 'node_modules', 'dist', '.github']) {
+      mkdirSync(join(mono, pkg));
+      writeFileSync(join(mono, pkg, 'tsconfig.json'), '{ "compilerOptions": { "strict": true } }\n');
+    }
+    writeFileSync(join(mono, 'server', '.prettierrc'), '{ "singleQuote": true }\n');
+    writeFileSync(join(mono, 'server', 'README.md'), '# not a config\n');
+    mkdirSync(join(mono, 'server', 'src'));
+    writeFileSync(join(mono, 'server', 'src', 'tsconfig.json'), '{}\n'); // second level: not searched
+    mkdirSync(join(mono, 'docs', 'tsconfig.json'), { recursive: true }); // a folder named like a config is not a file
+  });
+  afterAll(() => rmSync(mono, { recursive: true, force: true }));
+
+  it('findConfigFiles: root first, then first-level packages; skips dot / build / dependency folders and deeper levels', async () => {
+    expect(await findConfigFiles(mono)).toEqual([
+      '.editorconfig',
+      'client/tsconfig.json',
+      'reviewer-core/tsconfig.json',
+      'server/.prettierrc',
+      'server/tsconfig.json',
+    ]);
+  });
+
+  it('findConfigFiles: at most MAX_CONFIG_FILES paths', async () => {
+    const many = mkdtempSync(join(tmpdir(), 'dd-conv-many-'));
+    try {
+      for (let i = 0; i < MAX_CONFIG_FILES + 4; i++) {
+        const pkg = `pkg${String(i).padStart(2, '0')}`;
+        mkdirSync(join(many, pkg));
+        writeFileSync(join(many, pkg, 'tsconfig.json'), '{}\n');
+      }
+      const found = await findConfigFiles(many);
+      expect(found).toHaveLength(MAX_CONFIG_FILES);
+      expect(found[0]).toBe('pkg00/tsconfig.json');
+    } finally {
+      rmSync(many, { recursive: true, force: true });
+    }
+  });
+
+  it('selectConventionSamples reads package configs as config samples', async () => {
+    const sel = await selectConventionSamples(mono, []);
+    expect(sel.files.map((f) => [f.path, f.kind])).toEqual([
+      ['.editorconfig', 'config'],
+      ['client/tsconfig.json', 'config'],
+      ['reviewer-core/tsconfig.json', 'config'],
+      ['server/.prettierrc', 'config'],
+      ['server/tsconfig.json', 'config'],
+    ]);
+  });
+
+  it('spreadSampleFiles: a ranking that starts with one folder still yields every package, rank order kept per folder', () => {
+    const ranked = [
+      'server/src/platform/a.ts',
+      'server/src/platform/b.ts',
+      'server/src/platform/c.ts',
+      'server/src/modules/x.ts',
+      'client/src/app/page.tsx',
+      'client/src/lib/api.ts',
+      'reviewer-core/src/index.ts',
+      'vitest.config.ts',
+    ];
+    expect(spreadSampleFiles(ranked, 4)).toEqual([
+      'server/src/platform/a.ts',
+      'client/src/app/page.tsx',
+      'reviewer-core/src/index.ts',
+      'vitest.config.ts',
+    ]);
+    // Inside a package, parent folders alternate before a folder repeats.
+    expect(spreadSampleFiles(ranked, 6).slice(4)).toEqual(['server/src/modules/x.ts', 'client/src/lib/api.ts']);
+    expect(spreadSampleFiles(ranked, 100)).toHaveLength(ranked.length);
+  });
+
+  it('spreadSampleFiles: a single-folder repo keeps the ranking; backslashes and duplicates are normalized; n <= 0 gives []', () => {
+    expect(spreadSampleFiles(['src/a.ts', 'src/b.ts', 'src/c.ts'], 2)).toEqual(['src/a.ts', 'src/b.ts']);
+    expect(spreadSampleFiles(['src\\a.ts', 'src/a.ts', 'lib\\b.ts'], 5)).toEqual(['src/a.ts', 'lib/b.ts']);
+    expect(spreadSampleFiles(['.claude/skills/x/types.ts', '.github/scripts/a.ts', 'src/a.ts', '.eslintrc.js'], 5)).toEqual([
+      'src/a.ts',
+      '.eslintrc.js', // a root dot-file is not a dot-folder
+    ]);
+    expect(spreadSampleFiles(['a.ts'], 0)).toEqual([]);
+    expect(spreadSampleFiles([], 12)).toEqual([]);
   });
 });
 

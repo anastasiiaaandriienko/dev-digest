@@ -1,7 +1,10 @@
+import type { Dirent } from 'node:fs';
 import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import {
   CONFIG_FILE_RE,
+  CONFIG_SKIP_DIRS,
+  MAX_CONFIG_FILES,
   MAX_CONFIG_BYTES,
   MAX_FILE_BYTES,
   MAX_TOTAL_BYTES,
@@ -112,9 +115,41 @@ export async function readCloneFile(
   }
 }
 
+const configNames = (entries: Dirent[]) =>
+  entries
+    .filter((e) => e.isFile() && CONFIG_FILE_RE.test(e.name))
+    .map((e) => e.name)
+    .sort();
+
 /**
- * HW2 #39 — pick what the model sees with code only (no LLM): the repo's root
- * config files (tsconfig / eslint / prettier / editorconfig / biome) and the
+ * Config files of the repo root, then of each first-level package directory
+ * (a monorepo keeps its tsconfig in `server/`, `client/`, ...). Dot-dirs and
+ * build / dependency folders are skipped; at most MAX_CONFIG_FILES paths.
+ * Throws only when the root itself cannot be listed.
+ */
+export async function findConfigFiles(cloneRoot: string): Promise<string[]> {
+  const rootEntries = await readdir(cloneRoot, { withFileTypes: true });
+  const found = configNames(rootEntries);
+  const dirs = rootEntries
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !CONFIG_SKIP_DIRS.has(e.name))
+    .map((e) => e.name)
+    .sort();
+  for (const dir of dirs) {
+    if (found.length >= MAX_CONFIG_FILES) break;
+    try {
+      const entries = await readdir(join(cloneRoot, dir), { withFileTypes: true });
+      for (const name of configNames(entries)) found.push(`${dir}/${name}`);
+    } catch {
+      // An unreadable package folder only means fewer config samples.
+    }
+  }
+  return found.slice(0, MAX_CONFIG_FILES);
+}
+
+/**
+ * HW2 #39 — pick what the model sees with code only (no LLM): the repo's
+ * config files (tsconfig / eslint / prettier / editorconfig / biome, at the
+ * root and in first-level package folders) and the
  * top-ranked source files from repo-intel, each read safely, secrets redacted,
  * within per-file and total size budgets.
  */
@@ -130,11 +165,7 @@ export async function selectConventionSamples(clonePath: string, rankedFiles: re
 
   let configs: string[] = [];
   try {
-    const entries = await readdir(cloneRoot, { withFileTypes: true });
-    configs = entries
-      .filter((e) => CONFIG_FILE_RE.test(e.name))
-      .map((e) => e.name)
-      .sort();
+    configs = await findConfigFiles(cloneRoot);
   } catch {
     skipped.push({ path: '.', reason: 'repository root unreadable' });
   }

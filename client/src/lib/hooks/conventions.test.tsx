@@ -47,6 +47,7 @@ const STATE: ConventionsState = {
   scan: null,
   candidates: [cand("a"), cand("b", "accepted")],
   counts: { pending: 1, accepted: 1, rejected: 2 },
+  source: { repo_full_name: "acme/api", ref: "c0ffee1" },
 };
 const cached = () => qc.getQueryData<ConventionsState>(conventionsKey("r"));
 

@@ -70,7 +70,13 @@ const scan = (o: Partial<ConventionScan> = {}): ConventionScan => ({
   ...o,
 });
 const state = (o: Partial<ConventionsState> = {}): Q => ({
-  data: { scan: null, candidates: [], counts: { pending: 0, accepted: 0, rejected: 0 }, ...o },
+  data: {
+    scan: null,
+    candidates: [],
+    counts: { pending: 0, accepted: 0, rejected: 0 },
+    source: { repo_full_name: "acme/payments-api", ref: "c0ffee1" },
+    ...o,
+  },
   isLoading: false,
   isError: false,
   refetch: vi.fn(),
@@ -199,6 +205,16 @@ describe("ConventionsView — candidates (HW2 #46–#48, #50)", () => {
     renderView();
     fireEvent.click(screen.getByRole("button", { name: "Reject: Rule b" }));
     expect(updateAsync).toHaveBeenCalledWith({ id: "b", patch: { status: "rejected" } });
+  });
+
+  it("file:line opens the evidence line on GitHub at the scanned commit, in a new tab", () => {
+    query = state({ scan: scan(), candidates: [cand("a"), { ...cand("b"), evidence_line: null }], counts: { pending: 2, accepted: 0, rejected: 0 } });
+    renderView();
+    const link = screen.getByRole("link", { name: "src/a.ts:3" });
+    expect(link).toHaveAttribute("href", "https://github.com/acme/payments-api/blob/c0ffee1/src/a.ts#L3");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    expect(screen.getByRole("link", { name: "src/a.ts" })).toHaveAttribute("href", "https://github.com/acme/payments-api/blob/c0ffee1/src/a.ts");
   });
 
   it("everything decided → 'nothing left to review'", () => {

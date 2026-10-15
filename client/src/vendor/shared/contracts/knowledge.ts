@@ -394,6 +394,13 @@ export const ConventionsState = z.object({
     accepted: z.number().int(),
     rejected: z.number().int(),
   }),
+  // Where evidence links point: the repo on GitHub and the clone's current HEAD
+  // (else the default branch). Scans do not store their commit, so after a
+  // re-sync a link can drift from the line that was sampled.
+  source: z.object({
+    repo_full_name: z.string(),
+    ref: z.string(),
+  }),
 });
 export type ConventionsState = z.infer<typeof ConventionsState>;
 

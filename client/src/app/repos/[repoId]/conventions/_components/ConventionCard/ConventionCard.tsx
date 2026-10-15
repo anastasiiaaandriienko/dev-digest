@@ -17,9 +17,12 @@ import { s } from "./styles";
 
 export function ConventionCard({
   candidate,
+  evidenceHref,
   onUpdate,
 }: {
   candidate: ConventionCandidate;
+  /** Opens the evidence on GitHub in a new tab; without it file:line is plain text. */
+  evidenceHref?: string | null;
   /** Persist a decision or an edit; rejects when the server refused it. */
   onUpdate: (patch: Patch) => Promise<unknown>;
 }) {
@@ -111,7 +114,7 @@ export function ConventionCard({
             </div>
             <div style={s.evidence}>
               <div style={s.evidenceHead}>
-                {location ? <MonoLink>{location}</MonoLink> : <span style={s.muted}>{t("card.noEvidence")}</span>}
+                {location ? <MonoLink href={evidenceHref ?? undefined}>{location}</MonoLink> : <span style={s.muted}>{t("card.noEvidence")}</span>}
                 {location && <IconBtn icon="Copy" size={22} label={t("card.copyEvidence", { location })} onClick={copy} />}
               </div>
               {c.evidence_snippet && (

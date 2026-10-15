@@ -52,6 +52,23 @@ describe("ConventionCard — display (HW2 #46)", () => {
     expect(screen.getByTestId("convention-confidence")).toHaveTextContent("72%");
   });
 
+  it("file:line is a link only when an evidence URL is given", () => {
+    renderCard();
+    expect(screen.queryByRole("link")).toBeNull();
+    cleanup();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ conventions: messages }}>
+        <ul>
+          <ConventionCard candidate={CAND} evidenceHref="https://github.com/acme/api/blob/c0ffee1/src/users.ts#L5" onUpdate={vi.fn()} />
+        </ul>
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByRole("link", { name: "src/users.ts:5" })).toHaveAttribute(
+      "href",
+      "https://github.com/acme/api/blob/c0ffee1/src/users.ts#L5",
+    );
+  });
+
   it("legacy candidates without evidence or confidence still render", () => {
     renderCard({ evidence_path: null, evidence_line: null, evidence_snippet: null, confidence: null, category: "other" });
     expect(screen.getByText(C.noEvidence)).toBeInTheDocument();

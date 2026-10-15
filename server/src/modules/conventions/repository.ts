@@ -8,7 +8,10 @@ import { fingerprintRule, type GroundedCandidate } from './helpers.js';
 /** The repo fields a scan needs, scoped to the workspace. */
 export interface ScanRepo {
   id: string;
+  owner: string;
+  name: string;
   fullName: string;
+  defaultBranch: string;
   clonePath: string | null;
 }
 
@@ -28,7 +31,14 @@ export class ConventionsRepository {
 
   async getRepo(workspaceId: string, repoId: string): Promise<ScanRepo | undefined> {
     const [row] = await this.db
-      .select({ id: t.repos.id, fullName: t.repos.fullName, clonePath: t.repos.clonePath })
+      .select({
+        id: t.repos.id,
+        owner: t.repos.owner,
+        name: t.repos.name,
+        fullName: t.repos.fullName,
+        defaultBranch: t.repos.defaultBranch,
+        clonePath: t.repos.clonePath,
+      })
       .from(t.repos)
       .where(and(eq(t.repos.workspaceId, workspaceId), eq(t.repos.id, repoId)));
     return row;

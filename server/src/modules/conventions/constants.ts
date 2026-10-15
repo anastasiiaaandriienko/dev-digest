@@ -1,5 +1,26 @@
 /** Top-ranked source files sampled per scan (HW2 #39), next to the config files. */
 export const SAMPLE_TOP_FILES = 12;
+/**
+ * Ranked candidates asked from repo-intel (paths only, cheap); the 12 are then
+ * spread across the repo's top-level packages so a monorepo is not sampled from
+ * one folder only. Large on purpose: with a flat ranking (no import edges) the
+ * tied files come back in table order, so a small pool can be one folder.
+ */
+export const SAMPLE_POOL = 500;
+
+/** Config files read per scan (root first, then each first-level package). */
+export const MAX_CONFIG_FILES = 8;
+/** First-level directories never searched for config files. */
+export const CONFIG_SKIP_DIRS: ReadonlySet<string> = new Set([
+  'node_modules',
+  'dist',
+  'build',
+  'out',
+  'coverage',
+  'vendor',
+  'clones',
+  'tmp',
+]);
 
 /** Bytes read per file; longer files are cut at a line boundary (evidence must fall inside). */
 export const MAX_FILE_BYTES = 16 * 1024;

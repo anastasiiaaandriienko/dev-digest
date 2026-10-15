@@ -10,7 +10,7 @@ import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
 import * as t from '../src/db/schema.js';
-import { MockGitHubClient, MockLLMProvider, MockSecretsProvider } from '../src/adapters/mocks.js';
+import { MockGitClient, MockGitHubClient, MockLLMProvider, MockSecretsProvider } from '../src/adapters/mocks.js';
 import type { RepoIntel } from '../src/modules/repo-intel/types.js';
 import { ConventionsService } from '../src/modules/conventions/service.js';
 
@@ -41,6 +41,15 @@ class ScriptedLLM extends MockLLMProvider {
   }
 }
 
+/** Clone HEAD for evidence links; `fail` simulates a clone git cannot read. */
+class HeadGit extends MockGitClient {
+  fail = false;
+  override async currentHead(): Promise<string> {
+    if (this.fail) throw new Error('not a git repository');
+    return 'c0ffee1234567890';
+  }
+}
+
 const RANKED = ['src/users.ts', 'src/errors.ts', '.env', '../escape.ts'];
 const raw = (o: Partial<Raw>): Raw => ({
   category: 'naming',
@@ -62,6 +71,7 @@ d('Conventions Extractor (Testcontainers pg)', () => {
   const openai = new ScriptedLLM('openai');
   const anthropic = new ScriptedLLM('anthropic');
   const repoIntel = { getConventionSamples: async () => RANKED } as unknown as RepoIntel;
+  const git = new HeadGit();
 
   beforeAll(async () => {
     clone = mkdtempSync(join(tmpdir(), 'dd-conv-it-'));
@@ -104,6 +114,7 @@ d('Conventions Extractor (Testcontainers pg)', () => {
         github: new MockGitHubClient({ pulls: [] }),
         llm: { openai, anthropic },
         repoIntel,
+        git,
       },
     });
   });
@@ -430,5 +441,24 @@ d('Conventions Extractor (Testcontainers pg)', () => {
 
     expect((await patch('00000000-0000-4000-8000-000000000000', { status: 'accepted' })).statusCode).toBe(404);
     expect((await patch('not-a-uuid', { status: 'accepted' })).statusCode).toBe(422);
+  });
+
+  it('X11: state carries the evidence-link source: clone HEAD, else the default branch', async () => {
+    expect((await state()).source).toEqual({ repo_full_name: 'acme/api', ref: 'c0ffee1234567890' });
+
+    git.fail = true;
+    try {
+      expect((await state()).source).toEqual({ repo_full_name: 'acme/api', ref: 'main' });
+    } finally {
+      git.fail = false;
+    }
+
+    const [noClone] = await db()
+      .insert(t.repos)
+      .values({ workspaceId: ws, owner: 'acme', name: 'web', fullName: 'acme/web', defaultBranch: 'develop' })
+      .returning();
+    const res = await app.inject({ method: 'GET', url: `/repos/${noClone!.id}/conventions` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ scan: null, candidates: [], source: { repo_full_name: 'acme/web', ref: 'develop' } });
   });
 });

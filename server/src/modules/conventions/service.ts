@@ -14,8 +14,8 @@ import { ConfigError, ConflictError, NotFoundError, ValidationError } from '../.
 import { withTimeout } from '../../platform/resilience.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { toSkillDto } from '../skills/helpers.js';
-import { MAX_REJECTED_IN_PROMPT, SAMPLE_TOP_FILES, SCAN_TIMEOUT_MS } from './constants.js';
-import { buildSkillDraft, groundCandidates, toConventionDto, toScanDto } from './helpers.js';
+import { MAX_REJECTED_IN_PROMPT, SAMPLE_POOL, SAMPLE_TOP_FILES, SCAN_TIMEOUT_MS } from './constants.js';
+import { buildSkillDraft, groundCandidates, spreadSampleFiles, toConventionDto, toScanDto } from './helpers.js';
 import { buildExtractionMessages, ConventionExtraction, SCHEMA_NAME } from './prompt.js';
 import { ConventionsRepository, type ScanRepo } from './repository.js';
 import { selectConventionSamples } from './samples.js';
@@ -77,7 +77,8 @@ export class ConventionsService {
     if (!repo.clonePath) return fail('The repository is not cloned yet');
     let ranked: string[] = [];
     try {
-      ranked = await this.container.repoIntel.getConventionSamples(repo.id, SAMPLE_TOP_FILES);
+      const pool = await this.container.repoIntel.getConventionSamples(repo.id, SAMPLE_POOL);
+      ranked = spreadSampleFiles(pool, SAMPLE_TOP_FILES);
     } catch {
       ranked = []; // repo-intel degrades: config files alone can still be sampled
     }
@@ -127,14 +128,29 @@ export class ConventionsService {
 
   /** GET /repos/:id/conventions — rejected candidates only when asked for. */
   async state(workspaceId: string, repoId: string, includeRejected: boolean): Promise<ConventionsState> {
-    await this.scanRepo(workspaceId, repoId);
+    const repo = await this.scanRepo(workspaceId, repoId);
     const statuses: ConventionStatus[] = includeRejected ? ['pending', 'accepted', 'rejected'] : ['pending', 'accepted'];
     const [scan, rows, counts] = await Promise.all([
       this.repo.latestScan(workspaceId, repoId),
       this.repo.list(workspaceId, repoId, statuses),
       this.repo.counts(workspaceId, repoId),
     ]);
-    return { scan: scan ? toScanDto(scan) : null, candidates: rows.map(toConventionDto), counts };
+    const source = { repo_full_name: repo.fullName, ref: await this.sourceRef(repo) };
+    return { scan: scan ? toScanDto(scan) : null, candidates: rows.map(toConventionDto), counts, source };
+  }
+
+  /**
+   * The commit evidence links open on GitHub: the clone's current HEAD (a local
+   * rev-parse, no network), else the default branch. It matches the sampled
+   * files until the clone is re-synced; the scan itself does not store a commit.
+   */
+  private async sourceRef(repo: ScanRepo): Promise<string> {
+    if (!repo.clonePath) return repo.defaultBranch;
+    try {
+      return (await this.container.git.currentHead({ owner: repo.owner, name: repo.name })) || repo.defaultBranch;
+    } catch {
+      return repo.defaultBranch;
+    }
   }
 
   /** PATCH /conventions/:id — Accept / Reject / back to pending, inline edit of rule + category. */
