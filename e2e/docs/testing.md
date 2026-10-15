@@ -5,7 +5,7 @@ and env knobs are in [../README.md](../README.md), and the stack internals are i
 [architecture.md](architecture.md).
 
 > Every command below starts processes, and some of them install dependencies or
-> migrate and seed a database. Per the root [../../CLAUDE.md](../../CLAUDE.md), an
+> migrate and seed a database. Per the root [../../AGENTS.md](../../AGENTS.md), an
 > agent must get the user's approval before running them.
 
 ## Prerequisites

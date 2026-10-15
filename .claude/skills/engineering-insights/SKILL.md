@@ -42,7 +42,7 @@ If several packages are involved, write ONE entry in the primary owning package 
 
 ## What qualifies
 
-Record only if ALL hold: verified in this session (code read, command output, test result), non-obvious from a quick read of the code, reusable for future tasks, not already in `CLAUDE.md`, a README, `TESTING.md`, or an existing insight.
+Record only if ALL hold: verified in this session (code read, command output, test result), non-obvious from a quick read of the code, reusable for future tasks, not already in `AGENTS.md` / `CLAUDE.md`, a README, `TESTING.md`, or an existing insight.
 
 Record:
 - architectural constraints and cross-package dependencies;
@@ -124,5 +124,5 @@ Run only after meaningful coding/debugging, not after trivial edits or pure Q&A.
 
 ## Boundaries
 
-- This skill edits only `*/INSIGHTS.md`. It never changes application code, `CLAUDE.md`, migrations, or lockfiles.
+- This skill edits only `*/INSIGHTS.md`. It never changes application code, `AGENTS.md`, `CLAUDE.md`, migrations, or lockfiles.
 - Keep entries short; an `INSIGHTS.md` is a lookup aid, not documentation. If a file grows past ~100 entries, suggest a user-approved consolidation instead of pruning on your own.
