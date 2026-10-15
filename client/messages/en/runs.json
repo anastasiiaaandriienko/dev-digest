@@ -68,6 +68,16 @@
       "args": "args",
       "result": "result",
       "previewTruncated": "(preview truncated)"
+    },
+    "skills": {
+      "title": "Skills",
+      "summary": "{count, plural, one {# skill applied} other {# skills applied}}",
+      "tokens": "{tokens} tokens (Skills section only)",
+      "listLabel": "Applied skills in prompt order",
+      "position": "#{position}",
+      "version": "v{version}",
+      "blockTokens": "{tokens} tok",
+      "sent": "Skills section as sent"
     }
   },
   "drawer": {
@@ -77,7 +87,7 @@
     "running": "running",
     "completed": "completed",
     "copyRawOutput": "Copy raw output",
-  "copied": "Copied!",
+    "copied": "Copied!",
     "tracePending": "Trace is written when the run completes — see the Live log tab.",
     "loadingTrace": "Loading trace…",
     "noTrace": "No trace available yet."

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { Agent } from "@devdigest/shared";
 import messages from "../../../../../../messages/en/agents.json";
@@ -9,6 +9,11 @@ import { ToastProvider } from "../../../../../lib/toast";
 vi.mock("../../../../../lib/hooks/agents", () => ({
   useUpdateAgent: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false, data: undefined }),
   useProviderModels: () => ({ data: [{ id: "gpt-4.1", provider: "openai" }] }),
+  useAgentSkills: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useSetAgentSkills: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("@/lib/hooks/skills", () => ({
+  useSkills: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
 }));
 
 import { AgentEditor } from "./AgentEditor";
@@ -44,5 +49,22 @@ describe("A2 Agent Editor (smoke)", () => {
     expect(screen.getByText("Config")).toBeInTheDocument();
     expect(screen.getByText("Configuration")).toBeInTheDocument();
     expect(screen.getByText("Save agent")).toBeInTheDocument();
+  });
+});
+
+describe("Agent Editor tabs (HW2 #35)", () => {
+  it("has exactly two tabs: Config and Skills", () => {
+    renderWithIntl(<AgentEditor agent={AGENT} tab="config" onTab={() => {}} />);
+    const tabs = ["Config", "Skills", "Evals", "Stats", "CI"].filter((name) => screen.queryByRole("button", { name }));
+    expect(tabs).toEqual(["Config", "Skills"]);
+  });
+
+  it("tab=skills shows the Skills tab; clicking a tab reports it", () => {
+    const onTab = vi.fn();
+    renderWithIntl(<AgentEditor agent={AGENT} tab="skills" onTab={onTab} />);
+    expect(screen.getByRole("heading", { level: 2, name: "Skills" })).toBeInTheDocument();
+    expect(screen.queryByText("Save agent")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Config" }));
+    expect(onTab).toHaveBeenCalledWith("config");
   });
 });

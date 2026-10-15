@@ -133,6 +133,8 @@ export function useDeleteSkill() {
       // right before the page navigates away. The page's own copy is left to gc.
       qc.removeQueries({ queryKey: skillKey(id), type: "inactive" });
       qc.removeQueries({ queryKey: skillVersionsKey(id), type: "inactive" });
+      // Its agent links are gone server-side; a stale cached list would send the id back in the next PUT.
+      qc.invalidateQueries({ queryKey: ["agent-skills"] });
       return qc.invalidateQueries({ queryKey: SKILLS_KEY });
     },
   });

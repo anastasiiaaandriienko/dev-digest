@@ -89,9 +89,29 @@
   },
   "skills": {
     "title": "Skills",
-    "enabledCount": "{linked} of {total} enabled",
+    "enabledCount": "{linked} of {total} applied",
     "filterPlaceholder": "Filter skills…",
-    "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Toggle to attach."
+    "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Drag an enabled skill (or use ↑ / ↓) to reorder.",
+    "searchLabel": "Filter skills by name",
+    "reorderPausedHint": "Clear the filter to reorder.",
+    "attachedTitle": "In this agent's prompt",
+    "attachedEmpty": "No skills attached. Turn one on below to add it to the prompt.",
+    "availableTitle": "Available skills",
+    "availableEmpty": "Every skill is attached.",
+    "noMatch": "No skill matches “{query}”.",
+    "promptPosition": "#{position}",
+    "useForAgent": "Use {name} for this agent",
+    "offForAgent": "off for this agent",
+    "offForAgentHint": "Attached but disabled for this agent: kept in place, not in the prompt.",
+    "offGlobally": "disabled globally",
+    "offGloballyHint": "Disabled on the Skills page for every agent: not in the prompt until it is enabled there.",
+    "dragHandle": "Drag {name} to reorder",
+    "dragDisabled": "Only enabled skills can be reordered",
+    "moveUp": "Move {name} up",
+    "moveDown": "Move {name} down",
+    "detach": "Detach {name}",
+    "loadError": "Could not load this agent's skills.",
+    "source": "Source"
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."

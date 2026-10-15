@@ -1,0 +1,60 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for AgentSkillRow (design: agent editor · Skills tab rows). */
+export const s = {
+  row: (applied: boolean, dragging: boolean, dropTarget: boolean): CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "8px 10px",
+    borderRadius: 7,
+    border: "1px solid " + (dropTarget ? "var(--accent)" : "var(--border)"),
+    background: applied ? "var(--bg-hover)" : "var(--bg-elevated)",
+    opacity: dragging ? 0.45 : applied ? 1 : 0.75,
+    listStyle: "none",
+  }),
+  handle: (enabled: boolean): CSSProperties => ({
+    display: "inline-flex",
+    color: "var(--text-muted)",
+    cursor: enabled ? "grab" : "not-allowed",
+    opacity: enabled ? 1 : 0.35,
+    flexShrink: 0,
+  }),
+  position: { width: 26, fontSize: 11.5, color: "var(--accent-text)", fontWeight: 600, flexShrink: 0 } satisfies CSSProperties,
+  name: {
+    fontSize: 12.5,
+    fontWeight: 600,
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  } satisfies CSSProperties,
+  typeChip: (color: string, bg: string): CSSProperties => ({
+    fontSize: 10.5,
+    fontWeight: 600,
+    color,
+    background: bg,
+    padding: "1px 7px",
+    borderRadius: 4,
+    flexShrink: 0,
+  }),
+  source: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
+    fontSize: 10.5,
+    color: "var(--text-muted)",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  badge: (color: string): CSSProperties => ({
+    fontSize: 10.5,
+    fontWeight: 600,
+    color,
+    border: `1px solid ${color}`,
+    padding: "0 6px",
+    borderRadius: 4,
+    flexShrink: 0,
+  }),
+  spacer: { flex: 1 } satisfies CSSProperties,
+  moves: { display: "inline-flex", gap: 2 } satisfies CSSProperties,
+} as const;

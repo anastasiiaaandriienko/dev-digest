@@ -42,6 +42,8 @@ interface Rule {
   end?: boolean;
   /** The event itself says the phase's work was skipped (implies `end`). */
   skip?: boolean;
+  /** The event proves the phase DID work, overriding an earlier skip. */
+  ran?: boolean;
 }
 
 // Index into RUN_PHASES. Rules are tried in order: the engine's strategy lines
@@ -69,6 +71,10 @@ const RULES: Rule[] = [
   { phase: 1, re: /^callers digest: / },
   { phase: 1, re: /^repo map: / },
   { phase: 1, re: /^file rank: / },
+  // HW2 #14: the agent's skills are resolved here, after repo-intel. Applied
+  // skills mean Planning did work even when repo-intel was disabled.
+  { phase: 1, re: /^skills: applied \d+ — /, ran: true },
+  { phase: 1, re: /^skills: none applied$/ },
   // 3 · Implementation — the engine's review strategy, the model call(s) and
   //     the reduce step.
   { phase: 2, re: /^Large diff → map-reduce over \d+ files$/ },
@@ -90,8 +96,10 @@ const MAP_STEP_RE = /^map: reviewing /;
 const CANCELLED_RE = /^Run cancelled by user$/;
 
 /** Phase index of one message, or null if it is not a lifecycle event. */
-export function phaseOf(msg: string): { phase: number; end: boolean; skip: boolean } | null {
-  for (const r of RULES) if (r.re.test(msg)) return { phase: r.phase, end: !!(r.end || r.skip), skip: !!r.skip };
+export function phaseOf(msg: string): { phase: number; end: boolean; skip: boolean; ran: boolean } | null {
+  for (const r of RULES) {
+    if (r.re.test(msg)) return { phase: r.phase, end: !!(r.end || r.skip), skip: !!r.skip, ran: !!r.ran };
+  }
   return null;
 }
 
@@ -130,6 +138,7 @@ export function phasesFrom(lines: readonly PhaseLogLine[], status?: string | nul
     if (!p) continue;
     if (p.phase === 4 && p.end) sawComplete = true;
     if (p.skip) skipped.add(p.phase);
+    if (p.ran) skipped.delete(p.phase);
     if (p.phase > cur) {
       cur = p.phase;
       endSeen = p.end;

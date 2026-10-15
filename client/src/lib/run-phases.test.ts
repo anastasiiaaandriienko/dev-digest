@@ -36,14 +36,14 @@ const DONE = [L("Persisted review r1 with 1 finding(s)", "result"), L("Run compl
 
 describe("phaseOf", () => {
   it("classifies lifecycle messages and ignores the rest", () => {
-    expect(phaseOf("Loading PR diff…")).toEqual({ phase: 0, end: false, skip: false });
-    expect(phaseOf("Resolving openai provider done (3ms)")).toEqual({ phase: 0, end: true, skip: false });
-    expect(phaseOf("callers digest: 1 caller signature(s) attached")).toEqual({ phase: 1, end: false, skip: false });
-    expect(phaseOf("Reviewing 3 changed file(s) in one pass")).toEqual({ phase: 2, end: false, skip: false });
-    expect(phaseOf("Large diff → map-reduce over 3 files")).toEqual({ phase: 2, end: false, skip: false });
-    expect(phaseOf("Reviewing all files in one pass")).toEqual({ phase: 2, end: false, skip: false });
-    expect(phaseOf("Citation grounding: 1/1 passed")).toEqual({ phase: 3, end: true, skip: false });
-    expect(phaseOf("Run complete (confirmed after a persistence error)")).toEqual({ phase: 4, end: true, skip: false });
+    expect(phaseOf("Loading PR diff…")).toEqual({ phase: 0, end: false, skip: false, ran: false });
+    expect(phaseOf("Resolving openai provider done (3ms)")).toEqual({ phase: 0, end: true, skip: false, ran: false });
+    expect(phaseOf("callers digest: 1 caller signature(s) attached")).toEqual({ phase: 1, end: false, skip: false, ran: false });
+    expect(phaseOf("Reviewing 3 changed file(s) in one pass")).toEqual({ phase: 2, end: false, skip: false, ran: false });
+    expect(phaseOf("Large diff → map-reduce over 3 files")).toEqual({ phase: 2, end: false, skip: false, ran: false });
+    expect(phaseOf("Reviewing all files in one pass")).toEqual({ phase: 2, end: false, skip: false, ran: false });
+    expect(phaseOf("Citation grounding: 1/1 passed")).toEqual({ phase: 3, end: true, skip: false, ran: false });
+    expect(phaseOf("Run complete (confirmed after a persistence error)")).toEqual({ phase: 4, end: true, skip: false, ran: false });
     expect(phaseOf("Cancellation requested — stopping…")).toBeNull();
   });
 
@@ -52,9 +52,37 @@ describe("phaseOf", () => {
       phase: 1,
       end: true,
       skip: true,
+      ran: false,
     });
     // A failed lookup is logged, but the phase still ran — not a skip.
     expect(phaseOf("callers digest: repoIntel failed — boom")!.skip).toBe(false);
+  });
+
+  it("classifies the applied-skills line under Planning (HW2 #14)", () => {
+    expect(phaseOf("skills: applied 2 — breaking-change v3 → semver v1 (412 tokens)")).toEqual({
+      phase: 1,
+      end: false,
+      skip: false,
+      ran: true,
+    });
+    expect(phaseOf("skills: none applied")).toEqual({ phase: 1, end: false, skip: false, ran: false });
+  });
+});
+
+describe("phasesFrom — skills in Planning", () => {
+  const SKILLS = L("skills: applied 1 — breaking-change v3 (120 tokens)");
+  const NO_SKILLS = L("skills: none applied");
+
+  it("applied skills mean Planning did work, even when repo-intel was disabled", () => {
+    expect(states([...INIT, ...PLAN_SKIPPED, SKILLS, ...IMPL, ...VALID, ...DONE], "done")).toBe("CCCCC");
+  });
+
+  it("no skills + repo-intel disabled → Planning still reads skipped", () => {
+    expect(states([...INIT, ...PLAN_SKIPPED, NO_SKILLS, ...IMPL, ...VALID, ...DONE], "done")).toBe("CSCCC");
+  });
+
+  it("a live run resolving skills is in Planning", () => {
+    expect(states([...INIT, SKILLS], "running")).toBe("CAPPP");
   });
 });
 
