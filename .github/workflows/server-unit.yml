@@ -10,7 +10,8 @@
 #    LLM/git/embeddings are mocked via src/adapters/mocks.ts — no Docker.
 #
 # DB-backed tests run in server-integration.yml. reviewer-core/** is in the
-# path filter because server aliases ../reviewer-core/src at type-check time.
+# path filter because server aliases ../reviewer-core/src at type-check time;
+# docs/skills/** because test/api-contract-skills.test.ts validates those skills.
 name: server unit
 
 on:
@@ -19,11 +20,13 @@ on:
     paths:
       - 'server/**'
       - 'reviewer-core/**'
+      - 'docs/skills/**'
       - '.github/workflows/server-unit.yml'
   pull_request:
     paths:
       - 'server/**'
       - 'reviewer-core/**'
+      - 'docs/skills/**'
       - '.github/workflows/server-unit.yml'
 
 permissions:
