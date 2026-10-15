@@ -56,7 +56,7 @@ describe("SkillCard", () => {
 
   it("shows name, description, type, source, version and agent count", () => {
     renderCard();
-    expect(screen.getByRole("button", { name: "Preview breaking-change" })).toHaveTextContent("breaking-change");
+    expect(screen.getByRole("button", { name: "Open breaking-change" })).toHaveTextContent("breaking-change");
     expect(screen.getByText("Flag removed or renamed response fields")).toBeInTheDocument();
     expect(screen.getByText("security")).toHaveAttribute("data-skill-type", "security");
     expect(screen.getByText("Manual")).toBeInTheDocument();
@@ -84,30 +84,15 @@ describe("SkillCard", () => {
     const { onOpen } = renderCard();
     fireEvent.click(screen.getByText("Flag removed or renamed response fields"));
     expect(onOpen).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Preview breaking-change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open breaking-change" }));
     expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
-  it("no interactive control is nested in another (name, toggle, delete are siblings)", () => {
-    renderCard({ onDelete: vi.fn() });
-    expect(screen.getAllByRole("button")).toHaveLength(2); // name + delete
+  it("no interactive control is nested in another (name and toggle are siblings); no delete on the card", () => {
+    renderCard();
+    expect(screen.getAllByRole("button")).toHaveLength(1); // the name; delete lives in the editor
     for (const el of screen.getAllByRole("button").concat(screen.getAllByRole("switch"))) {
       expect(el.parentElement!.closest("button, [role='button'], a")).toBeNull();
     }
-  });
-});
-
-describe("SkillCard — delete", () => {
-  it("the delete button asks to delete WITHOUT opening the preview", () => {
-    const onDelete = vi.fn();
-    const { onOpen } = renderCard({ onDelete });
-    fireEvent.click(screen.getByRole("button", { name: "Delete breaking-change" }));
-    expect(onDelete).toHaveBeenCalledTimes(1);
-    expect(onOpen).not.toHaveBeenCalled();
-  });
-
-  it("is hidden when no onDelete handler is given", () => {
-    renderCard();
-    expect(screen.queryByRole("button", { name: "Delete breaking-change" })).not.toBeInTheDocument();
   });
 });

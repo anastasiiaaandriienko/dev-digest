@@ -1,14 +1,15 @@
 import type { CSSProperties } from "react";
 
-/** Co-located styles for SkillDetailView (design: Skill Editor header + tabs). */
+/** Co-located styles for SkillDetailView (design: Skills Lab, list column + skill editor). */
 export const s = {
-  page: { padding: "20px 32px 44px", maxWidth: 1100, margin: "0 auto" } satisfies CSSProperties,
-  back: { fontSize: 12.5, color: "var(--text-muted)", textDecoration: "none" } satisfies CSSProperties,
-  loading: { display: "flex", flexDirection: "column", gap: 16, marginTop: 16 } satisfies CSSProperties,
-  header: { display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" } satisfies CSSProperties,
+  // Full height under the 52px top bar; the list and the editor scroll on their own.
+  lab: { display: "flex", height: "calc(100vh - 52px)", minHeight: 0 } satisfies CSSProperties,
+  editor: { flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" } satisfies CSSProperties,
+  state: { padding: 24, display: "flex", flexDirection: "column", gap: 16 } satisfies CSSProperties,
+  header: { display: "flex", alignItems: "center", gap: 10, padding: "14px 24px 0", flexWrap: "wrap", flexShrink: 0 } satisfies CSSProperties,
   iconBox: (color: string, bg: string): CSSProperties => ({
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: 7,
     background: bg,
     color,
@@ -16,15 +17,15 @@ export const s = {
     placeItems: "center",
     flexShrink: 0,
   }),
-  h1: { fontSize: 18, fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" } satisfies CSSProperties,
+  h1: { fontSize: 16, fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" } satisfies CSSProperties,
   typeChip: (color: string, bg: string): CSSProperties => ({
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: 600,
     color,
     background: bg,
     padding: "2px 8px",
     borderRadius: 5,
   }),
-  tabs: { marginTop: 14, borderBottom: "1px solid var(--border)" } satisfies CSSProperties,
-  body: { paddingTop: 22 } satisfies CSSProperties,
+  tabs: { marginTop: 12, flexShrink: 0 } satisfies CSSProperties,
+  body: { flex: 1, minHeight: 0, overflow: "auto", padding: 24 } satisfies CSSProperties,
 } as const;

@@ -1,15 +1,16 @@
-/* SkillCard — one skill in the Skills grid (HW2 #9, #22, #23): type icon, name,
-   enabled toggle, delete, description, type + source ("needs vetting" while an
-   untrusted import is still disabled), version and agent count.
-   The card is a plain container (a click anywhere opens the preview, as a mouse
+/* SkillCard — one skill in the Skills Lab list (HW2 #9, #22, #23; design:
+   Skills Lab card): type icon, name, enabled toggle, description, type + source ("needs vetting" while an untrusted import is
+   still disabled), agent count and version.
+   The card is a plain container (a click anywhere opens the skill, as a mouse
    convenience); the keyboard / screen-reader entry is the name button. The
-   toggle and delete buttons are sibling controls, so no interactive element is
-   nested in another, and neither ever opens the preview (same pattern as PRRow). */
+   toggle is a sibling control, so no interactive element is nested in
+   another, and it never opens the skill (same pattern as PRRow). Deleting a
+   skill lives in the editor's Config danger zone. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Icon, IconBtn, Toggle } from "@devdigest/ui";
+import { Icon, Toggle } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { needsVetting } from "@/lib/skill-meta";
 import { SOURCE_ICON, TYPE_COLOR } from "../../constants";
@@ -20,15 +21,12 @@ export function SkillCard({
   active,
   onOpen,
   onToggle,
-  onDelete,
 }: {
   skill: Skill;
   /** Highlighted while its preview is open. */
   active?: boolean;
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
-  /** Ask to delete (the parent shows the confirmation). Omit to hide the button. */
-  onDelete?: () => void;
 }) {
   const t = useTranslations("skills");
   const color = TYPE_COLOR[skill.type] ?? TYPE_COLOR.custom;
@@ -54,13 +52,13 @@ export function SkillCard({
           className="mono"
           style={s.name}
           title={skill.name}
-          aria-label={t("card.openPreview", { name: skill.name })}
-          aria-expanded={!!active}
+          aria-label={t("card.open", { name: skill.name })}
+          aria-current={active ? "true" : undefined}
           onClick={onOpen}
         >
           {skill.name}
         </button>
-        {/* Its own control: toggling must never open the preview. */}
+        {/* Its own control: toggling must never open the skill. */}
         <div onClick={(e) => e.stopPropagation()}>
           <Toggle
             on={skill.enabled}
@@ -69,11 +67,6 @@ export function SkillCard({
             label={t("card.toggleLabel", { name: skill.name })}
           />
         </div>
-        {onDelete && (
-          <div onClick={(e) => e.stopPropagation()}>
-            <IconBtn icon="Trash" size={24} danger label={t("card.deleteLabel", { name: skill.name })} onClick={onDelete} />
-          </div>
-        )}
       </div>
       <div style={s.description} title={skill.description || undefined}>
         {skill.description || t("card.noDescription")}
@@ -94,13 +87,13 @@ export function SkillCard({
         )}
       </div>
       <div style={s.footer}>
-        <span className="tnum" style={s.footerItem} data-testid="skill-version">
-          <Icon.GitCommit size={11} />
-          {t("preview.version", { version: skill.version })}
-        </span>
         <span className="tnum" style={s.footerItem} data-testid="skill-agent-count">
           <Icon.Cpu size={11} />
           {t("card.agents", { count: skill.agent_count })}
+        </span>
+        <span className="tnum" style={s.footerItem} data-testid="skill-version">
+          <Icon.GitCommit size={11} />
+          {t("preview.version", { version: skill.version })}
         </span>
       </div>
     </div>

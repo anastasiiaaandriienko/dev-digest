@@ -10,6 +10,14 @@ export interface ConfigForm {
 
 export type ConfigPatch = Partial<ConfigForm>;
 
+/** What the Config tab tells the page about unsaved edits (used before switching skills). */
+export interface ConfigGuard {
+  /** The form differs from the saved skill. */
+  dirty: boolean;
+  /** Validate and save; resolves true once saved, false when it failed (edits are kept). */
+  save: () => Promise<boolean>;
+}
+
 export function formFrom(skill: Skill): ConfigForm {
   return {
     name: skill.name,

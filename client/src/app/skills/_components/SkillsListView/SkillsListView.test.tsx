@@ -1,7 +1,9 @@
 /**
- * /skills view (HW2 #9–#12): grid from useSkills, search, empty / error states,
- * "Add Skill" menu (create, import from file), `?preview=<id>` drawer with
- * rendered Markdown, and the enabled toggle. Hooks, AppShell and the router are mocked.
+ * /skills view (HW2 #9–#12; design: Skills Lab list + editor): the list column
+ * from useSkills, search, empty / error states, "Add Skill" menu (create,
+ * import from file), cards that open the editor, the "select a skill" prompt,
+ * the `?preview=<id>` drawer with rendered Markdown, and the enabled toggle.
+ * Hooks, AppShell and the router are mocked.
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import React from "react";
@@ -25,12 +27,10 @@ vi.mock("@/components/app-shell", () => ({
 type Q = { data?: Skill[]; isLoading: boolean; isError: boolean; refetch: () => void };
 let query: Q;
 const mutate = vi.fn();
-const deleteSkill = vi.fn();
 vi.mock("@/lib/hooks/skills", () => ({
   useSkills: () => query,
   useUpdateSkill: () => ({ mutate }),
   useCreateSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useDeleteSkill: () => ({ mutateAsync: deleteSkill, isPending: false }),
   usePreviewSkillImport: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useImportSkills: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -76,6 +76,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   replace.mockClear();
+  push.mockClear();
   mutate.mockClear();
 });
 
@@ -97,11 +98,12 @@ describe("SkillsListView — grid", () => {
     expect(screen.getByText(messages.page.noMatch.title)).toBeInTheDocument();
   });
 
-  it("toggling a card PUTs only `enabled` and does not open the preview", () => {
+  it("toggling a card PUTs only `enabled` and does not open the skill", () => {
     renderView();
     fireEvent.click(screen.getByRole("switch", { name: "Enable breaking-change" }));
     expect(mutate).toHaveBeenCalledWith({ id: "breaking-change", patch: { enabled: false } });
     expect(replace).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("empty: a create CTA; error: retry; loading: skeletons", () => {
@@ -145,12 +147,6 @@ describe("SkillsListView — Add Skill menu", () => {
 });
 
 describe("SkillsListView — ?preview= side panel", () => {
-  it("clicking a card sets ?preview=<id> (no page navigation)", () => {
-    renderView();
-    fireEvent.click(screen.getByRole("button", { name: "Preview breaking-change" }));
-    expect(replace).toHaveBeenCalledWith("/skills?preview=breaking-change", { scroll: false });
-  });
-
   it("?preview=<id> opens a right-side drawer with the body rendered as Markdown", () => {
     params = new URLSearchParams("preview=breaking-change");
     renderView();
@@ -182,45 +178,22 @@ describe("SkillsListView — ?preview= side panel", () => {
   });
 });
 
-describe("SkillsListView — delete", () => {
-  afterEach(() => deleteSkill.mockReset());
-
-  it("the card's delete button opens the confirmation (not the preview); Cancel keeps the skill", () => {
-    renderView();
-    fireEvent.click(screen.getByRole("button", { name: "Delete breaking-change" }));
-    expect(replace).not.toHaveBeenCalled();
-    const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent(messages.delete.title);
-    expect(dialog).toHaveTextContent("breaking-change");
-    expect(dialog).toHaveTextContent("removed from 2 agents");
-    fireEvent.click(within(dialog).getByRole("button", { name: messages.delete.cancel }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(deleteSkill).not.toHaveBeenCalled();
-  });
-
-  it("confirming deletes that skill and closes its open preview", async () => {
-    deleteSkill.mockResolvedValue({ ok: true });
-    params = new URLSearchParams("preview=naming");
-    renderView();
-    fireEvent.click(screen.getByRole("button", { name: "Delete naming" }));
-    const confirm = screen
-      .getAllByRole("dialog")
-      .map((d) => within(d).queryByRole("button", { name: messages.delete.confirm }))
-      .find(Boolean)!;
-    fireEvent.click(confirm);
-    await vi.waitFor(() => expect(deleteSkill).toHaveBeenCalledWith("naming"));
-    await vi.waitFor(() => expect(replace).toHaveBeenCalledWith("/skills", { scroll: false }));
-  });
-});
-
 describe("SkillsListView — Open skill", () => {
   afterEach(() => push.mockClear());
 
-  it("clicking a card still only opens the preview (no page navigation)", () => {
+  it("clicking a card (name or body) opens that skill in the editor", () => {
     renderView();
-    fireEvent.click(screen.getByText("API removals")); // the card body
-    expect(replace).toHaveBeenCalledWith("/skills?preview=breaking-change", { scroll: false });
-    expect(push).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Open breaking-change" }));
+    expect(push).toHaveBeenLastCalledWith("/skills/breaking-change");
+    fireEvent.click(screen.getByText("camelCase helpers")); // the card body
+    expect(push).toHaveBeenLastCalledWith("/skills/naming");
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("asks to pick a skill until one is open; the list cards have no delete (it lives in the editor)", () => {
+    renderView();
+    expect(screen.getByText(messages.page.selectPrompt.title)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete breaking-change" })).toBeNull();
   });
 
   it("the preview offers Open skill, which navigates to /skills/:id", () => {

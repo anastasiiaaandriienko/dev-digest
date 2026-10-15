@@ -1,7 +1,7 @@
 /* hooks/agents.ts — React Query hooks for the A2 Agents tab + Agent Editor. */
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import type { Agent, AgentSkillLink, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
 
@@ -102,6 +102,39 @@ export function useAgentSkills(agentId: string | null | undefined) {
     queryFn: () => api.get<AgentSkillLink[]>(`/agents/${agentId}/skills`),
     enabled: !!agentId,
   });
+}
+
+/** An agent that has a skill attached, with that link's per-agent switch. */
+export interface AgentUsingSkill {
+  agent: Agent;
+  /** Whether the skill is switched on for this agent (false = attached but off). */
+  enabled: boolean;
+}
+
+/**
+ * The agents a skill is attached to (Skill Editor · Stats). There is no
+ * per-skill endpoint, so this reads the agents list and each agent's links
+ * through the same cached queries the agent editor uses. Read-only.
+ */
+export function useAgentsUsingSkill(skillId: string) {
+  const agents = useAgents();
+  const ids = (agents.data ?? []).map((a) => a.id);
+  const links = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: agentSkillsKey(id),
+      queryFn: () => api.get<AgentSkillLink[]>(`/agents/${id}/skills`),
+    })),
+  });
+  const using: AgentUsingSkill[] = [];
+  (agents.data ?? []).forEach((agent, i) => {
+    const link = links[i]?.data?.find((l) => l.skill_id === skillId);
+    if (link) using.push({ agent, enabled: link.enabled });
+  });
+  return {
+    data: using,
+    isLoading: agents.isLoading || links.some((q) => q.isLoading),
+    isError: agents.isError || links.some((q) => q.isError),
+  };
 }
 
 /** One entry of the list sent to PUT (array order = prompt order). */

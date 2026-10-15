@@ -1,0 +1,56 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for StatsTab (design: Skill Editor · Stats). */
+export const s = {
+  wrap: { maxWidth: 980 } satisfies CSSProperties,
+  cards: { display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" } satisfies CSSProperties,
+  grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } satisfies CSSProperties,
+  card: {
+    padding: 16,
+    borderRadius: 10,
+    border: "1px solid var(--border)",
+    background: "var(--bg-elevated)",
+    minWidth: 0,
+  } satisfies CSSProperties,
+  muted: { fontSize: 12.5, color: "var(--text-muted)", margin: 0 } satisfies CSSProperties,
+  agentList: { display: "flex", flexDirection: "column", gap: 8, margin: 0, padding: 0, listStyle: "none" } satisfies CSSProperties,
+  agentRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
+    padding: "8px 10px",
+    borderRadius: 7,
+    border: "1px solid var(--border)",
+    background: "var(--bg-surface)",
+  } satisfies CSSProperties,
+  agentIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    background: "var(--accent-bg)",
+    color: "var(--accent)",
+    display: "grid",
+    placeItems: "center",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  agentName: {
+    fontSize: 12.5,
+    fontWeight: 600,
+    flex: 1,
+    minWidth: 0,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  } satisfies CSSProperties,
+  open: { fontSize: 12, color: "var(--text-secondary)", textDecoration: "none" } satisfies CSSProperties,
+  unavailable: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "18px 4px",
+    fontSize: 12.5,
+    lineHeight: 1.5,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+  unavailableIcon: { flexShrink: 0 } satisfies CSSProperties,
+} as const;

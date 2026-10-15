@@ -22,3 +22,29 @@
     transform: translateY(0);
   }
 }
+
+/* Skills Lab search box: the input has no outline of its own, so the box shows focus. */
+.dd-skills-lab-search:focus-within {
+  border-color: var(--accent) !important;
+}
+
+/* Skills Lab (list column + skill editor): stack the columns on narrow screens.
+   Inline styles set the desktop layout; these rules only override below 900px. */
+@media (max-width: 900px) {
+  .dd-skills-lab {
+    flex-direction: column !important;
+    height: auto !important;
+  }
+  .dd-skills-lab-list {
+    width: 100% !important;
+    max-height: 45vh;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+  }
+  .dd-skills-lab-editor-scroll {
+    overflow: visible !important;
+  }
+  .dd-skills-lab-two-col {
+    grid-template-columns: 1fr !important;
+  }
+}

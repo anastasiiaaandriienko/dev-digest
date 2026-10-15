@@ -16,6 +16,7 @@ const success = vi.fn();
 vi.mock("@/lib/toast", () => ({ notify: { success: (m: string) => success(m), error: vi.fn(), info: vi.fn() } }));
 
 import { VersioningTab } from "./VersioningTab";
+import { versionWhen } from "./helpers";
 
 const V = messages.detail.versioning;
 const version = (n: number, body: string, current = false): SkillVersion => ({
@@ -58,13 +59,21 @@ describe("VersioningTab — history", () => {
     expect(within(row(4)).getByText(V.current)).toBeInTheDocument();
     expect(within(row(3)).queryByText(V.current)).not.toBeInTheDocument();
     expect(row(2).querySelector("time")).toHaveAttribute("dateTime", "2026-10-12T10:00:00.000Z");
+    expect(row(2).querySelector("time")).toHaveTextContent(versionWhen("2026-10-12T10:00:00.000Z")); // compact, as in the design
     // the current version has no Diff / Restore
     expect(within(row(4)).queryByRole("button")).toBeNull();
   });
 
+  it("titles each row from the bodies: initial, line delta vs the previous version, or a restore", () => {
+    renderTab();
+    expect(within(row(1)).getByText(V.initial)).toBeInTheDocument();
+    expect(within(row(2)).getByText("+0 −2 lines vs v1")).toBeInTheDocument();
+    expect(within(row(3)).getByText("+2 −0 lines vs v2")).toBeInTheDocument();
+  });
+
   it("marks a version whose body repeats an older one (a restore)", () => {
     renderTab();
-    expect(within(row(4)).getByText("same body as v1")).toBeInTheDocument();
+    expect(within(row(4)).getByText("Same body as v1")).toBeInTheDocument();
   });
 
   it("loading, error and empty states", () => {
@@ -136,5 +145,20 @@ describe("VersioningTab — restore", () => {
     renderTab();
     expect(within(row(3)).getByRole("button", { name: V.restoring })).toBeDisabled();
     expect(within(row(2)).getByRole("button", { name: V.restore })).toBeDisabled();
+  });
+});
+
+describe("VersioningTab — blocked while Config has unsaved edits", () => {
+  it("every Restore is disabled and a note says why; Diff still works", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+        <VersioningTab skill={SKILL} restoreBlocked />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId("restore-blocked")).toHaveTextContent(V.restoreBlocked);
+    for (const n of [3, 2]) expect(within(row(n)).getByRole("button", { name: V.restore })).toBeDisabled();
+    fireEvent.click(within(row(3)).getByRole("button", { name: V.diff }));
+    expect(within(row(3)).getByTestId("version-diff")).toBeInTheDocument();
+    expect(restoreAsync).not.toHaveBeenCalled();
   });
 });

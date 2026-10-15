@@ -1,16 +1,15 @@
-import type { IconName } from "@devdigest/ui";
-
-/** Skill page tab (`?tab=`); the label resolves under `skills.detail.tabs`. */
+/** Skill editor tab (`?tab=`); the label resolves under `skills.detail.tabs`. */
 export interface SkillTab {
-  key: "config" | "preview" | "versioning";
-  icon: IconName;
+  key: "config" | "preview" | "evals" | "stats" | "versioning";
 }
 
-/** HW2 #25: exactly Config, Preview and Versioning (Stats arrives in a later lesson). */
+/** Design: Config | Preview | Evals | Stats | Versions (`versioning` keeps old links working). */
 export const TABS: readonly SkillTab[] = [
-  { key: "config", icon: "Settings" },
-  { key: "preview", icon: "Eye" },
-  { key: "versioning", icon: "History" },
+  { key: "config" },
+  { key: "preview" },
+  { key: "evals" },
+  { key: "stats" },
+  { key: "versioning" },
 ];
 
 export const DEFAULT_TAB: SkillTab["key"] = "config";

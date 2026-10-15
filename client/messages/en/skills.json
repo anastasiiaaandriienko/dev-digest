@@ -3,7 +3,6 @@
     "crumbLab": "Skills Lab",
     "crumbSkills": "Skills",
     "heading": "Skills",
-    "subtitle": "Markdown rule sets your review agents follow. Click a skill to preview it.",
     "addSkill": "Add Skill",
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
@@ -26,15 +25,14 @@
     },
     "selectPrompt": {
       "title": "Select a skill",
-      "body": "Pick a skill on the left to preview its body."
+      "body": "Pick a skill on the left to edit it, preview its body and browse its versions."
     }
   },
   "card": {
     "noDescription": "No description",
     "agents": "{count, plural, =0 {no agents} one {# agent} other {# agents}}",
     "toggleLabel": "Enable {name}",
-    "openPreview": "Preview {name}",
-    "deleteLabel": "Delete {name}"
+    "open": "Open {name}"
   },
   "delete": {
     "title": "Delete skill?",
@@ -81,7 +79,6 @@
   },
   "detail": {
     "crumbSkill": "Skill",
-    "back": "← All skills",
     "loadError": "Could not load this skill.",
     "notFound": {
       "title": "Skill not found",
@@ -90,7 +87,9 @@
     "tabs": {
       "config": "Config",
       "preview": "Preview",
-      "versioning": "Versioning"
+      "evals": "Evals",
+      "stats": "Stats",
+      "versioning": "Versions"
     },
     "config": {
       "title": "Configuration",
@@ -103,13 +102,17 @@
       "bodyStats": "{lines, plural, one {# line} other {# lines}} · ~{tokens} tokens",
       "save": "Save skill",
       "saving": "Saving…",
-      "reset": "Discard changes",
+      "reset": "Cancel",
       "noChanges": "No unsaved changes",
       "saved": "Saved “{name}”.",
       "savedVersion": "Saved “{name}” as v{version}.",
       "dangerTitle": "Delete skill",
       "dangerBody": "Removes it from every agent that uses it and deletes its version history. This can’t be undone.",
-      "delete": "Delete"
+      "delete": "Delete",
+      "unsaved": "unsaved",
+      "tokens": "~{tokens, number} tokens",
+      "saveNote": "Saving snapshots the body as <b>v{version}</b>",
+      "saveNoteMeta": "Metadata only — the body stays <b>v{version}</b>"
     },
     "previewTab": {
       "title": "Preview",
@@ -118,9 +121,9 @@
     "versioning": {
       "title": "Version history",
       "count": "{count, plural, one {# version} other {# versions}}",
-      "subtitle": "Every saved body is an immutable snapshot. Restoring an old one creates a new version; nothing is overwritten.",
+      "subtitle": "Every save snapshots the body, so each version keeps the exact text it had. Restoring one adds a new version — history is never overwritten.",
       "current": "Current",
-      "sameAs": "same body as v{version}",
+      "sameAs": "Same body as v{version}",
       "diff": "Diff",
       "hideDiff": "Hide diff",
       "restore": "Restore",
@@ -129,13 +132,38 @@
       "restored": "Restored v{from} as v{version}.",
       "alreadyCurrent": "v{from} already matches the current body — nothing to restore.",
       "loadError": "Could not load the version history.",
-      "empty": "No versions recorded for this skill."
+      "empty": "No versions recorded for this skill.",
+      "initial": "Initial version",
+      "changed": "+{added} −{removed} lines vs v{prev}",
+      "restoreBlocked": "Save or discard your Config changes before restoring a version."
     },
     "diff": {
       "title": "v{from} → v{to} (current)",
       "stats": "+{added} −{removed}",
       "identical": "No differences — this version has the same body as the current one.",
       "label": "Changes from v{from} to the current version"
+    },
+    "evals": {
+      "title": "Eval cases",
+      "unavailableBadge": "Not available yet",
+      "unavailableTitle": "Eval cases aren’t supported yet",
+      "unavailableBody": "This DevDigest build has no API to create, store results for, or run eval cases, so nothing is listed here — no sample data is shown in its place."
+    },
+    "stats": {
+      "usedBy": "Used by",
+      "agentsSuffix": "{count, plural, one {agent} other {agents}}",
+      "pullFrequency": "Pull frequency",
+      "acceptRate": "Accept rate",
+      "findings30d": "Findings (30d)",
+      "notTracked": "Not tracked yet",
+      "agentsTitle": "Agents using this skill",
+      "noAgents": "No agent uses this skill yet. Attach it from an agent’s Skills tab.",
+      "agentsError": "Could not load the agents.",
+      "offForAgent": "off for this agent",
+      "open": "Open",
+      "openAgent": "Open {name}",
+      "categoriesTitle": "Findings by category",
+      "categoriesUnavailable": "Not tracked yet: findings don’t record which skill produced them."
     }
   },
   "drawer": {
@@ -245,5 +273,14 @@
     "submit": "{count, plural, =0 {Import} one {Import # skill} other {Import # skills}}",
     "importing": "Importing…",
     "success": "{count, plural, one {Imported # skill} other {Imported # skills}}: disabled until you review and enable {count, plural, one {it} other {them}}."
+  },
+  "unsaved": {
+    "title": "Unsaved changes",
+    "body": "“{name}” has changes that aren’t saved yet.",
+    "hint": "Save them before leaving this skill, or discard them. A failed save keeps your edits here.",
+    "save": "Save and continue",
+    "saving": "Saving…",
+    "discard": "Discard changes",
+    "cancel": "Cancel"
   }
 }

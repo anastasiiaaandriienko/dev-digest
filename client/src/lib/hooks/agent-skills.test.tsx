@@ -16,7 +16,7 @@ vi.mock("../api", () => ({
   API_BASE: "",
 }));
 
-import { agentSkillsKey, linksFromItems, useAgents, useAgentSkills, useSetAgentSkills } from "./agents";
+import { agentSkillsKey, linksFromItems, useAgents, useAgentSkills, useAgentsUsingSkill, useSetAgentSkills } from "./agents";
 
 let qc: QueryClient;
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -170,5 +170,31 @@ describe("useSetAgentSkills → agent cards' skill_count (regression: count stay
     await act(() => new Promise((r) => setTimeout(r, 50)));
     expect(agentsFetches()).toBe(before);
     expect(shownCount(result)).toBe(1);
+  });
+});
+
+describe("useAgentsUsingSkill (Skill Editor · Stats)", () => {
+  it("returns the agents whose links include the skill, with that link's enabled flag; GET only", async () => {
+    get.mockImplementation((path: string) => {
+      if (path === "/agents") return Promise.resolve([{ id: "a1", name: "One" }, { id: "a2", name: "Two" }, { id: "a3", name: "Three" }]);
+      if (path === "/agents/a1/skills") return Promise.resolve([{ agent_id: "a1", skill_id: "sk", order: 0, enabled: true }]);
+      if (path === "/agents/a2/skills") return Promise.resolve([{ agent_id: "a2", skill_id: "other", order: 0, enabled: true }]);
+      return Promise.resolve([{ agent_id: "a3", skill_id: "sk", order: 1, enabled: false }]);
+    });
+    const { result } = renderHook(() => useAgentsUsingSkill("sk"), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.data.map((u) => [u.agent.id, u.enabled])).toEqual([
+      ["a1", true],
+      ["a3", false],
+    ]);
+    expect(result.current.isError).toBe(false);
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("no agents → empty, not loading", async () => {
+    get.mockResolvedValue([]);
+    const { result } = renderHook(() => useAgentsUsingSkill("sk"), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.data).toEqual([]);
   });
 });

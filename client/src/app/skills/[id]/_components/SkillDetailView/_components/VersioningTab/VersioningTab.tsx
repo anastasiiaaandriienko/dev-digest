@@ -1,8 +1,12 @@
-/* VersioningTab — every body snapshot of a skill (HW2 #27), newest first, with
-   its timestamp and the Current badge; each older version can be diffed against
+/* VersioningTab — every body snapshot of a skill (HW2 #27; design: Skill
+   Editor · Versions), newest first. Versions store no message, so each row's
+   title is derived from the bodies: initial version, a restore ("same body as
+   vN") or the line delta against the previous version; then its timestamp and
+   the Current badge; each older version can be diffed against
    the current body (#28) or restored (#29). Restoring creates a NEW version
    server-side (history is never rewritten); a body that is already current
-   cannot be restored. */
+   cannot be restored. While Config has unsaved edits Restore is blocked (it
+   would replace the form and lose them) and a note says why. */
 "use client";
 
 import React from "react";
@@ -13,18 +17,31 @@ import { useRestoreSkillVersion, useSkillVersions } from "@/lib/hooks/skills";
 import { notify } from "@/lib/toast";
 import { VersionDiff } from "./_components/VersionDiff";
 import { WHEN_FORMAT } from "./constants";
-import { sameBodyAs } from "./helpers";
+import { versionSummaries, versionWhen, type VersionSummary } from "./helpers";
 import { s } from "./styles";
 
-export function VersioningTab({ skill }: { skill: Skill }) {
+export function VersioningTab({
+  skill,
+  restoreBlocked = false,
+}: {
+  skill: Skill;
+  /** Config has unsaved edits: restoring would throw them away, so it is blocked. */
+  restoreBlocked?: boolean;
+}) {
   const t = useTranslations("skills");
-  const format = useFormatter(); // the app locale (next-intl), not the browser's
+  const format = useFormatter(); // full date in the row tooltip (app locale); the row itself shows versionWhen
   const { data: versions, isLoading, isError, refetch } = useSkillVersions(skill.id);
   const restore = useRestoreSkillVersion();
   const [diffOf, setDiffOf] = React.useState<number | null>(null);
 
-  const same = React.useMemo(() => sameBodyAs(versions ?? []), [versions]);
+  const summaries = React.useMemo(() => versionSummaries(versions ?? []), [versions]);
   const current = versions?.find((v) => v.current);
+  const summaryText = (sm: VersionSummary) =>
+    sm.kind === "initial"
+      ? t("detail.versioning.initial")
+      : sm.kind === "same"
+        ? t("detail.versioning.sameAs", { version: sm.as })
+        : t("detail.versioning.changed", { added: sm.added, removed: sm.removed, prev: sm.prev });
 
   const doRestore = async (version: number) => {
     try {
@@ -49,6 +66,11 @@ export function VersioningTab({ skill }: { skill: Skill }) {
         )}
       </div>
       <p style={s.subtitle}>{t("detail.versioning.subtitle")}</p>
+      {restoreBlocked && (
+        <p role="status" style={s.blocked} data-testid="restore-blocked">
+          {t("detail.versioning.restoreBlocked")}
+        </p>
+      )}
 
       {isLoading && (
         <div style={s.list} aria-busy="true">
@@ -65,7 +87,7 @@ export function VersioningTab({ skill }: { skill: Skill }) {
             const isSameAsCurrent = v.body === skill.body;
             const restoringThis = restore.isPending && restore.variables?.version === v.version;
             const open = diffOf === v.version;
-            const sameAs = same.get(v.version);
+            const summary = summaries.get(v.version);
             return (
               <li key={v.version} style={s.item(v.current)} data-version={v.version}>
                 <div style={s.row}>
@@ -73,12 +95,15 @@ export function VersioningTab({ skill }: { skill: Skill }) {
                     {t("preview.version", { version: v.version })}
                   </span>
                   <div style={s.meta}>
-                    <time dateTime={v.created_at} style={s.when}>
-                      {format.dateTime(new Date(v.created_at), WHEN_FORMAT)}
+                    {summary && <span style={s.title}>{summaryText(summary)}</span>}
+                    <time
+                      dateTime={v.created_at}
+                      title={format.dateTime(new Date(v.created_at), WHEN_FORMAT)}
+                      className="tnum"
+                      style={s.when}
+                    >
+                      {versionWhen(v.created_at)}
                     </time>
-                    {sameAs !== undefined && (
-                      <span style={s.note}>{t("detail.versioning.sameAs", { version: sameAs })}</span>
-                    )}
                   </div>
                   {v.current ? (
                     <Badge color="var(--ok)" bg="var(--ok-bg)" dot>
@@ -99,8 +124,14 @@ export function VersioningTab({ skill }: { skill: Skill }) {
                         kind="secondary"
                         size="sm"
                         icon="History"
-                        disabled={isSameAsCurrent || restore.isPending}
-                        title={isSameAsCurrent ? t("detail.versioning.restoreSame") : undefined}
+                        disabled={isSameAsCurrent || restore.isPending || restoreBlocked}
+                        title={
+                          isSameAsCurrent
+                            ? t("detail.versioning.restoreSame")
+                            : restoreBlocked
+                              ? t("detail.versioning.restoreBlocked")
+                              : undefined
+                        }
                         onClick={() => doRestore(v.version)}
                       >
                         {restoringThis ? t("detail.versioning.restoring") : t("detail.versioning.restore")}

@@ -46,7 +46,7 @@ export const s = {
     overflow: "hidden",
     textOverflow: "ellipsis",
   } satisfies CSSProperties,
-  metaRow: { display: "flex", alignItems: "center", gap: 7 } satisfies CSSProperties,
+  metaRow: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", rowGap: 5 } satisfies CSSProperties,
   typeChip: (color: string, bg: string): CSSProperties => ({
     fontSize: 10.5,
     fontWeight: 600,
@@ -57,6 +57,7 @@ export const s = {
   }),
   vetting: {
     display: "inline-flex",
+    whiteSpace: "nowrap",
     alignItems: "center",
     gap: 3,
     fontSize: 10.5,
@@ -68,6 +69,7 @@ export const s = {
   } satisfies CSSProperties,
   source: {
     display: "inline-flex",
+    whiteSpace: "nowrap",
     alignItems: "center",
     gap: 3,
     fontSize: 10.5,
@@ -75,7 +77,7 @@ export const s = {
   } satisfies CSSProperties,
   footer: {
     display: "flex",
-    gap: 12,
+    gap: 10,
     marginTop: 9,
     paddingTop: 9,
     borderTop: "1px solid var(--border)",
