@@ -1,6 +1,6 @@
 /* lib/findings.ts — shared, pure helpers over persisted findings (L01 severity
    counts, filters and the PR-list popover). No React, no data fetching. */
-import type { FindingRecord } from "@devdigest/shared";
+import type { FindingRecord, PrFindingsSummary, ReviewRecord } from "@devdigest/shared";
 
 /** Severities the contract emits, in display order. */
 export const SEVERITIES = ["CRITICAL", "WARNING", "SUGGESTION"] as const;
@@ -55,4 +55,19 @@ export function topFindings(findings: readonly FindingRecord[], limit: number): 
 /** "src/a.ts:11" or "src/a.ts:11-14". */
 export function findingLocation(f: Pick<FindingRecord, "file" | "start_line" | "end_line">): string {
   return f.end_line !== f.start_line ? `${f.file}:${f.start_line}-${f.end_line}` : `${f.file}:${f.start_line}`;
+}
+
+/**
+ * The reviews a PR-list findings summary counted (the latest completed review
+ * of each agent, chosen by the server), in the summary's order. Reviews the
+ * summary does not name (older runs of an agent, summaries) are left out, so
+ * the popover's findings always match the FINDINGS column's counts.
+ */
+export function summaryReviews(
+  reviews: readonly ReviewRecord[] | undefined,
+  summary: PrFindingsSummary | null | undefined,
+): ReviewRecord[] {
+  if (!reviews || !summary) return [];
+  const byId = new Map(reviews.map((r) => [r.id, r]));
+  return summary.agents.flatMap((a) => byId.get(a.review_id) ?? []);
 }

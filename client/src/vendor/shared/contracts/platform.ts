@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Provider } from './knowledge.js';
+import { Verdict } from './findings.js';
 
 /**
  * Platform / scaffolding DTOs owned by F1:
@@ -154,6 +155,36 @@ export type Repo = z.infer<typeof Repo>;
 export const PrStatus = z.enum(['needs_review', 'reviewed', 'stale', 'open', 'closed', 'merged']);
 export type PrStatus = z.infer<typeof PrStatus>;
 
+// Findings per severity (INFO: UI token only, kept so the counts add up).
+export const PrSeverityCounts = z.object({
+  CRITICAL: z.number().int(),
+  WARNING: z.number().int(),
+  SUGGESTION: z.number().int(),
+  INFO: z.number().int(),
+});
+export type PrSeverityCounts = z.infer<typeof PrSeverityCounts>;
+
+// One agent's latest completed review of a PR, as counted on the PR list.
+export const PrFindingsAgent = z.object({
+  agent_id: z.string().nullable(),
+  agent_name: z.string().nullable(),
+  review_id: z.string(),
+  verdict: Verdict.nullable(),
+  created_at: z.string(),
+  total: z.number().int(),
+  counts: PrSeverityCounts,
+});
+export type PrFindingsAgent = z.infer<typeof PrFindingsAgent>;
+
+// L01 PR-list FINDINGS: the latest completed review of EACH agent (older
+// reviews of the same agent are not counted); `agents` is newest first.
+export const PrFindingsSummary = z.object({
+  total: z.number().int(),
+  counts: PrSeverityCounts,
+  agents: z.array(PrFindingsAgent),
+});
+export type PrFindingsSummary = z.infer<typeof PrFindingsSummary>;
+
 export const PrMeta = z.object({
   id: z.string().nullish(),
   number: z.number().int(),
@@ -176,6 +207,9 @@ export const PrMeta = z.object({
   // true when at least one `done` run has an unknown cost, so cost_usd is a
   // lower bound (L01; list endpoint only). Absent = not computed.
   cost_partial: z.boolean().optional(),
+  // Findings over every agent's latest completed review (L01; list endpoint
+  // only). null = no completed review; absent = not computed.
+  findings_summary: PrFindingsSummary.nullable().optional(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 

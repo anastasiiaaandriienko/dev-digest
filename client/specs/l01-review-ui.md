@@ -316,9 +316,34 @@ Nothing on the server.
   found"; zero findings → a zero-count summary plus "no findings".
 - **Server:** no change (P2 not pursued).
 
+### Updated (2026-10-15): findings across agents (P2 summary)
+The single-`latestReview` content above is superseded: a PR reviewed by several
+agents showed only the newest agent's findings.
+- **Rule:** for each PR, the latest **completed** `kind: "review"` of **each
+  agent** (its run is `done`, or it has no run, e.g. seeded). Older reviews of
+  the same agent, failed / running runs and summaries are not counted. Reviews
+  with no agent share one bucket.
+- **Server:** `GET /repos/:id/pulls` adds `PrMeta.findings_summary`
+  (`total`, `counts`, `agents[]` newest first, each with `review_id`, name,
+  verdict, `total`, `counts`); `null` = no completed review. Built by
+  `server/src/modules/pulls/findings-summary.ts`. Contract in both
+  `vendor/shared/contracts/platform.ts` copies. Score and cost are unchanged.
+- **Indicator:** FINDINGS shows the summary total, "· N agents" when more than
+  one, a per-agent tooltip, and an accessible name with both numbers.
+- **Popover:** counts, total and the per-agent breakdown come from the same
+  summary; top findings and open criticals come from `usePrReviews` narrowed to
+  the summary's `review_id`s (`summaryReviews`, `src/lib/findings.ts`), so the
+  popover can never count a review the indicator did not. "Not reviewed yet" now
+  means `findings_summary == null` (no request).
+- **Tests:** `server/test/pulls-findings-summary.test.ts` (selection, counting,
+  contract), `server/test/pulls-findings-summary.it.test.ts` (HTTP + SQL: two
+  agents, re-run, failed/running runs, zero findings, seeded review);
+  `FindingsPopover.test.tsx` and `src/lib/findings.test.ts` (client).
+
 ### Depends on
 - P1: nothing.
-- P2: a server spec plus contract changes on both sides (not pursued).
+- P2: a server spec plus contract changes on both sides (implemented 2026-10-15,
+  see "Updated" above).
 
 ---
 

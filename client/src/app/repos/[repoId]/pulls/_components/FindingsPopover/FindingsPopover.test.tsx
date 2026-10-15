@@ -6,8 +6,9 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { FindingRecord, ReviewRecord } from "@devdigest/shared";
+import type { FindingRecord, PrFindingsSummary, ReviewRecord } from "@devdigest/shared";
 import type { PrMeta } from "@/lib/types";
+import { countBySeverity } from "@/lib/findings";
 import messages from "../../../../../../../messages/en/prReview.json";
 import { HOVER_OPEN_DELAY_MS } from "./constants";
 
@@ -20,7 +21,7 @@ const usePrReviews = vi.fn((_prId: string | null) => query);
 vi.mock("@/lib/hooks/reviews", () => ({ usePrReviews: (prId: string | null) => usePrReviews(prId) }));
 
 import { PRRow } from "../PRRow";
-import { latestReview } from "./FindingsPopover";
+import { agentBreakdown } from "./FindingsPopover";
 
 const L = messages.list.findings;
 
@@ -71,7 +72,23 @@ const NEWEST = review("rev-new", [
   f("w1", "WARNING", { start_line: 3, end_line: 5 }),
   f("c2", "CRITICAL", { confidence: 0.99, dismissed_at: "2026-10-11T10:05:00.000Z" }),
 ]);
+// An OLDER run of the SAME agent (a1): the server's summary does not select it.
 const OLDER = review("rev-old", [f("x", "CRITICAL")], { agent_name: "Old Agent", created_at: "2026-10-10T10:00:00.000Z" });
+
+/** The server's summary over `reviews` (each one = an agent's latest completed review). */
+function summaryOf(reviews: ReviewRecord[]): PrFindingsSummary {
+  const agents = reviews.map((r) => ({
+    agent_id: r.agent_id,
+    agent_name: r.agent_name ?? null,
+    review_id: r.id,
+    verdict: r.verdict,
+    created_at: r.created_at,
+    total: r.findings.length,
+    counts: countBySeverity(r.findings),
+  }));
+  const counts = countBySeverity(reviews.flatMap((r) => r.findings));
+  return { total: agents.reduce((n, a) => n + a.total, 0), counts, agents };
+}
 
 function pr(o: Partial<PrMeta> = {}): PrMeta {
   return {
@@ -91,6 +108,7 @@ function pr(o: Partial<PrMeta> = {}): PrMeta {
     score: 40,
     cost_usd: null,
     cost_partial: false,
+    findings_summary: summaryOf([NEWEST]),
     ...o,
   };
 }
@@ -104,7 +122,7 @@ function renderRow(p: PrMeta) {
 }
 
 const titleLink = () => screen.getByRole("link", { name: "Add rate limiting" });
-const indicator = () => screen.getByRole("button", { name: L.label });
+const indicator = () => screen.getByRole("button", { name: /^Show findings summary/ });
 const openFindingsLink = () => screen.getByRole("link", { name: L.open });
 const dialog = () => screen.queryByRole("dialog");
 const fetchedIds = () => usePrReviews.mock.calls.map(([id]) => id).filter((id) => id !== null);
@@ -341,22 +359,31 @@ describe("FindingsPopover — keyboard", () => {
 });
 
 describe("FindingsPopover — content", () => {
-  it("H1: shows the LATEST review's counts, open criticals, verdict and top 3 findings", () => {
+  // A second agent (a2) with its own latest review.
+  const PERF = review(
+    "rev-perf",
+    [f("p1", "WARNING", { review_id: "rev-perf", title: "N+1 query" }), f("p2", "SUGGESTION", { review_id: "rev-perf" })],
+    { agent_id: "a2", agent_name: "Performance Reviewer", verdict: "comment", created_at: "2026-10-11T11:00:00.000Z" },
+  );
+  const topItems = () =>
+    Array.from(screen.getByTestId("findings-top").querySelectorAll("li")).map((li) => li.textContent);
+  const totalCount = (root: Element, k: string) =>
+    root.querySelector(`[aria-label="${L.countsLabel}"] [data-severity="${k}"]`)!.textContent;
+
+  it("H1: one agent — counts, open criticals, verdict and top 3 findings of its latest review", () => {
     renderRow(pr());
     openNow();
     const d = dialog()!;
     expect(d).toHaveTextContent("Security Reviewer");
-    expect(d).not.toHaveTextContent("Old Agent");
     expect(d).toHaveTextContent("Request changes");
-    const count = (k: string) => d.querySelector(`[data-severity="${k}"]`)!.textContent;
-    expect(count("CRITICAL")).toContain("2");
-    expect(count("WARNING")).toContain("1");
-    expect(count("SUGGESTION")).toContain("1");
-    expect(d).toHaveTextContent("4 findings in the latest review");
+    expect(totalCount(d, "CRITICAL")).toContain("2");
+    expect(totalCount(d, "WARNING")).toContain("1");
+    expect(totalCount(d, "SUGGESTION")).toContain("1");
+    expect(d).toHaveTextContent("4 findings from 1 agent");
     // c2 is dismissed → not open.
     expect(d).toHaveTextContent("1 open critical");
     // Undismissed first, then severity, then confidence; 3 shown, 1 more.
-    const items = Array.from(d.querySelectorAll("li")).map((li) => li.textContent);
+    const items = topItems();
     expect(items[0]).toContain("CRITICAL c1");
     expect(items[1]).toContain("WARNING w1");
     expect(items[1]).toContain("src/a.ts:3-5");
@@ -368,8 +395,64 @@ describe("FindingsPopover — content", () => {
     );
   });
 
-  it("H2: an unreviewed PR shows 'Not reviewed yet' without any request", () => {
-    renderRow(pr({ score: null }));
+  it("repeated runs of one agent: only its latest review counts (no double counting)", () => {
+    // The API returns both runs of agent a1; the summary selected rev-new only.
+    query = { data: [NEWEST, OLDER], isLoading: false, isError: false };
+    renderRow(pr());
+    openNow();
+    const d = dialog()!;
+    expect(d).not.toHaveTextContent("Old Agent");
+    expect(d).toHaveTextContent("4 findings from 1 agent");
+    expect(topItems().join(" ")).not.toContain("CRITICAL x");
+    expect(screen.getByTestId("findings-by-agent").querySelectorAll("li")).toHaveLength(1);
+  });
+
+  it("multiple agents: totals over every agent's latest review, with a per-agent breakdown", () => {
+    query = { data: [PERF, NEWEST, OLDER], isLoading: false, isError: false };
+    renderRow(pr({ findings_summary: summaryOf([PERF, NEWEST]) }));
+    openNow();
+    const d = dialog()!;
+    expect(d).toHaveTextContent("6 findings from 2 agents");
+    expect(totalCount(d, "CRITICAL")).toContain("2");
+    expect(totalCount(d, "WARNING")).toContain("2");
+    expect(totalCount(d, "SUGGESTION")).toContain("2");
+
+    const rows = Array.from(screen.getByTestId("findings-by-agent").querySelectorAll("li"));
+    expect(rows.map((r) => r.getAttribute("data-agent-review"))).toEqual(["rev-perf", "rev-new"]);
+    expect(rows[0]).toHaveTextContent("Performance Reviewer");
+    expect(rows[0]).toHaveTextContent("Comment");
+    expect(rows[0]).toHaveTextContent("2 findings");
+    expect(rows[1]).toHaveTextContent("Security Reviewer");
+    expect(rows[1]).toHaveTextContent("4 findings");
+    // Top findings come from both agents (not from the older run).
+    expect(topItems().join(" ")).toContain("CRITICAL c1");
+    expect(topItems().join(" ")).toContain("N+1 query");
+    expect(topItems().join(" ")).not.toContain("CRITICAL x");
+  });
+
+  it("the FINDINGS indicator shows the same total as the popover, plus the agent count", () => {
+    const summary = summaryOf([PERF, NEWEST]);
+    renderRow(pr({ findings_summary: summary }));
+    expect(screen.getByTestId("findings-total")).toHaveTextContent("6");
+    expect(indicator()).toHaveAccessibleName("Show findings summary: 6 findings from 2 agents");
+    expect(indicator()).toHaveTextContent("2 agents");
+    expect(indicator()).toHaveAttribute("title", "Performance Reviewer: 2\nSecurity Reviewer: 4");
+
+    query = { data: [PERF, NEWEST, OLDER], isLoading: false, isError: false };
+    openNow();
+    expect(dialog()).toHaveTextContent(`${summary.total} findings from 2 agents`);
+  });
+
+  it("H2: an unreviewed PR (no completed review) shows 'Not reviewed yet' without any request", () => {
+    renderRow(pr({ score: null, findings_summary: null }));
+    expect(screen.queryByTestId("findings-total")).not.toBeInTheDocument();
+    openNow();
+    expect(dialog()).toHaveTextContent(L.notReviewed);
+    expect(fetchedIds()).toEqual([]);
+  });
+
+  it("a scored PR whose reviews all failed/are incomplete (summary null) is treated as not reviewed", () => {
+    renderRow(pr({ score: 55, findings_summary: null }));
     openNow();
     expect(dialog()).toHaveTextContent(L.notReviewed);
     expect(fetchedIds()).toEqual([]);
@@ -391,15 +474,19 @@ describe("FindingsPopover — content", () => {
     expect(dialog()!.querySelector("[data-severity]")).toBeNull();
   });
 
-  it("a latest review with zero findings says so, with zero counts", () => {
-    query = { data: [review("empty", [], { verdict: "approve" })], isLoading: false, isError: false };
-    renderRow(pr());
+  it("an agent with zero findings is listed with zero counts", () => {
+    const empty = review("empty", [], { verdict: "approve" });
+    query = { data: [empty], isLoading: false, isError: false };
+    renderRow(pr({ findings_summary: summaryOf([empty]) }));
+    expect(screen.getByTestId("findings-total")).toHaveTextContent("0");
     openNow();
     expect(dialog()).toHaveTextContent(L.empty);
-    expect(dialog()!.querySelector('[data-severity="CRITICAL"]')!.textContent).toContain("0");
+    expect(dialog()).toHaveTextContent("0 findings from 1 agent");
+    expect(totalCount(dialog()!, "CRITICAL")).toContain("0");
+    expect(screen.getByTestId("findings-by-agent")).toHaveTextContent("Approve");
   });
 
-  it("no review rows (e.g. only a summary) → 'No review found'", () => {
+  it("none of the summary's reviews are returned (e.g. only a summary row) → 'No completed review'", () => {
     query = { data: [review("sum", [], { kind: "summary" })], isLoading: false, isError: false };
     renderRow(pr());
     openNow();
@@ -407,9 +494,9 @@ describe("FindingsPopover — content", () => {
   });
 });
 
-describe("latestReview", () => {
-  it("picks the newest 'review' (API is newest-first) and skips summaries", () => {
-    expect(latestReview(undefined)).toBeUndefined();
-    expect(latestReview([review("s", [], { kind: "summary" }), NEWEST, OLDER])?.id).toBe("rev-new");
+describe("agentBreakdown", () => {
+  it("one 'agent: total' line per agent, with a fallback name", () => {
+    const s = summaryOf([NEWEST, review("anon", [], { agent_name: null })]);
+    expect(agentBreakdown(s, "Agent")).toBe("Security Reviewer: 4\nAgent: 0");
   });
 });

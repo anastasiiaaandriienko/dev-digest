@@ -1,10 +1,12 @@
 /* FindingsPopover — the PR list's read-only findings popover (L01, client
-   spec §4, option P1). Hovering or keyboard-focusing the PR ROW (after a short
-   delay), or clicking its FINDINGS indicator, opens a popover with the LATEST
-   review's severity counts, open criticals, verdict and top findings. Data is
-   fetched lazily with usePrReviews — only when opened and only for reviewed
-   PRs — and shares the ["reviews", prId] cache with the PR detail page. It
-   never changes data. */
+   spec §4). Hovering or keyboard-focusing the PR ROW (after a short
+   delay), or clicking its FINDINGS indicator, opens a popover over the latest
+   COMPLETED review of EACH agent (`PrMeta.findings_summary`, chosen by the
+   server): total and severity counts, a per-agent breakdown, open criticals and
+   top findings. Counts come from the summary, exactly as the indicator shows
+   them; findings are fetched lazily with usePrReviews (only when opened, only
+   for reviewed PRs, shared ["reviews", prId] cache) and narrowed to the
+   summary's reviews. It never changes data. */
 "use client";
 
 import React from "react";
@@ -13,23 +15,18 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Icon, SEV, SeverityBadge, Skeleton } from "@devdigest/ui";
 import type { PrMeta } from "@/lib/types";
-import type { ReviewRecord } from "@devdigest/shared";
+import type { PrFindingsSummary, ReviewRecord } from "@devdigest/shared";
 import { usePrReviews } from "@/lib/hooks/reviews";
 import {
-  countBySeverity,
   findingLocation,
   openCriticals,
   severityKeys,
+  summaryReviews,
   topFindings,
   type SeverityKey,
 } from "@/lib/findings";
 import { HOVER_CLOSE_DELAY_MS, HOVER_OPEN_DELAY_MS, POPOVER_WIDTH, TOP_FINDINGS } from "./constants";
 import { s } from "./styles";
-
-/** Latest persisted "review" (newest-first from the API), as the list's score uses. */
-export function latestReview(reviews: ReviewRecord[] | undefined): ReviewRecord | undefined {
-  return reviews?.find((r) => r.kind === "review");
-}
 
 export interface FindingsPopoverController {
   open: boolean;
@@ -207,13 +204,17 @@ export function FindingsPopover({
 }) {
   const t = useTranslations("prReview");
   const router = useRouter();
-  const reviewed = pr.score != null; // same rule as the score ring
+  // One rule for the indicator and the popover: the server's summary of each
+  // agent's latest completed review. null/absent = nothing completed yet.
+  const summary = pr.findings_summary ?? null;
+  const reviewed = summary != null;
   const { open, pos } = pop;
 
   // Lazy: no request until opened, and never for a PR without a review.
   const reviews = usePrReviews(open && reviewed ? pr.id ?? null : null);
 
   const href = `/repos/${repoId}/pulls/${pr.number}?tab=findings`;
+  const agentCount = summary?.agents.length ?? 0;
 
   return (
     <span ref={pop.anchorRef} style={s.wrap}>
@@ -221,7 +222,12 @@ export function FindingsPopover({
         ref={pop.indicatorRef}
         type="button"
         data-testid="findings-indicator"
-        aria-label={t("list.findings.label")}
+        aria-label={
+          summary
+            ? t("list.findings.indicatorLabel", { count: summary.total, agents: agentCount })
+            : t("list.findings.label")
+        }
+        title={summary ? agentBreakdown(summary, t("list.findings.agent")) : undefined}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? pop.popId : undefined}
@@ -235,6 +241,14 @@ export function FindingsPopover({
       >
         <Icon.MessageSquare size={12} />
         {t("list.findings.short")}
+        {summary && (
+          <span className="tnum" style={s.triggerCount} data-testid="findings-total">
+            {summary.total}
+          </span>
+        )}
+        {agentCount > 1 && (
+          <span style={s.triggerAgents}>· {t("list.findings.agents", { count: agentCount })}</span>
+        )}
       </button>
       {open &&
         pos &&
@@ -277,7 +291,8 @@ export function FindingsPopover({
               reviewed={reviewed}
               loading={reviews.isLoading}
               failed={reviews.isError}
-              review={latestReview(reviews.data)}
+              summary={summary}
+              reviews={summaryReviews(reviews.data, summary)}
               href={href}
               onOpen={(e) => {
                 e.preventDefault();
@@ -292,23 +307,31 @@ export function FindingsPopover({
   );
 }
 
+/** Tooltip for the FINDINGS indicator: one "agent: N" line per agent. */
+export function agentBreakdown(summary: PrFindingsSummary, fallbackName: string): string {
+  return summary.agents.map((a) => `${a.agent_name ?? fallbackName}: ${a.total}`).join("\n");
+}
+
 function PopoverBody({
   reviewed,
   loading,
   failed,
-  review,
+  summary,
+  reviews,
   href,
   onOpen,
 }: {
   reviewed: boolean;
   loading: boolean;
   failed: boolean;
-  review: ReviewRecord | undefined;
+  summary: PrFindingsSummary | null;
+  /** The summary's reviews (each agent's latest completed one), in its order. */
+  reviews: ReviewRecord[];
   href: string;
   onOpen: (e: React.MouseEvent) => void;
 }) {
   const t = useTranslations("prReview");
-  if (!reviewed) return <div style={s.note}>{t("list.findings.notReviewed")}</div>;
+  if (!reviewed || !summary) return <div style={s.note}>{t("list.findings.notReviewed")}</div>;
   if (loading) {
     return (
       <div aria-busy="true" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -319,21 +342,19 @@ function PopoverBody({
     );
   }
   if (failed) return <div style={s.error}>{t("list.findings.error")}</div>;
-  if (!review) return <div style={s.note}>{t("list.findings.noReview")}</div>;
+  if (reviews.length === 0) return <div style={s.note}>{t("list.findings.noReview")}</div>;
 
-  const findings = review.findings;
-  const counts = countBySeverity(findings);
+  // Counts: the summary (identical to the indicator). Findings: only the
+  // summary's reviews, so older runs of an agent never show up here.
+  const counts = summary.counts;
+  const names = new Map(reviews.map((r) => [r.id, r.agent_name]));
+  const findings = reviews.flatMap((r) => r.findings);
   const top = topFindings(findings, TOP_FINDINGS);
   const more = findings.length - top.length;
   const crit = openCriticals(findings);
 
   return (
     <>
-      <div style={s.header}>
-        <Icon.Cpu size={13} style={{ color: "var(--text-muted)" }} />
-        <span>{review.agent_name ?? t("list.findings.agent")}</span>
-        {review.verdict && <span style={s.verdict}>· {t(`list.findings.verdict.${review.verdict}`)}</span>}
-      </div>
       <div style={s.counts} aria-label={t("list.findings.countsLabel")}>
         {severityKeys(counts).map((k: SeverityKey) => (
           <span key={k} data-severity={k} title={t(`severity.${k}`)}>
@@ -342,13 +363,33 @@ function PopoverBody({
         ))}
       </div>
       <div style={s.meta}>
-        {t("list.findings.total", { count: findings.length })}
+        {t("list.findings.total", { count: summary.total, agents: summary.agents.length })}
         {crit > 0 ? ` · ${t("list.findings.openCriticals", { count: crit })}` : ""}
       </div>
+      <ul style={s.agents} aria-label={t("list.findings.byAgent")} data-testid="findings-by-agent">
+        {summary.agents.map((a) => (
+          <li key={a.review_id} style={s.agentRow} data-agent-review={a.review_id}>
+            <Icon.Cpu size={13} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+            <span style={s.agentName}>{a.agent_name ?? names.get(a.review_id) ?? t("list.findings.agent")}</span>
+            {a.verdict && <span style={s.verdict}>· {t(`list.findings.verdict.${a.verdict}`)}</span>}
+            <span style={{ flex: 1 }} />
+            {severityKeys(a.counts)
+              .filter((k) => a.counts[k] > 0)
+              .map((k) => (
+                <span key={k} data-severity={k} title={t(`severity.${k}`)}>
+                  <SeverityBadge severity={k} count={a.counts[k]} compact />
+                </span>
+              ))}
+            <span className="tnum" style={s.meta}>
+              {t("list.findings.agentTotal", { count: a.total })}
+            </span>
+          </li>
+        ))}
+      </ul>
       {findings.length === 0 ? (
         <div style={s.note}>{t("list.findings.empty")}</div>
       ) : (
-        <ul style={s.list}>
+        <ul style={s.list} data-testid="findings-top">
           {top.map((f) => (
             <li key={f.id} style={s.item}>
               <SeverityBadge severity={f.severity in SEV ? (f.severity as SeverityKey) : "INFO"} compact />

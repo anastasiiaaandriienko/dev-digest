@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
-import type { FindingRecord } from "@devdigest/shared";
-import { countBySeverity, findingLocation, openCriticals, severityKeys, topFindings } from "./findings";
+import type { FindingRecord, PrFindingsSummary, ReviewRecord } from "@devdigest/shared";
+import {
+  countBySeverity,
+  findingLocation,
+  openCriticals,
+  severityKeys,
+  summaryReviews,
+  topFindings,
+} from "./findings";
 
 function f(id: string, severity: string, o: Partial<FindingRecord> = {}): FindingRecord {
   return {
@@ -74,5 +81,47 @@ describe("findingLocation", () => {
   it("formats a single line or a range", () => {
     expect(findingLocation({ file: "a.ts", start_line: 3, end_line: 3 })).toBe("a.ts:3");
     expect(findingLocation({ file: "a.ts", start_line: 3, end_line: 9 })).toBe("a.ts:3-9");
+  });
+});
+
+describe("summaryReviews", () => {
+  const rev = (id: string, agentId: string): ReviewRecord => ({
+    id,
+    pr_id: "pr",
+    agent_id: agentId,
+    run_id: null,
+    agent_name: agentId,
+    kind: "review",
+    verdict: null,
+    summary: null,
+    score: null,
+    model: null,
+    grounding: null,
+    created_at: "2026-10-11T10:00:00.000Z",
+    findings: [f(`${id}-f`, "WARNING", { review_id: id })],
+  });
+  const summary = (ids: string[]): PrFindingsSummary => ({
+    total: ids.length,
+    counts: { CRITICAL: 0, WARNING: ids.length, SUGGESTION: 0, INFO: 0 },
+    agents: ids.map((id) => ({
+      agent_id: null,
+      agent_name: null,
+      review_id: id,
+      verdict: null,
+      created_at: "2026-10-11T10:00:00.000Z",
+      total: 1,
+      counts: { CRITICAL: 0, WARNING: 1, SUGGESTION: 0, INFO: 0 },
+    })),
+  });
+
+  it("keeps only the reviews the summary selected, in the summary order", () => {
+    const reviews = [rev("a1-new", "a1"), rev("a2", "a2"), rev("a1-old", "a1")];
+    expect(summaryReviews(reviews, summary(["a2", "a1-new"])).map((r) => r.id)).toEqual(["a2", "a1-new"]);
+  });
+
+  it("skips summary entries that were not returned, and handles missing input", () => {
+    expect(summaryReviews([rev("a", "a1")], summary(["a", "gone"])).map((r) => r.id)).toEqual(["a"]);
+    expect(summaryReviews(undefined, summary(["a"]))).toEqual([]);
+    expect(summaryReviews([rev("a", "a1")], null)).toEqual([]);
   });
 });
