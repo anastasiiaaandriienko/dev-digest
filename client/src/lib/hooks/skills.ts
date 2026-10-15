@@ -1,11 +1,19 @@
 /* hooks/skills.ts — React Query hooks for the Skills Lab (HW2): list, one skill,
-   create, update, delete, version history and restore over the server's
+   create, update, delete, version history, restore and file import over the server's
    /skills API. Keys: ["skills"] (list), ["skill", id], ["skill-versions", id]. */
 "use client";
 
 import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Skill, SkillRestoreResult, SkillType, SkillVersion } from "@devdigest/shared";
+import type {
+  Skill,
+  SkillImportFileRequest,
+  SkillImportItem,
+  SkillImportPreview,
+  SkillRestoreResult,
+  SkillType,
+  SkillVersion,
+} from "@devdigest/shared";
 
 export const SKILLS_KEY = ["skills"] as const;
 export const skillKey = (id: string) => ["skill", id] as const;
@@ -137,5 +145,21 @@ export function useDeleteSkill() {
       qc.invalidateQueries({ queryKey: ["agent-skills"] });
       return qc.invalidateQueries({ queryKey: SKILLS_KEY });
     },
+  });
+}
+
+/** POST /skills/import/preview — parse an uploaded .md / .zip; nothing is saved. */
+export function usePreviewSkillImport() {
+  return useMutation({
+    mutationFn: (req: SkillImportFileRequest) => api.post<SkillImportPreview>("/skills/import/preview", req),
+  });
+}
+
+/** POST /skills/import — create the reviewed skills (source `imported`, disabled). */
+export function useImportSkills() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: SkillImportItem[]) => api.post<Skill[]>("/skills/import", { items }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: SKILLS_KEY }),
   });
 }

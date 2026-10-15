@@ -32,6 +32,28 @@ function renderCard(props: Partial<React.ComponentProps<typeof SkillCard>> = {})
 }
 
 describe("SkillCard", () => {
+  it("shows 'needs vetting' only for an untrusted source that is still disabled (HW2 #15)", () => {
+    const vetting = () => screen.queryByTestId("needs-vetting");
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+        <SkillCard skill={{ ...SKILL, source: "imported", enabled: false }} onOpen={vi.fn()} onToggle={vi.fn()} />
+      </NextIntlClientProvider>,
+    );
+    expect(vetting()).toHaveTextContent(messages.listItem.needsVetting);
+    expect(vetting()).toHaveAttribute("title", messages.listItem.vettingTitle);
+    expect(screen.getByText(messages.listItem.source.imported)).toBeInTheDocument();
+    unmount();
+    for (const skill of [{ ...SKILL, source: "imported" as const, enabled: true }, { ...SKILL, enabled: false }]) {
+      const r = render(
+        <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+          <SkillCard skill={skill} onOpen={vi.fn()} onToggle={vi.fn()} />
+        </NextIntlClientProvider>,
+      );
+      expect(vetting()).toBeNull();
+      r.unmount();
+    }
+  });
+
   it("shows name, description, type, source, version and agent count", () => {
     renderCard();
     expect(screen.getByRole("button", { name: "Preview breaking-change" })).toHaveTextContent("breaking-change");

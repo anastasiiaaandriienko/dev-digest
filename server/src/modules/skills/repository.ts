@@ -1,5 +1,5 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
-import type { SkillCreate, SkillUpdate } from '@devdigest/shared';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import type { SkillCreate, SkillImportItem, SkillUpdate } from '@devdigest/shared';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
@@ -80,6 +80,59 @@ export class SkillsRepository {
         .returning();
       await tx.insert(t.skillVersions).values({ skillId: row!.id, version: 1, body: row!.body });
       return row!;
+    });
+  }
+
+  /** Existing skill names of the workspace among `names`, compared case-insensitively. */
+  async takenNames(workspaceId: string, names: readonly string[]): Promise<string[]> {
+    if (names.length === 0) return [];
+    const lower = names.map((n) => n.toLowerCase());
+    const rows = await this.db
+      .select({ name: t.skills.name })
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), inArray(sql`lower(${t.skills.name})`, lower)));
+    return rows.map((r) => r.name);
+  }
+
+  /**
+   * Create imported skills (source `imported`, disabled, version 1 + its
+   * version row), all or nothing. A per-workspace advisory lock serializes
+   * imports, so two concurrent imports cannot both pass the name check and
+   * create the same name. Returns the names already taken instead of writing.
+   * Scope: only imports take the lock; manual create / rename never enforced
+   * unique names and still don't (a DB-level unique index would need a migration).
+   */
+  async createImported(
+    workspaceId: string,
+    items: readonly SkillImportItem[],
+  ): Promise<{ kind: 'created'; rows: SkillRow[] } | { kind: 'conflict'; names: string[] }> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`skills:${workspaceId}`}, 0))`);
+      const lower = items.map((i) => i.name.toLowerCase());
+      const taken = await tx
+        .select({ name: t.skills.name })
+        .from(t.skills)
+        .where(and(eq(t.skills.workspaceId, workspaceId), inArray(sql`lower(${t.skills.name})`, lower)));
+      if (taken.length > 0) return { kind: 'conflict', names: taken.map((r) => r.name) } as const;
+
+      const rows = await tx
+        .insert(t.skills)
+        .values(
+          items.map((i) => ({
+            workspaceId,
+            name: i.name,
+            description: i.description,
+            type: i.type,
+            source: 'imported' as const,
+            body: i.body,
+            enabled: false, // untrusted until a human reviews and enables it
+            version: 1,
+            evidenceFiles: null,
+          })),
+        )
+        .returning();
+      await tx.insert(t.skillVersions).values(rows.map((r) => ({ skillId: r.id, version: 1, body: r.body })));
+      return { kind: 'created', rows } as const;
     });
   }
 

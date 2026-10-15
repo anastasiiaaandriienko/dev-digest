@@ -1,7 +1,7 @@
 /* /skills — Skills Lab skills grid (HW2 #9–#12, #23–#24): search, "Add Skill"
-   menu (create now; import is shown disabled until #15), skill cards with an
+   menu (create from scratch, import from a .md / .zip file — #15), skill cards with an
    enabled toggle and a delete button (with a confirmation dialog), a right-side
-   preview drawer driven by `?preview=<id>`, and the create modal. Data comes
+   preview drawer driven by `?preview=<id>`, and the create and import modals. Data comes
    from the useSkills hooks (server /skills API). */
 "use client";
 
@@ -14,6 +14,7 @@ import { AppShell } from "@/components/app-shell";
 import { useSkills, useUpdateSkill } from "@/lib/hooks/skills";
 import { PREVIEW_PARAM } from "../../constants";
 import { CreateSkillModal } from "../CreateSkillModal";
+import { ImportSkillModal } from "../ImportSkillModal";
 import { DeleteSkillModal } from "../DeleteSkillModal";
 import { SkillCard } from "../SkillCard";
 import { SkillPreviewDrawer } from "../SkillPreviewDrawer";
@@ -30,6 +31,7 @@ export function SkillsListView() {
   const update = useUpdateSkill();
   const [query, setQuery] = React.useState("");
   const [creating, setCreating] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
   const [deleting, setDeleting] = React.useState<Skill | null>(null);
 
   const previewId = search.get(PREVIEW_PARAM);
@@ -52,6 +54,12 @@ export function SkillsListView() {
   return (
     <AppShell crumb={[{ label: t("page.crumbLab") }, { label: t("page.crumbSkills") }]}>
       {creating && <CreateSkillModal onClose={() => setCreating(false)} onCreated={(sk) => setPreview(sk.id)} />}
+      {importing && (
+        <ImportSkillModal
+          onClose={() => setImporting(false)}
+          onImported={(created) => created[0] && setPreview(created[0].id)}
+        />
+      )}
       {preview !== undefined && (
         <SkillPreviewDrawer
           skill={preview}
@@ -96,7 +104,7 @@ export function SkillsListView() {
             items={[
               { label: t("page.menu.createFromScratch"), icon: "Edit", onClick: () => setCreating(true) },
               { divider: true },
-              { label: t("page.menu.fromFile"), icon: "Upload", hint: t("page.menu.comingSoon"), disabled: true },
+              { label: t("page.menu.fromFile"), icon: "Upload", hint: t("page.menu.fromFileHint"), onClick: () => setImporting(true) },
             ]}
           />
         </div>

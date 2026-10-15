@@ -55,6 +55,17 @@ export const s = {
     padding: "1px 7px",
     borderRadius: 4,
   }),
+  vetting: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
+    fontSize: 10.5,
+    fontWeight: 600,
+    padding: "1px 6px",
+    borderRadius: 4,
+    color: "var(--warn)",
+    background: "var(--warn-bg)",
+  } satisfies CSSProperties,
   source: {
     display: "inline-flex",
     alignItems: "center",

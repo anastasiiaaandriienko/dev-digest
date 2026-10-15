@@ -1,4 +1,4 @@
-import type { Skill, SkillSource, SkillType, SkillUpdate, SkillVersion } from '@devdigest/shared';
+import type { Skill, SkillImportCandidate, SkillSource, SkillType, SkillUpdate, SkillVersion } from '@devdigest/shared';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
 
 /**
@@ -59,4 +59,32 @@ export function toSkillVersionDto(row: SkillVersionRow, currentVersion: number):
     created_at: row.createdAt.toISOString(),
     current: row.version === currentVersion,
   };
+}
+
+/** Names that occur more than once (case-insensitive), as first written. */
+export function duplicateNames(names: readonly string[]): string[] {
+  const seen = new Map<string, number>();
+  for (const n of names) seen.set(n.toLowerCase(), (seen.get(n.toLowerCase()) ?? 0) + 1);
+  const out: string[] = [];
+  for (const n of names) {
+    if (seen.get(n.toLowerCase())! > 1 && !out.some((o) => o.toLowerCase() === n.toLowerCase())) out.push(n);
+  }
+  return out;
+}
+
+/**
+ * Add a `name` issue to every candidate whose name is already used in the
+ * workspace (`taken`) or by another candidate of the same file.
+ */
+export function markDuplicates(candidates: readonly SkillImportCandidate[], taken: readonly string[]): SkillImportCandidate[] {
+  const existing = new Set(taken.map((n) => n.toLowerCase()));
+  const twice = new Set(duplicateNames(candidates.map((c) => c.name)).map((n) => n.toLowerCase()));
+  return candidates.map((c) => {
+    const key = c.name.toLowerCase();
+    const extra = [
+      ...(existing.has(key) ? [{ field: 'name' as const, message: `A skill named "${c.name}" already exists` }] : []),
+      ...(twice.has(key) ? [{ field: 'name' as const, message: `"${c.name}" is used by more than one file` }] : []),
+    ];
+    return extra.length > 0 ? { ...c, issues: [...c.issues, ...extra] } : c;
+  });
 }

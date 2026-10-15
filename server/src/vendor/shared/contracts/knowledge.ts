@@ -115,7 +115,8 @@ export type MemoryItem = z.infer<typeof MemoryItem>;
 export const SkillType = z.enum(['rubric', 'convention', 'security', 'custom']);
 export type SkillType = z.infer<typeof SkillType>;
 
-export const SkillSource = z.enum(['manual', 'imported_url', 'extracted', 'community']);
+// `imported` = uploaded as a .md / .zip file (Skills Lab "Import from file").
+export const SkillSource = z.enum(['manual', 'imported', 'imported_url', 'extracted', 'community']);
 export type SkillSource = z.infer<typeof SkillSource>;
 
 export const Skill = z.object({
@@ -180,6 +181,137 @@ export const SkillRestoreResult = z.object({
   restored_from: z.number().int().positive(),
 });
 export type SkillRestoreResult = z.infer<typeof SkillRestoreResult>;
+
+// ---- Skill import from a .md / .zip file ----
+// The rules below are shared: the server enforces them (preview + import), the
+// client runs the same checks live while the user edits the preview.
+
+export const SKILL_IMPORT_LIMITS = {
+  /** Size of the uploaded .md / .zip file itself. */
+  maxUploadBytes: 2 * 1024 * 1024,
+  /** Entries in a .zip (directories included). */
+  maxEntries: 50,
+  /** Uncompressed size of one .md (file or archive entry). */
+  maxEntryBytes: 512 * 1024,
+  /** Uncompressed size of all archive entries together. */
+  maxTotalBytes: 5 * 1024 * 1024,
+  /** Uncompressed / compressed, per entry (zip-bomb guard). */
+  maxCompressionRatio: 100,
+  /** Skills created by one import. */
+  maxItems: 50,
+} as const;
+
+/** Imported skill names: lowercase kebab-case, e.g. `api-breaking-changes`. */
+export const SKILL_IMPORT_NAME_RE = /^[a-z0-9](?:[a-z0-9-]{0,118}[a-z0-9])?$/;
+
+// C0/C1 controls (tab and newlines allowed) and bidi overrides ("Trojan Source").
+const UNSAFE_CHARS_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/;
+
+const EXECUTABLE_PATTERNS: readonly (readonly [RegExp, string])[] = [
+  [/<\s*script\b/i, '<script> tag'],
+  [/<\s*(?:iframe|frame|frameset|object|embed|applet)\b/i, 'embedded frame or object'],
+  [/<\s*meta\b[^>]*http-equiv/i, '<meta http-equiv>'],
+  [/<[a-z][^>]*[\s/]on[a-z]+\s*=/i, 'inline event handler (on…=)'],
+  [/\b(?:javascript|vbscript)\s*:/i, 'script URL'],
+  [/\bdata\s*:\s*text\/html/i, 'data:text/html URL'],
+];
+
+/** Markdown without fenced / inline code: a rule may *mention* `<script>` in code. */
+function proseOnly(md: string): string {
+  return md.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '').replace(/`[^`\n]*`/g, '');
+}
+
+/** What makes `text` executable (HTML/script outside code spans), or null. */
+export function findExecutableContent(text: string): string | null {
+  const prose = proseOnly(text);
+  for (const [re, what] of EXECUTABLE_PATTERNS) if (re.test(prose)) return what;
+  return null;
+}
+
+const safeText = (s: string, ctx: z.RefinementCtx) => {
+  if (UNSAFE_CHARS_RE.test(s)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Contains control or bidi characters' });
+  const exec = findExecutableContent(s);
+  if (exec) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Executable content is not allowed (${exec}); put examples in code spans` });
+};
+
+/** One skill as it will be created by an import (after the user's edits). */
+export const SkillImportItem = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Name is required')
+    .max(120)
+    .regex(SKILL_IMPORT_NAME_RE, 'Use lowercase letters, digits and single hyphens (e.g. api-breaking-changes)'),
+  description: z.string().trim().max(2000).default('').superRefine(safeText),
+  type: SkillType,
+  body: z
+    .string()
+    .max(200_000)
+    .refine((b) => b.trim().length > 0, 'Body is empty')
+    .superRefine(safeText),
+});
+export type SkillImportItem = z.infer<typeof SkillImportItem>;
+
+export const SkillImportField = z.enum(['name', 'description', 'type', 'body']);
+export type SkillImportField = z.infer<typeof SkillImportField>;
+
+export const SkillImportIssue = z.object({ field: SkillImportField, message: z.string() });
+export type SkillImportIssue = z.infer<typeof SkillImportIssue>;
+
+/** Field-level problems of an item under the shared rules ([] = importable). */
+export function skillImportIssues(item: { name: string; description: string; type: string; body: string }): SkillImportIssue[] {
+  const res = SkillImportItem.safeParse(item);
+  if (res.success) return [];
+  return res.error.issues.map((i) => ({
+    field: SkillImportField.catch('body').parse(i.path[0]),
+    message: i.message,
+  }));
+}
+
+// POST /skills/import/preview — parse an uploaded file; nothing is saved.
+export const SkillImportFileRequest = z.object({
+  filename: z.string().trim().min(1).max(255),
+  content_base64: z
+    .string()
+    .min(1)
+    .max(Math.ceil(SKILL_IMPORT_LIMITS.maxUploadBytes / 3) * 4),
+});
+export type SkillImportFileRequest = z.infer<typeof SkillImportFileRequest>;
+
+/** One skill found in the file, as proposed (editable before the import). */
+export const SkillImportCandidate = z.object({
+  /** The .md file name, or the entry path inside the .zip. */
+  path: z.string(),
+  name: z.string(),
+  description: z.string(),
+  type: SkillType,
+  body: z.string(),
+  /** Problems found by the server, incl. name already taken in the workspace. */
+  issues: z.array(SkillImportIssue),
+});
+export type SkillImportCandidate = z.infer<typeof SkillImportCandidate>;
+
+export const SkillImportPreview = z.object({
+  filename: z.string(),
+  format: z.enum(['md', 'zip']),
+  items: z.array(SkillImportCandidate),
+  /** Archive metadata entries that were ignored (directories, __MACOSX/, .DS_Store). */
+  skipped: z.array(z.string()),
+});
+export type SkillImportPreview = z.infer<typeof SkillImportPreview>;
+
+// POST /skills/import — create the reviewed items (source `imported`, disabled).
+// A name already used in the workspace (or twice in the request) → 409.
+export const SkillImportRequest = z.object({
+  items: z
+    .array(SkillImportItem)
+    .min(1)
+    .max(SKILL_IMPORT_LIMITS.maxItems)
+    .refine((items) => items.reduce((n, i) => n + i.body.length, 0) <= SKILL_IMPORT_LIMITS.maxTotalBytes, {
+      message: `Skills in one import may total at most ${SKILL_IMPORT_LIMITS.maxTotalBytes} characters`,
+    }),
+});
+export type SkillImportRequest = z.infer<typeof SkillImportRequest>;
 
 export const CommunitySkill = z.object({
   name: z.string(),

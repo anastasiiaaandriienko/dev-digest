@@ -1,5 +1,6 @@
 /* SkillCard — one skill in the Skills grid (HW2 #9, #22, #23): type icon, name,
-   enabled toggle, delete, description, type + source, version and agent count.
+   enabled toggle, delete, description, type + source ("needs vetting" while an
+   untrusted import is still disabled), version and agent count.
    The card is a plain container (a click anywhere opens the preview, as a mouse
    convenience); the keyboard / screen-reader entry is the name button. The
    toggle and delete buttons are sibling controls, so no interactive element is
@@ -10,6 +11,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon, IconBtn, Toggle } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
+import { needsVetting } from "@/lib/skill-meta";
 import { SOURCE_ICON, TYPE_COLOR } from "../../constants";
 import { s } from "./styles";
 
@@ -84,6 +86,12 @@ export function SkillCard({
           <SourceIcon size={11} />
           {t(`listItem.source.${skill.source}`)}
         </span>
+        {needsVetting(skill) && (
+          <span style={s.vetting} title={t("listItem.vettingTitle")} data-testid="needs-vetting">
+            <Icon.Shield size={10} />
+            {t("listItem.needsVetting")}
+          </span>
+        )}
       </div>
       <div style={s.footer}>
         <span className="tnum" style={s.footerItem} data-testid="skill-version">

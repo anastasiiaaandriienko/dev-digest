@@ -12,7 +12,8 @@
       "fromFile": "Import from file",
       "fromUrl": "Import from URL",
       "community": "Search community skills…",
-      "comingSoon": "Coming soon"
+      "comingSoon": "Coming soon",
+      "fromFileHint": ".md or .zip"
     },
     "empty": {
       "title": "No skills yet",
@@ -189,6 +190,7 @@
     },
     "source": {
       "manual": "Manual",
+      "imported": "Imported file",
       "extracted": "Extracted",
       "community": "Community",
       "imported_url": "Imported"
@@ -204,5 +206,44 @@
     "bodyLabel": "Skill body (Markdown)",
     "bodyHint": "Saving a changed body creates a new immutable version.",
     "version": "v{version}"
+  },
+  "importFile": {
+    "title": "Import skills from a file",
+    "subtitle": "A .md skill, or a .zip of .md skills. Review each one before importing.",
+    "inputLabel": "Skill file (.md or .zip)",
+    "drop": "Drop a .md or .zip file here, or",
+    "browse": "browse files…",
+    "dropHint": "Up to {size} MB. Only Markdown is imported: executables, scripts and unsafe archives are rejected.",
+    "reading": "Reading {filename}…",
+    "errors": {
+      "type": "Only .md and .zip files can be imported.",
+      "size": "The file is larger than {size} MB.",
+      "empty": "The file is empty.",
+      "read": "The file could not be read.",
+      "failed": "This file cannot be imported",
+      "duplicateInFile": "\"{name}\" is used by more than one skill in this import",
+      "taken": "A skill named \"{name}\" already exists"
+    },
+    "rejectedEntries": "Rejected entries",
+    "found": "{count, plural, one {# skill} other {# skills}} found in {filename}",
+    "skipped": "{count, plural, one {# metadata entry} other {# metadata entries}} ignored",
+    "vetting": "Imported skills are saved disabled (needs vetting). Read each one, then enable it on the Skills page.",
+    "include": "Import {name}",
+    "from": "From {path}",
+    "name": "Name",
+    "description": "Description",
+    "type": "Type",
+    "body": "Body (Markdown)",
+    "rendered": "Rendered",
+    "edit": "Edit",
+    "bodyEmpty": "Empty body",
+    "problems": "{count, plural, one {# problem} other {# problems}}",
+    "ready": "Ready",
+    "excluded": "Not imported",
+    "chooseAnother": "Choose another file",
+    "cancel": "Cancel",
+    "submit": "{count, plural, =0 {Import} one {Import # skill} other {Import # skills}}",
+    "importing": "Importing…",
+    "success": "{count, plural, one {Imported # skill} other {Imported # skills}}: disabled until you review and enable {count, plural, one {it} other {them}}."
   }
 }

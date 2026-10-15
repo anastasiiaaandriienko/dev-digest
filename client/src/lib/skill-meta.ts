@@ -1,7 +1,7 @@
 /* lib/skill-meta.ts — how a skill's type and source are shown, shared by the
    Skills Lab pages (/skills) and the agent editor's Skills tab. No JSX. */
 import type { IconName } from "@devdigest/ui";
-import type { SkillSource, SkillType } from "@devdigest/shared";
+import type { Skill, SkillSource, SkillType } from "@devdigest/shared";
 
 /** Skill types in display order (matches the `SkillType` contract). */
 export const SKILL_TYPES: SkillType[] = ["rubric", "convention", "security", "custom"];
@@ -17,7 +17,16 @@ export const TYPE_COLOR: Record<SkillType, { c: string; bg: string }> = {
 /** Source → icon (labels come from `skills.listItem.source`). */
 export const SOURCE_ICON: Record<SkillSource, IconName> = {
   manual: "Edit",
+  imported: "Upload",
   extracted: "Wrench",
   community: "Globe",
   imported_url: "Link",
 };
+
+/** Sources whose content came from outside the workspace and must be reviewed. */
+export const UNTRUSTED_SOURCES: readonly SkillSource[] = ["imported", "imported_url", "community"];
+
+/** An untrusted skill nobody has enabled yet: show "needs vetting". */
+export function needsVetting(skill: Pick<Skill, "source" | "enabled">): boolean {
+  return !skill.enabled && UNTRUSTED_SOURCES.includes(skill.source);
+}

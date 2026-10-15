@@ -1,6 +1,6 @@
 /**
  * /skills view (HW2 #9–#12): grid from useSkills, search, empty / error states,
- * "Add Skill" menu (create enabled, import disabled), `?preview=<id>` drawer with
+ * "Add Skill" menu (create, import from file), `?preview=<id>` drawer with
  * rendered Markdown, and the enabled toggle. Hooks, AppShell and the router are mocked.
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
@@ -31,6 +31,8 @@ vi.mock("@/lib/hooks/skills", () => ({
   useUpdateSkill: () => ({ mutate }),
   useCreateSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteSkill: () => ({ mutateAsync: deleteSkill, isPending: false }),
+  usePreviewSkillImport: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useImportSkills: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("@/lib/toast", () => ({ notify: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
@@ -124,14 +126,18 @@ describe("SkillsListView — grid", () => {
 });
 
 describe("SkillsListView — Add Skill menu", () => {
-  it("offers Create (opens the modal) and a disabled Import marked Coming soon", () => {
+  it("offers Create and Import from file (HW2 #15); each opens its modal", () => {
     renderView();
     fireEvent.click(screen.getByRole("button", { name: messages.page.addSkill }));
     const importItem = screen.getByRole("button", { name: new RegExp(messages.page.menu.fromFile) });
-    expect(importItem).toBeDisabled();
-    expect(importItem).toHaveTextContent(messages.page.menu.comingSoon);
+    expect(importItem).toBeEnabled();
+    expect(importItem).not.toHaveTextContent(messages.page.menu.comingSoon);
     fireEvent.click(importItem);
+    expect(screen.getByRole("dialog")).toHaveTextContent(messages.importFile.title);
+    fireEvent.click(screen.getByRole("button", { name: messages.importFile.cancel }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: messages.page.addSkill }));
 
     fireEvent.click(screen.getByRole("button", { name: messages.page.menu.createFromScratch }));
     expect(screen.getByRole("dialog")).toHaveTextContent(messages.create.title);
