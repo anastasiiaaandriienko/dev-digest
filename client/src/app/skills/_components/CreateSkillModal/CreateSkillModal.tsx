@@ -12,7 +12,7 @@ import { useCreateSkill } from "@/lib/hooks/skills";
 import { notify } from "@/lib/toast";
 import { SKILL_TYPES } from "../../constants";
 import { BODY_ROWS, DEFAULT_TYPE, MODAL_WIDTH } from "./constants";
-import { validateSkillForm, type SkillFormField } from "./helpers";
+import { validateSkillForm, type SkillFormField } from "../../helpers";
 import { s } from "./styles";
 
 export function CreateSkillModal({

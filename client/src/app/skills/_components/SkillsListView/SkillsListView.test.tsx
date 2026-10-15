@@ -11,9 +11,10 @@ import type { Skill } from "@devdigest/shared";
 import messages from "../../../../../messages/en/skills.json";
 
 const replace = vi.fn();
+const push = vi.fn();
 let params = new URLSearchParams();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace, push: vi.fn() }),
+  useRouter: () => ({ replace, push }),
   usePathname: () => "/skills",
   useSearchParams: () => params,
 }));
@@ -203,5 +204,23 @@ describe("SkillsListView — delete", () => {
     fireEvent.click(confirm);
     await vi.waitFor(() => expect(deleteSkill).toHaveBeenCalledWith("naming"));
     await vi.waitFor(() => expect(replace).toHaveBeenCalledWith("/skills", { scroll: false }));
+  });
+});
+
+describe("SkillsListView — Open skill", () => {
+  afterEach(() => push.mockClear());
+
+  it("clicking a card still only opens the preview (no page navigation)", () => {
+    renderView();
+    fireEvent.click(screen.getByText("API removals")); // the card body
+    expect(replace).toHaveBeenCalledWith("/skills?preview=breaking-change", { scroll: false });
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("the preview offers Open skill, which navigates to /skills/:id", () => {
+    params = new URLSearchParams("preview=breaking-change");
+    renderView();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: messages.previewDrawer.openSkill }));
+    expect(push).toHaveBeenCalledWith("/skills/breaking-change");
   });
 });

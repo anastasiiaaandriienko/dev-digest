@@ -1,17 +1,65 @@
-/* hooks/skills.ts — React Query hooks for the Skills Lab (HW2): list, create and
-   update over the server's /skills API. */
+/* hooks/skills.ts — React Query hooks for the Skills Lab (HW2): list, one skill,
+   create, update, delete, version history and restore over the server's
+   /skills API. Keys: ["skills"] (list), ["skill", id], ["skill-versions", id]. */
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Skill, SkillType } from "@devdigest/shared";
+import type { Skill, SkillRestoreResult, SkillType, SkillVersion } from "@devdigest/shared";
 
 export const SKILLS_KEY = ["skills"] as const;
+export const skillKey = (id: string) => ["skill", id] as const;
+export const skillVersionsKey = (id: string) => ["skill-versions", id] as const;
+
+/** After a write to one skill: refresh the list, the skill page and its history. */
+function invalidateSkill(qc: QueryClient, id: string) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: SKILLS_KEY }),
+    qc.invalidateQueries({ queryKey: skillKey(id) }),
+    qc.invalidateQueries({ queryKey: skillVersionsKey(id) }),
+  ]);
+}
 
 export function useSkills() {
   return useQuery({
     queryKey: SKILLS_KEY,
     queryFn: () => api.get<Skill[]>("/skills"),
+  });
+}
+
+/** One skill for the /skills/:id page. */
+export function useSkill(id: string | null | undefined) {
+  return useQuery({
+    queryKey: skillKey(id ?? ""),
+    queryFn: () => api.get<Skill>(`/skills/${id}`),
+    enabled: !!id,
+  });
+}
+
+/** Body history, newest first (`current` marks the live version). */
+export function useSkillVersions(id: string | null | undefined) {
+  return useQuery({
+    queryKey: skillVersionsKey(id ?? ""),
+    queryFn: () => api.get<SkillVersion[]>(`/skills/${id}/versions`),
+    enabled: !!id,
+  });
+}
+
+export interface RestoreSkillVersionInput {
+  id: string;
+  version: number;
+}
+
+/** POST …/versions/:version/restore — the old body comes back as a NEW version. */
+export function useRestoreSkillVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version }: RestoreSkillVersionInput) =>
+      api.post<SkillRestoreResult>(`/skills/${id}/versions/${version}/restore`),
+    onSuccess: (result, { id }) => {
+      qc.setQueryData(skillKey(id), result.skill);
+      return invalidateSkill(qc, id);
+    },
   });
 }
 
@@ -63,7 +111,9 @@ export function useUpdateSkill() {
     onError: (_err, { id }, ctx) => {
       if (ctx) qc.setQueryData<Skill[]>(SKILLS_KEY, (old) => patchSkill(old, id, ctx.previous));
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: SKILLS_KEY }),
+    // The skill page shows the saved state at once; a changed body also added a version.
+    onSuccess: (skill, { id }) => qc.setQueryData(skillKey(id), skill),
+    onSettled: (_d, _e, { id }) => invalidateSkill(qc, id),
   });
 }
 
@@ -78,6 +128,11 @@ export function useDeleteSkill() {
     mutationFn: (id: string) => api.del<{ ok: true }>(`/skills/${id}`),
     onSuccess: (_d, id) => {
       qc.setQueryData<Skill[]>(SKILLS_KEY, (old) => old?.filter((s) => s.id !== id));
+      // Drop cached copies of the gone skill, but only INACTIVE ones: removing a
+      // query the still-mounted skill page observes makes it refetch → a 404
+      // right before the page navigates away. The page's own copy is left to gc.
+      qc.removeQueries({ queryKey: skillKey(id), type: "inactive" });
+      qc.removeQueries({ queryKey: skillVersionsKey(id), type: "inactive" });
       return qc.invalidateQueries({ queryKey: SKILLS_KEY });
     },
   });

@@ -23,7 +23,19 @@ vi.mock("../api", () => ({
   API_BASE: "",
 }));
 
-import { SKILLS_KEY, patchSkill, useCreateSkill, useDeleteSkill, useSkills, useUpdateSkill } from "./skills";
+import {
+  SKILLS_KEY,
+  patchSkill,
+  skillKey,
+  skillVersionsKey,
+  useCreateSkill,
+  useDeleteSkill,
+  useRestoreSkillVersion,
+  useSkill,
+  useSkillVersions,
+  useSkills,
+  useUpdateSkill,
+} from "./skills";
 
 function skill(id: string, o: Partial<Skill> = {}): Skill {
   return {
@@ -148,5 +160,70 @@ describe("useDeleteSkill", () => {
       await expect(result.current.mutateAsync("a")).rejects.toThrow("500");
     });
     expect(cached()!.map((s) => s.id)).toEqual(["a"]);
+  });
+});
+
+describe("useSkill / useSkillVersions", () => {
+  it("GET /skills/:id and /skills/:id/versions; disabled without an id", async () => {
+    get.mockImplementation((path: string) =>
+      Promise.resolve(path.endsWith("/versions") ? [{ version: 1 }] : skill("a")),
+    );
+    const one = renderHook(() => useSkill("a"), { wrapper });
+    const hist = renderHook(() => useSkillVersions("a"), { wrapper });
+    await waitFor(() => expect(one.result.current.isSuccess && hist.result.current.isSuccess).toBe(true));
+    expect(get).toHaveBeenCalledWith("/skills/a");
+    expect(get).toHaveBeenCalledWith("/skills/a/versions");
+
+    get.mockClear();
+    renderHook(() => useSkill(null), { wrapper });
+    renderHook(() => useSkillVersions(undefined), { wrapper });
+    expect(get).not.toHaveBeenCalled();
+  });
+});
+
+describe("useRestoreSkillVersion", () => {
+  it("POSTs the restore, stores the returned skill and refreshes list, skill and history", async () => {
+    post.mockResolvedValue({ skill: skill("a", { version: 5, body: "# old" }), restored: true, restored_from: 2 });
+    get.mockReturnValue(new Promise(() => {}));
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useRestoreSkillVersion(), { wrapper });
+    await act(() => result.current.mutateAsync({ id: "a", version: 2 }));
+
+    expect(post).toHaveBeenCalledWith("/skills/a/versions/2/restore");
+    expect(qc.getQueryData<Skill>(skillKey("a"))).toMatchObject({ version: 5, body: "# old" });
+    for (const key of [SKILLS_KEY, skillKey("a"), skillVersionsKey("a")]) {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: key });
+    }
+  });
+});
+
+describe("useUpdateSkill — skill page caches", () => {
+  it("a save updates the skill page cache and refreshes its version history", async () => {
+    put.mockResolvedValue(skill("a", { body: "# new", version: 2 }));
+    get.mockReturnValue(new Promise(() => {}));
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useUpdateSkill(), { wrapper });
+    await act(() => result.current.mutateAsync({ id: "a", patch: { body: "# new" } }));
+    expect(qc.getQueryData<Skill>(skillKey("a"))).toMatchObject({ version: 2 });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: skillVersionsKey("a") });
+  });
+});
+
+describe("useDeleteSkill — skill page caches", () => {
+  it("drops inactive caches of the deleted skill but never refetches an observed one", async () => {
+    del.mockResolvedValue({ ok: true });
+    get.mockReturnValue(new Promise(() => {}));
+    qc.setQueryData(skillVersionsKey("a"), [{ version: 1 }]);
+    qc.setQueryData(skillKey("a"), skill("a"));
+    // The skill page is still mounted (an active observer on ["skill", "a"]).
+    renderHook(() => useSkill("a"), { wrapper });
+    get.mockClear();
+
+    const { result } = renderHook(() => useDeleteSkill(), { wrapper });
+    await act(() => result.current.mutateAsync("a"));
+
+    expect(qc.getQueryData(skillVersionsKey("a"))).toBeUndefined();
+    expect(qc.getQueryData(skillKey("a"))).toBeDefined();
+    expect(get).not.toHaveBeenCalledWith("/skills/a");
   });
 });

@@ -52,7 +52,8 @@
     "version": "Version",
     "source": "Source",
     "body": "Skill body",
-    "notFound": "This skill no longer exists."
+    "notFound": "This skill no longer exists.",
+    "openSkill": "Open skill"
   },
   "create": {
     "title": "Create skill",
@@ -84,6 +85,56 @@
     "notFound": {
       "title": "Skill not found",
       "body": "It may have been deleted."
+    },
+    "tabs": {
+      "config": "Config",
+      "preview": "Preview",
+      "versioning": "Versioning"
+    },
+    "config": {
+      "title": "Configuration",
+      "enabled": "Enabled",
+      "name": "Name",
+      "description": "Description",
+      "type": "Type",
+      "body": "Skill body (Markdown)",
+      "bodyHint": "The only text sent to the model. Saving a changed body snapshots it as v{next}; other fields are metadata and keep v{current}.",
+      "bodyStats": "{lines, plural, one {# line} other {# lines}} · ~{tokens} tokens",
+      "save": "Save skill",
+      "saving": "Saving…",
+      "reset": "Discard changes",
+      "noChanges": "No unsaved changes",
+      "saved": "Saved “{name}”.",
+      "savedVersion": "Saved “{name}” as v{version}.",
+      "dangerTitle": "Delete skill",
+      "dangerBody": "Removes it from every agent that uses it and deletes its version history. This can’t be undone.",
+      "delete": "Delete"
+    },
+    "previewTab": {
+      "title": "Preview",
+      "subtitle": "Rendered as the reviewing agent receives it."
+    },
+    "versioning": {
+      "title": "Version history",
+      "count": "{count, plural, one {# version} other {# versions}}",
+      "subtitle": "Every saved body is an immutable snapshot. Restoring an old one creates a new version; nothing is overwritten.",
+      "current": "Current",
+      "sameAs": "same body as v{version}",
+      "diff": "Diff",
+      "hideDiff": "Hide diff",
+      "restore": "Restore",
+      "restoring": "Restoring…",
+      "restoreSame": "This body is already current",
+      "restored": "Restored v{from} as v{version}.",
+      "alreadyCurrent": "v{from} already matches the current body — nothing to restore.",
+      "loadError": "Could not load the version history.",
+      "empty": "No versions recorded for this skill."
+    },
+    "diff": {
+      "title": "v{from} → v{to} (current)",
+      "stats": "+{added} −{removed}",
+      "identical": "No differences — this version has the same body as the current one.",
+      "label": "Changes from v{from} to the current version"
     }
   },
   "drawer": {

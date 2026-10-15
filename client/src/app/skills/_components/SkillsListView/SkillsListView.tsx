@@ -52,7 +52,13 @@ export function SkillsListView() {
   return (
     <AppShell crumb={[{ label: t("page.crumbLab") }, { label: t("page.crumbSkills") }]}>
       {creating && <CreateSkillModal onClose={() => setCreating(false)} onCreated={(sk) => setPreview(sk.id)} />}
-      {preview !== undefined && <SkillPreviewDrawer skill={preview} onClose={closePreview} />}
+      {preview !== undefined && (
+        <SkillPreviewDrawer
+          skill={preview}
+          onClose={closePreview}
+          onOpenPage={(id) => router.push(`/skills/${id}`)}
+        />
+      )}
       {deleting && (
         <DeleteSkillModal
           skill={deleting}

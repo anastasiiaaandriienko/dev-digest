@@ -54,4 +54,5 @@ export const s = {
     color: "var(--text-primary)",
   } satisfies CSSProperties,
   muted: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
+  footer: { display: "flex", justifyContent: "flex-end" } satisfies CSSProperties,
 } as const;
