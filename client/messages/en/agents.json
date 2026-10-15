@@ -1,7 +1,8 @@
 {
   "card": {
     "noDescription": "No description",
-    "skillCount": "{count} skills"
+    "skillCount": "{count, plural, one {# skill} other {# skills}}",
+    "deleteLabel": "Delete {name}"
   },
   "list": {
     "breadcrumbLab": "Skills Lab",
@@ -115,5 +116,16 @@
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."
+  },
+  "delete": {
+    "title": "Delete agent?",
+    "body": "Delete “{name}”, its config history and its skill links?",
+    "skills": "{count, plural, =0 {No skills are attached.} one {# skill link is removed. The skill itself is kept.} other {# skill links are removed. The skills themselves are kept.}}",
+    "irreversible": "This can't be undone.",
+    "cancel": "Cancel",
+    "confirm": "Delete agent",
+    "deleting": "Deleting…",
+    "deleted": "Deleted agent “{name}”.",
+    "failed": "Could not delete the agent."
   }
 }

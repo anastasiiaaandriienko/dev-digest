@@ -5,9 +5,11 @@
 
 import React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import type { Agent } from "@devdigest/shared";
 import { Button, Dropdown, ErrorState, Skeleton, Icon, Badge } from "@devdigest/ui";
 import { AppShell } from "../../../components/app-shell";
 import { AgentCard } from "../_components/AgentCard";
+import { DeleteAgentModal } from "../_components/DeleteAgentModal";
 import { AgentEditor } from "./_components/AgentEditor";
 import { TAB_KEYS as VALID_TABS } from "./_components/AgentEditor/constants";
 import { useAgents, useAgent, useUpdateAgent } from "../../../lib/hooks/agents";
@@ -22,6 +24,7 @@ export default function AgentEditorPage() {
   const { data: agents } = useAgents();
   const { data: agent, isLoading, isError, error, refetch } = useAgent(id);
   const update = useUpdateAgent();
+  const [deleting, setDeleting] = React.useState<Agent | null>(null);
 
   const tab = VALID_TABS.includes(search.get("tab") ?? "") ? search.get("tab")! : "config";
   const setTab = (t: string) => {
@@ -51,6 +54,14 @@ export default function AgentEditorPage() {
 
   return (
     <AppShell crumb={crumb}>
+      {deleting && (
+        <DeleteAgentModal
+          agent={deleting}
+          onClose={() => setDeleting(null)}
+          // Deleting the agent that is open here: leave its (now gone) page.
+          onDeleted={(deletedId) => deletedId === id && router.push("/agents")}
+        />
+      )}
       <div style={{ display: "flex", height: "calc(100vh - 52px)" }}>
         {/* left: agent list */}
         <div
@@ -84,8 +95,10 @@ export default function AgentEditorPage() {
                 key={a.id}
                 ag={a}
                 active={a.id === id}
+                skillCount={a.skill_count}
                 onClick={() => router.push(`/agents/${a.id}?tab=${tab}`)}
                 onToggle={(enabled) => update.mutate({ id: a.id, patch: { enabled } })}
+                onDelete={() => setDeleting(a)}
               />
             ))}
           </div>

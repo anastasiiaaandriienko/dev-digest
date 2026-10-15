@@ -8,6 +8,9 @@ import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
 import { MockGitHubClient, MockSecretsProvider } from '../src/adapters/mocks.js';
 import * as t from '../src/db/schema.js';
+import { schema } from '../src/db/schema.js';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { AgentsRepository } from '../src/modules/agents/repository.js';
 
 /**
  * HW2 #13 (backend) — an agent's ordered skill list over HTTP against a real
@@ -169,5 +172,43 @@ d('Agent skills (Testcontainers pg)', () => {
     const final = (await rows(a)).map((r) => r.skillId);
     expect(lists.map((l) => l.join(','))).toContain(final.join(','));
     expect((await rows(a)).map((r) => r.order)).toEqual(final.map((_, i) => i));
+  });
+
+  it('A-count (HW2 #32): GET /agents returns skill_count = attached skills, enabled or not, workspace-scoped', async () => {
+    const withSkills = await agent();
+    const without = await agent();
+    const [s1, s2, s3] = [await skill(), await skill(), await skill()];
+    expect((await put(withSkills, [
+      { skill_id: s1, enabled: true },
+      { skill_id: s2, enabled: false }, // disabled for this agent: still attached
+      { skill_id: s3, enabled: true },
+    ])).statusCode).toBe(200);
+    await db().update(t.skills).set({ enabled: false }).where(eq(t.skills.id, s3)); // disabled globally: still attached
+
+    // A foreign-workspace agent with links must not leak into this list.
+    const foreign = await agent(otherWs);
+    await db().insert(t.agentSkills).values({ agentId: foreign, skillId: await skill(otherWs), order: 0 });
+
+    const res = await app.inject({ method: 'GET', url: '/agents' });
+    expect(res.statusCode).toBe(200);
+    const list = res.json() as { id: string; skill_count?: number }[];
+    const byId = new Map(list.map((a) => [a.id, a.skill_count]));
+    expect(byId.get(withSkills)).toBe(3);
+    expect(byId.get(without)).toBe(0);
+    expect(byId.has(foreign)).toBe(false);
+    expect(list.every((a) => typeof a.skill_count === 'number')).toBe(true);
+
+    // ONE statement for the whole list, however many agents (no N+1).
+    const statements: string[] = [];
+    const logged = drizzle(pg.handle.sql, { schema, logger: { logQuery: (q) => statements.push(q) } });
+    const repo = new AgentsRepository(logged as unknown as typeof pg.handle.db);
+    const counted = await repo.listWithSkillCount(ws);
+    expect(counted.length).toBeGreaterThanOrEqual(2);
+    expect(statements).toHaveLength(1);
+
+    // Detaching updates the count.
+    await put(withSkills, [{ skill_id: s1, enabled: true }]);
+    const after = (await app.inject({ method: 'GET', url: '/agents' })).json() as { id: string; skill_count: number }[];
+    expect(after.find((a) => a.id === withSkills)!.skill_count).toBe(1);
   });
 });

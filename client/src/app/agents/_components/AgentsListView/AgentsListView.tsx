@@ -1,14 +1,17 @@
-/* /agents — Agents list (A2, L03). AgentCards + create. Selecting an agent
-   navigates to the 5-tab editor at /agents/:id. */
+/* /agents — Agents list (A2, L03). AgentCards (with their attached-skill count,
+   HW2 #32) + create + delete with a confirmation dialog (HW2 #34). Selecting an
+   agent navigates to the editor at /agents/:id. */
 "use client";
 
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import type { Agent } from "@devdigest/shared";
 import { Button, Dropdown, EmptyState, ErrorState, Skeleton, Icon } from "@devdigest/ui";
 import { AppShell } from "../../../../components/app-shell";
 import { useAgents, useUpdateAgent } from "../../../../lib/hooks/agents";
 import { AgentCard } from "../AgentCard";
+import { DeleteAgentModal } from "../DeleteAgentModal";
 import { CreateAgentModal } from "./_components/CreateAgentModal";
 import { TEMPLATES } from "./constants";
 import { filterAgents } from "./helpers";
@@ -20,6 +23,7 @@ export function AgentsListView() {
   const { data: agents, isLoading, isError, refetch } = useAgents();
   const update = useUpdateAgent();
   const [creating, setCreating] = React.useState(false);
+  const [deleting, setDeleting] = React.useState<Agent | null>(null);
   const [search, setSearch] = React.useState("");
 
   const list = filterAgents(agents ?? [], search);
@@ -27,6 +31,7 @@ export function AgentsListView() {
   return (
     <AppShell crumb={[{ label: t("list.breadcrumbLab") }, { label: t("list.breadcrumb") }]}>
       {creating && <CreateAgentModal onClose={() => setCreating(false)} />}
+      {deleting && <DeleteAgentModal agent={deleting} onClose={() => setDeleting(null)} />}
       <div style={s.page}>
         <div style={s.header}>
           <div style={s.headerText}>
@@ -86,8 +91,10 @@ export function AgentsListView() {
               <AgentCard
                 key={a.id}
                 ag={a}
+                skillCount={a.skill_count}
                 onClick={() => router.push(`/agents/${a.id}?tab=config`)}
                 onToggle={(enabled) => update.mutate({ id: a.id, patch: { enabled } })}
+                onDelete={() => setDeleting(a)}
               />
             ))}
           </div>

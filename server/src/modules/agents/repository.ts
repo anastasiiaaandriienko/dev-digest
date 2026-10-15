@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -75,6 +75,26 @@ export class AgentsRepository {
 
   async list(workspaceId: string): Promise<AgentRow[]> {
     return this.db.select().from(t.agents).where(eq(t.agents.workspaceId, workspaceId));
+  }
+
+  /**
+   * Agents of the workspace with how many skills each has attached (enabled or
+   * not), in ONE query: the links are counted in a grouped subquery (only
+   * skills of the same workspace) and LEFT JOINed, so agents without skills get 0.
+   */
+  async listWithSkillCount(workspaceId: string): Promise<{ row: AgentRow; skillCount: number }[]> {
+    const counts = this.db
+      .select({ agentId: t.agentSkills.agentId, n: sql<number>`count(*)::int`.as('n') })
+      .from(t.agentSkills)
+      .innerJoin(t.skills, eq(t.skills.id, t.agentSkills.skillId))
+      .where(eq(t.skills.workspaceId, workspaceId))
+      .groupBy(t.agentSkills.agentId)
+      .as('skill_counts');
+    return this.db
+      .select({ row: t.agents, skillCount: sql<number>`coalesce(${counts.n}, 0)::int` })
+      .from(t.agents)
+      .leftJoin(counts, eq(counts.agentId, t.agents.id))
+      .where(eq(t.agents.workspaceId, workspaceId));
   }
 
   async listEnabled(workspaceId: string): Promise<AgentRow[]> {

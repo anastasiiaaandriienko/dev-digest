@@ -56,9 +56,10 @@ export class AgentsService {
     this.repo = new AgentsRepository(container.db);
   }
 
+  /** The Agents page list; each agent carries its attached-skill count (HW2 #32). */
   async list(workspaceId: string): Promise<Agent[]> {
-    const rows = await this.repo.list(workspaceId);
-    return rows.map(toAgentDto);
+    const rows = await this.repo.listWithSkillCount(workspaceId);
+    return rows.map(({ row, skillCount }) => ({ ...toAgentDto(row), skill_count: skillCount }));
   }
 
   async get(workspaceId: string, id: string): Promise<Agent | undefined> {

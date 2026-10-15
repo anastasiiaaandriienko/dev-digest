@@ -74,9 +74,10 @@ export function useDeleteAgent() {
   return useMutation({
     mutationFn: (id: string) => api.del<{ ok: boolean }>(`/agents/${id}`),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["agents"] });
       qc.removeQueries({ queryKey: ["agent", id] });
     },
+    // Also after a failure: a 404 means the agent is already gone, so the list must not keep showing it.
+    onSettled: () => qc.invalidateQueries({ queryKey: ["agents"] }),
   });
 }
 
