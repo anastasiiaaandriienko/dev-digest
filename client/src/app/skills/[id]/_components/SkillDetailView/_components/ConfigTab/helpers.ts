@@ -1,4 +1,5 @@
 import type { Skill, SkillType } from "@devdigest/shared";
+import type { UnsavedGuard } from "@/lib/unsaved-guard";
 
 export interface ConfigForm {
   name: string;
@@ -11,12 +12,7 @@ export interface ConfigForm {
 export type ConfigPatch = Partial<ConfigForm>;
 
 /** What the Config tab tells the page about unsaved edits (used before switching skills). */
-export interface ConfigGuard {
-  /** The form differs from the saved skill. */
-  dirty: boolean;
-  /** Validate and save; resolves true once saved, false when it failed (edits are kept). */
-  save: () => Promise<boolean>;
-}
+export type ConfigGuard = UnsavedGuard;
 
 export function formFrom(skill: Skill): ConfigForm {
   return {

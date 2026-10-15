@@ -4,13 +4,17 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Modal, FormField, TextInput, SelectInput, Textarea } from "@devdigest/ui";
-import type { Provider } from "@devdigest/shared";
-import { useCreateAgent } from "../../../../../../lib/hooks/agents";
+import type { Agent, Provider } from "@devdigest/shared";
+import { useCreateAgent } from "@/lib/hooks/agents";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODAL_WIDTH, PROVIDER_OPTIONS } from "./constants";
 import { s } from "./styles";
 
-/** Create-agent modal — name/description/provider/model/system-prompt. */
-export function CreateAgentModal({ onClose }: { onClose: () => void }) {
+/**
+ * Create-agent modal — name/description/provider/model/system-prompt. After the
+ * create it opens the new agent, through `onCreated` when given (so the page
+ * can ask about unsaved edits first), else straight to its editor.
+ */
+export function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreated?: (agent: Agent) => void }) {
   const t = useTranslations("agents");
   const router = useRouter();
   const create = useCreateAgent();
@@ -29,7 +33,8 @@ export function CreateAgentModal({ onClose }: { onClose: () => void }) {
       system_prompt: systemPrompt,
     });
     onClose();
-    router.push(`/agents/${agent.id}?tab=config`);
+    if (onCreated) onCreated(agent);
+    else router.push(`/agents/${agent.id}?tab=config`);
   };
 
   return (

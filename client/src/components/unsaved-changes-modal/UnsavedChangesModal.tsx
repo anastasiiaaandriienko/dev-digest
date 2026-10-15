@@ -1,5 +1,6 @@
-/* UnsavedChangesModal — asked before leaving a skill whose Config has unsaved
-   edits (another skill in the list, or an agent link on the Stats tab). Three ways out:
+/* UnsavedChangesModal — shared by the Skill and Agent editors: asked before
+   leaving a record whose Config form has unsaved edits (another card in the
+   list, or an in-app link from the editor). Three ways out:
    Save and continue (only leaves once the save succeeded), Discard changes
    (leave without saving) and Cancel / X (stay, edits untouched). While the
    save runs the dialog can't be dismissed. */
@@ -18,14 +19,14 @@ export function UnsavedChangesModal({
   onDiscard,
   onCancel,
 }: {
-  /** The skill being left. */
+  /** The skill / agent being left. */
   name: string;
   saving: boolean;
   onSave: () => void;
   onDiscard: () => void;
   onCancel: () => void;
 }) {
-  const t = useTranslations("skills");
+  const t = useTranslations("common");
   return (
     <Modal
       width={MODAL_WIDTH}

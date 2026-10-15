@@ -1,7 +1,9 @@
 /**
- * /agents (HW2 #7, #32, #34): each card shows the attached-skill count from
- * GET /agents (`skill_count`), and the card's delete opens DeleteAgentModal.
- * Hooks, the router and AppShell are mocked.
+ * /agents (HW2 #7, #32, #34; design: Agents list + editor, empty state): each
+ * card shows the attached-skill count from GET /agents (`skill_count`), the
+ * card's delete opens DeleteAgentModal, a card opens its editor, and with no
+ * agents the page shows "No agents yet" + Create your first agent (no
+ * template action: none exist). Hooks, the router and AppShell are mocked.
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
 import React from "react";
@@ -31,10 +33,11 @@ const base = (id: string, name: string, skill_count: number): Agent => ({
   skill_count,
 });
 const AGENTS = [base("a1", "API Contract Reviewer", 4), base("a2", "Test Quality Reviewer", 0)];
+let agentsData: Agent[] = AGENTS;
 const mutateAsync = vi.fn();
 // One mock: "@/lib/hooks/agents" and the relative import resolve to the same module.
 vi.mock("@/lib/hooks/agents", () => ({
-  useAgents: () => ({ data: AGENTS, isLoading: false, isError: false, refetch: vi.fn() }),
+  useAgents: () => ({ data: agentsData, isLoading: false, isError: false, refetch: vi.fn() }),
   useUpdateAgent: () => ({ mutate: vi.fn() }),
   useDeleteAgent: () => ({ mutateAsync, isPending: false }),
   useCreateAgent: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -46,6 +49,7 @@ import { AgentsListView } from "./AgentsListView";
 
 afterEach(() => {
   cleanup();
+  agentsData = AGENTS;
   mutateAsync.mockReset();
   push.mockReset();
 });
@@ -85,5 +89,35 @@ describe("AgentsListView", () => {
     fireEvent.click(screen.getByRole("button", { name: messages.delete.cancel }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(mutateAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("AgentsListView — layout (design: list column + editor area)", () => {
+  it("lists the agents next to a 'select an agent' prompt; a card opens its editor", () => {
+    renderView();
+    expect(screen.getByRole("heading", { name: messages.list.title })).toBeInTheDocument();
+    expect(screen.getByText(messages.list.selectTitle)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open API Contract Reviewer" }));
+    expect(push).toHaveBeenCalledWith("/agents/a1?tab=config");
+  });
+
+  it("search filters the cards by name or description", () => {
+    renderView();
+    fireEvent.change(screen.getByRole("textbox", { name: messages.list.searchPlaceholder }), { target: { value: "quality" } });
+    expect(screen.queryByText("API Contract Reviewer")).toBeNull();
+    expect(screen.getByText("Test Quality Reviewer")).toBeInTheDocument();
+  });
+
+  it("no agents: 'No agents yet' + Create your first agent (opens the create dialog); no template action; the list column is just its heading", () => {
+    agentsData = [];
+    renderView();
+    const empty = screen.getByTestId("agents-empty");
+    expect(within(empty).getByRole("heading", { name: messages.list.emptyTitle })).toBeInTheDocument();
+    expect(empty).toHaveTextContent(messages.list.emptyBody);
+    expect(screen.queryByRole("button", { name: /template/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: messages.list.addAgent })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: messages.list.searchPlaceholder })).toBeNull();
+    fireEvent.click(within(empty).getByRole("button", { name: messages.list.emptyCta }));
+    expect(screen.getByRole("dialog")).toHaveTextContent(messages.create.title);
   });
 });

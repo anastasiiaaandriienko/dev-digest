@@ -2,7 +2,9 @@
   "card": {
     "noDescription": "No description",
     "skillCount": "{count, plural, one {# skill} other {# skills}}",
-    "deleteLabel": "Delete {name}"
+    "deleteLabel": "Delete {name}",
+    "open": "Open {name}",
+    "toggleLabel": "Enable {name}"
   },
   "list": {
     "breadcrumbLab": "Skills Lab",
@@ -15,7 +17,11 @@
     "loadError": "Could not load agents.",
     "emptyTitle": "No agents yet",
     "emptyBody": "An agent is a configured reviewer — a model, a prompt, and the skills it uses. Create one to start reviewing.",
-    "emptyCta": "Create your first agent"
+    "emptyCta": "Create your first agent",
+    "noMatchTitle": "No matching agents",
+    "noMatchBody": "No agent name or description matches “{query}”.",
+    "selectTitle": "Select an agent",
+    "selectBody": "Pick an agent on the left to edit its configuration and skills."
   },
   "create": {
     "title": "Create agent",
@@ -85,12 +91,19 @@
     "repoIntelHint": "Inject repo context (repo skeleton, callers of changed symbols, and a 'high blast-radius' note) into this agent's review prompt. On by default. Turning it off sends only the diff — useful for cheap models or self-contained PRs.",
     "save": "Save agent",
     "saving": "Saving…",
-    "saved": "Saved (v{version})",
-    "savedToast": "Agent saved (v{version})"
+    "savedToast": "Agent saved (v{version})",
+    "cancel": "Cancel",
+    "noChanges": "No unsaved changes",
+    "promptTokens": "~{tokens, number} tokens",
+    "errors": {
+      "name": "Enter a name.",
+      "model": "Pick a model.",
+      "system_prompt": "Enter a system prompt."
+    }
   },
   "skills": {
     "title": "Skills",
-    "enabledCount": "{linked} of {total} applied",
+    "enabledCount": "{linked} of {total} enabled",
     "filterPlaceholder": "Filter skills…",
     "orderHint": "Order matters — earlier skills appear earlier in the assembled prompt. Drag an enabled skill (or use ↑ / ↓) to reorder.",
     "searchLabel": "Filter skills by name",
@@ -98,9 +111,7 @@
     "attachedTitle": "In this agent's prompt",
     "attachedEmpty": "No skills attached. Turn one on below to add it to the prompt.",
     "availableTitle": "Available skills",
-    "availableEmpty": "Every skill is attached.",
     "noMatch": "No skill matches “{query}”.",
-    "promptPosition": "#{position}",
     "useForAgent": "Use {name} for this agent",
     "offForAgent": "off for this agent",
     "offForAgentHint": "Attached but disabled for this agent: kept in place, not in the prompt.",
@@ -111,8 +122,7 @@
     "moveUp": "Move {name} up",
     "moveDown": "Move {name} down",
     "detach": "Detach {name}",
-    "loadError": "Could not load this agent's skills.",
-    "source": "Source"
+    "loadError": "Could not load this agent's skills."
   },
   "mount": {
     "body": "Mount point for {owner}. The Agent Editor shell + tab routing are wired by A2 — {owner} renders this tab."

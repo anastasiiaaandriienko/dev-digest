@@ -63,7 +63,8 @@ describe("Agent Editor tabs (HW2 #35)", () => {
     const onTab = vi.fn();
     renderWithIntl(<AgentEditor agent={AGENT} tab="skills" onTab={onTab} />);
     expect(screen.getByRole("heading", { level: 2, name: "Skills" })).toBeInTheDocument();
-    expect(screen.queryByText("Save agent")).toBeNull();
+    // Config stays mounted but hidden (its unsaved edits survive the tab switch)
+    expect(screen.queryByRole("button", { name: "Save agent" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Config" }));
     expect(onTab).toHaveBeenCalledWith("config");
   });

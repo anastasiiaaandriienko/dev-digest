@@ -1,16 +1,16 @@
 import type { CSSProperties } from "react";
 
-/** Co-located styles for AgentSkillRow (design: agent editor · Skills tab rows). */
+/** Co-located styles for AgentSkillRow (design: Agent Editor · Skills rows). */
 export const s = {
   row: (applied: boolean, dragging: boolean, dropTarget: boolean): CSSProperties => ({
     display: "flex",
     alignItems: "center",
-    gap: 10,
-    padding: "8px 10px",
+    gap: 11,
+    padding: "10px 12px",
     borderRadius: 7,
     border: "1px solid " + (dropTarget ? "var(--accent)" : "var(--border)"),
     background: applied ? "var(--bg-hover)" : "var(--bg-elevated)",
-    opacity: dragging ? 0.45 : applied ? 1 : 0.75,
+    opacity: dragging ? 0.45 : applied ? 1 : 0.7,
     listStyle: "none",
   }),
   handle: (enabled: boolean): CSSProperties => ({
@@ -20,8 +20,21 @@ export const s = {
     opacity: enabled ? 1 : 0.35,
     flexShrink: 0,
   }),
-  position: { width: 26, fontSize: 11.5, color: "var(--accent-text)", fontWeight: 600, flexShrink: 0 } satisfies CSSProperties,
+  checkbox: (on: boolean): CSSProperties => ({
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    border: "1.5px solid " + (on ? "var(--accent)" : "var(--border-strong)"),
+    background: on ? "var(--accent)" : "transparent",
+    display: "grid",
+    placeItems: "center",
+    padding: 0,
+    flexShrink: 0,
+    cursor: "pointer",
+  }),
+  checkMark: { color: "#fff" } satisfies CSSProperties,
   name: {
+    flex: 1,
     fontSize: 12.5,
     fontWeight: 600,
     minWidth: 0,
@@ -38,14 +51,6 @@ export const s = {
     borderRadius: 4,
     flexShrink: 0,
   }),
-  source: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 3,
-    fontSize: 10.5,
-    color: "var(--text-muted)",
-    flexShrink: 0,
-  } satisfies CSSProperties,
   badge: (color: string): CSSProperties => ({
     fontSize: 10.5,
     fontWeight: 600,
@@ -54,7 +59,7 @@ export const s = {
     padding: "0 6px",
     borderRadius: 4,
     flexShrink: 0,
+    whiteSpace: "nowrap",
   }),
-  spacer: { flex: 1 } satisfies CSSProperties,
-  moves: { display: "inline-flex", gap: 2 } satisfies CSSProperties,
+  moves: { display: "inline-flex", gap: 2, flexShrink: 0 } satisfies CSSProperties,
 } as const;

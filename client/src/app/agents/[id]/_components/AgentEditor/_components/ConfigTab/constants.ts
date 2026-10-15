@@ -11,3 +11,6 @@ export const CI_FAIL_ON_VALUES: readonly CiFailOn[] = ["never", "critical", "war
 
 /** Output-schema options (only one supported in MVP). */
 export const OUTPUT_SCHEMA_VALUE = "Standard findings JSON";
+
+/** Visible rows of the system prompt editor. */
+export const PROMPT_ROWS = 10;

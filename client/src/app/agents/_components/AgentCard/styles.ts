@@ -1,17 +1,16 @@
 import type { CSSProperties } from "react";
 
-/** Co-located styles for AgentCard (extracted from inline styles). */
+/** Co-located styles for AgentCard (design: Agents · AgentCard). */
 export const s = {
   card: (active: boolean, enabled: boolean): CSSProperties => ({
-    padding: 14,
+    padding: 13,
     borderRadius: 8,
     cursor: "pointer",
     border: "1px solid " + (active ? "var(--border-strong)" : "var(--border)"),
     background: active ? "var(--bg-hover)" : "var(--bg-elevated)",
     opacity: enabled ? 1 : 0.6,
-    marginBottom: 10,
   }),
-  headerRow: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
+  headerRow: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
   iconBox: {
     width: 26,
     height: 26,
@@ -23,29 +22,43 @@ export const s = {
     flexShrink: 0,
   } satisfies CSSProperties,
   name: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: 600,
     flex: 1,
+    minWidth: 0,
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
+    textAlign: "left",
+    padding: 0,
+    border: "none",
+    background: "none",
+    color: "var(--text-primary)",
+    cursor: "pointer",
   } satisfies CSSProperties,
   description: {
-    fontSize: 13,
+    fontSize: 12,
     color: "var(--text-muted)",
-    margin: "8px 0",
+    margin: "7px 0",
     lineHeight: 1.4,
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
   } satisfies CSSProperties,
-  metaRow: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  // One line: a long model id (OpenRouter "vendor/model") truncates, the skill count stays whole.
+  metaRow: { display: "flex", alignItems: "center", gap: 7, minWidth: 0 } satisfies CSSProperties,
+  skills: { flexShrink: 0 } satisfies CSSProperties,
   modelChip: (color: string): CSSProperties => ({
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: 600,
     color,
-    background: color + "1a",
-    padding: "1px 8px",
+    background: `color-mix(in srgb, ${color} 12%, transparent)`,
+    padding: "1px 6px",
     borderRadius: 4,
+    minWidth: 0,
+    flexShrink: 1,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   }),
 } as const;

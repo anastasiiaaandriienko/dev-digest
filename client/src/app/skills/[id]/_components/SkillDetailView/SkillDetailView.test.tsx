@@ -14,6 +14,7 @@ import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-li
 import { NextIntlClientProvider } from "next-intl";
 import type { Skill } from "@devdigest/shared";
 import messages from "../../../../../../messages/en/skills.json";
+import common from "../../../../../../messages/en/common.json";
 
 const replace = vi.fn();
 const push = vi.fn();
@@ -82,7 +83,7 @@ afterEach(() => {
 
 function renderView() {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ skills: messages, common }}>
       <SkillDetailView />
     </NextIntlClientProvider>,
   );
@@ -209,7 +210,7 @@ describe("SkillDetailView — delete", () => {
 });
 
 describe("SkillDetailView — unsaved Config edits when switching skills", () => {
-  const U = messages.unsaved;
+  const U = common.unsaved;
   const nameInput = () => screen.getByDisplayValue(/^breaking-change/) as HTMLInputElement;
   const editName = (value = "breaking-change-v2") => fireEvent.change(nameInput(), { target: { value } });
   const openOther = () => fireEvent.click(screen.getByRole("button", { name: "Open naming" }));
@@ -292,7 +293,7 @@ describe("SkillDetailView — unsaved Config edits when switching skills", () =>
     editName();
     params = new URLSearchParams("tab=preview");
     view.rerender(
-      <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+      <NextIntlClientProvider locale="en" messages={{ skills: messages, common }}>
         <SkillDetailView />
       </NextIntlClientProvider>,
     );
@@ -305,7 +306,7 @@ describe("SkillDetailView — unsaved Config edits when switching skills", () =>
     expect(push).not.toHaveBeenCalled();
     params = new URLSearchParams("tab=config");
     view.rerender(
-      <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+      <NextIntlClientProvider locale="en" messages={{ skills: messages, common }}>
         <SkillDetailView />
       </NextIntlClientProvider>,
     );
@@ -317,7 +318,7 @@ describe("SkillDetailView — unsaved Config edits when switching skills", () =>
     editName();
     params = new URLSearchParams("tab=versioning");
     view.rerender(
-      <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+      <NextIntlClientProvider locale="en" messages={{ skills: messages, common }}>
         <SkillDetailView />
       </NextIntlClientProvider>,
     );
@@ -335,7 +336,7 @@ describe("SkillDetailView — unsaved Config edits when switching skills", () =>
     editName();
     params = new URLSearchParams("tab=stats");
     view.rerender(
-      <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+      <NextIntlClientProvider locale="en" messages={{ skills: messages, common }}>
         <SkillDetailView />
       </NextIntlClientProvider>,
     );

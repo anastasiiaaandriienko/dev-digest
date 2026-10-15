@@ -1,6 +1,7 @@
-/* SkillsTab — the agent's skills (HW2 #13, #30, #31, #37): every skill in the
-   workspace, attached ones first in their PROMPT order, then the rest. The
-   switch attaches/enables a skill for this agent; × detaches it; enabled,
+/* SkillsTab — the agent's skills (HW2 #13, #30, #31, #37; design: Agent Editor
+   · Skills): every skill in the workspace as one list, attached ones first in
+   their PROMPT order, then the rest. The checkbox attaches/enables a skill for
+   this agent; × detaches it; enabled,
    attached skills reorder by drag & drop or ↑ / ↓. Every change PUTs the whole
    ordered list (optimistic, rolled back on error). Skills disabled globally
    stay listed but are marked as not applied. */
@@ -83,7 +84,7 @@ export function SkillsTab({ agent }: { agent: Agent }) {
             {t("skills.enabledCount", { linked: appliedCount(attached), total: skillsQ.data.length })}
           </span>
         </Badge>
-        <div style={s.search}>
+        <label className="dd-skills-lab-search" style={s.search}>
           <Icon.Search size={13} style={s.searchIcon} />
           <input
             value={query}
@@ -92,13 +93,12 @@ export function SkillsTab({ agent }: { agent: Agent }) {
             aria-label={t("skills.searchLabel")}
             style={s.searchInput}
           />
-        </div>
+        </label>
       </div>
       <p style={s.hint}>
         {t("skills.orderHint")} {filtering && <strong>{t("skills.reorderPausedHint")}</strong>}
       </p>
 
-      <h3 style={s.h3}>{t("skills.attachedTitle")}</h3>
       {attached.length === 0 ? (
         <p style={s.empty}>{t("skills.attachedEmpty")}</p>
       ) : (
@@ -135,10 +135,7 @@ export function SkillsTab({ agent }: { agent: Agent }) {
         </ol>
       )}
 
-      <h3 style={s.h3}>{t("skills.availableTitle")}</h3>
-      {available.length === 0 ? (
-        <p style={s.empty}>{t("skills.availableEmpty")}</p>
-      ) : (
+      {available.length > 0 && (
         <ul style={s.list} aria-label={t("skills.availableTitle")} data-testid="available-skills">
           {shownAvailable.map((row) => (
             <AgentSkillRow

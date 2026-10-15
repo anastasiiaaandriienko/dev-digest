@@ -79,30 +79,29 @@ describe("SkillsTab — listing", () => {
     expect(ids("available-skills")).toEqual(["imported-rule"]);
   });
 
-  it("each row has its type, source and a per-agent switch; the count shows applied / total", () => {
+  it("each row has its type and a per-agent checkbox; the count shows enabled (applied) / total", () => {
     renderTab();
     expect(within(rowOf("breaking-change")).getByText("security")).toHaveAttribute("data-skill-type", "security");
-    expect(within(rowOf("imported-rule")).getByText("Imported")).toBeInTheDocument();
     for (const s of SKILLS) {
-      expect(screen.getByRole("switch", { name: `Use ${s.name} for this agent` })).toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: `Use ${s.name} for this agent` })).toBeInTheDocument();
     }
     // applied = response-schema + breaking-change (semver off for agent, deprecation off globally)
-    expect(screen.getByTestId("applied-count")).toHaveTextContent("2 of 5 applied");
+    expect(screen.getByTestId("applied-count")).toHaveTextContent("2 of 5 enabled");
   });
 
-  it("distinguishes 'off for this agent' from 'disabled globally'; only applied skills get a prompt position", () => {
+  it("distinguishes 'off for this agent' from 'disabled globally'; only applied skills are marked applied", () => {
     renderTab();
     expect(within(rowOf("semver")).getByText(S.offForAgent)).toBeInTheDocument();
     expect(within(rowOf("semver")).queryByText(S.offGlobally)).toBeNull();
-    expect(screen.getByRole("switch", { name: "Use semver for this agent" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("checkbox", { name: "Use semver for this agent" })).toHaveAttribute("aria-checked", "false");
 
     expect(within(rowOf("deprecation")).getByText(S.offGlobally)).toBeInTheDocument();
     expect(within(rowOf("deprecation")).queryByText(S.offForAgent)).toBeNull();
     // enabled for the agent, but not applied because it is off globally
-    expect(screen.getByRole("switch", { name: "Use deprecation for this agent" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("checkbox", { name: "Use deprecation for this agent" })).toHaveAttribute("aria-checked", "true");
 
-    const pos = (id: string) => within(rowOf(id)).getByTestId("prompt-position").textContent;
-    expect([pos("response-schema"), pos("breaking-change"), pos("semver"), pos("deprecation")]).toEqual(["#1", "#2", "–", "–"]);
+    const applied = (id: string) => rowOf(id).getAttribute("data-applied") === "true";
+    expect(["response-schema", "breaking-change", "semver", "deprecation"].map(applied)).toEqual([true, true, false, false]);
   });
 
   it("loading, error and empty attached list", () => {
@@ -123,13 +122,13 @@ describe("SkillsTab — listing", () => {
 describe("SkillsTab — changes (each PUTs the whole ordered list)", () => {
   it("turning on an unattached skill attaches it at the end, enabled", () => {
     renderTab();
-    fireEvent.click(screen.getByRole("switch", { name: "Use imported-rule for this agent" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use imported-rule for this agent" }));
     expect(sent()).toEqual(["response-schema:on", "breaking-change:on", "semver:off", "deprecation:on", "imported-rule:on"]);
   });
 
   it("turning an attached skill off keeps its place (disabled for this agent only)", () => {
     renderTab();
-    fireEvent.click(screen.getByRole("switch", { name: "Use breaking-change for this agent" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use breaking-change for this agent" }));
     expect(sent()).toEqual(["response-schema:on", "breaking-change:off", "semver:off", "deprecation:on"]);
   });
 

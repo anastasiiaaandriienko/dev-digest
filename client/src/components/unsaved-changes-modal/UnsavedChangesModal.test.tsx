@@ -5,7 +5,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import messages from "../../../../../../../../messages/en/skills.json";
+import messages from "../../../messages/en/common.json";
 import { UnsavedChangesModal } from "./UnsavedChangesModal";
 
 const U = messages.unsaved;
@@ -14,7 +14,7 @@ afterEach(cleanup);
 function renderModal(saving = false) {
   const h = { onSave: vi.fn(), onDiscard: vi.fn(), onCancel: vi.fn() };
   render(
-    <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ common: messages }}>
       <UnsavedChangesModal name="breaking-change" saving={saving} {...h} />
     </NextIntlClientProvider>,
   );

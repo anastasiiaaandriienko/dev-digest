@@ -1,12 +1,13 @@
-/* AgentSkillRow — one skill in the agent's Skills tab: drag handle (enabled,
-   attached skills only), prompt position, name, type, source, state badges,
-   the per-agent switch, keyboard ↑ / ↓ and detach. All controls are siblings. */
+/* AgentSkillRow — one skill in the agent's Skills tab (design: Agent Editor ·
+   Skills row): drag handle (enabled, attached skills only), the per-agent
+   checkbox, name, state badges, type chip, keyboard ↑ / ↓ and detach. All
+   controls are siblings. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Icon, IconBtn, Toggle } from "@devdigest/ui";
-import { SOURCE_ICON, TYPE_COLOR } from "@/lib/skill-meta";
+import { Icon, IconBtn } from "@devdigest/ui";
+import { TYPE_COLOR } from "@/lib/skill-meta";
 import type { SkillRow } from "../../helpers";
 import { s } from "./styles";
 
@@ -47,7 +48,7 @@ export function AgentSkillRow({
   const ts = useTranslations("skills");
   const { skill } = row;
   const color = TYPE_COLOR[skill.type] ?? TYPE_COLOR.custom;
-  const SourceIcon = Icon[SOURCE_ICON[skill.source] ?? "Edit"];
+  const on = row.attached && row.agentEnabled;
 
   return (
     <li
@@ -88,18 +89,19 @@ export function AgentSkillRow({
       >
         <Icon.Menu size={14} />
       </span>
-      <span className="mono tnum" style={s.position} data-testid="prompt-position">
-        {row.promptOrder != null ? t("skills.promptPosition", { position: row.promptOrder }) : "–"}
-      </span>
+      {/* Not the kit Checkbox: that one cannot carry an accessible name (aria-label). */}
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={on}
+        aria-label={t("skills.useForAgent", { name: skill.name })}
+        onClick={() => onToggle(!on)}
+        style={s.checkbox(on)}
+      >
+        {on && <Icon.Check size={11} style={s.checkMark} />}
+      </button>
       <span className="mono" style={s.name} title={skill.name}>
         {skill.name}
-      </span>
-      <span style={s.typeChip(color.c, color.bg)} data-skill-type={skill.type}>
-        {ts(`listItem.type.${skill.type}`)}
-      </span>
-      <span style={s.source} title={t("skills.source")}>
-        <SourceIcon size={11} />
-        {ts(`listItem.source.${skill.source}`)}
       </span>
       {row.attached && !row.agentEnabled && (
         <span style={s.badge("var(--text-muted)")} title={t("skills.offForAgentHint")} data-state="off-for-agent">
@@ -111,7 +113,6 @@ export function AgentSkillRow({
           {t("skills.offGlobally")}
         </span>
       )}
-      <span style={s.spacer} />
       {row.attached && (
         <span style={s.moves}>
           <IconBtn
@@ -130,15 +131,12 @@ export function AgentSkillRow({
           />
         </span>
       )}
-      <Toggle
-        on={row.attached && row.agentEnabled}
-        onChange={onToggle}
-        size={14}
-        label={t("skills.useForAgent", { name: skill.name })}
-      />
       {onDetach && (
         <IconBtn icon="X" size={24} danger label={t("skills.detach", { name: skill.name })} onClick={onDetach} />
       )}
+      <span style={s.typeChip(color.c, color.bg)} data-skill-type={skill.type}>
+        {ts(`listItem.type.${skill.type}`)}
+      </span>
     </li>
   );
 }
