@@ -76,3 +76,17 @@ Verified, non-obvious knowledge for `server/`. Append-only; maintained via the `
 - **Discovery:** `server/node_modules` was installed by pnpm 12.9.1 (`.modules.yaml`), while CI pins pnpm 10 (`.github/workflows/server-unit.yml`, `version: 10`). A trial `pnpm add fflate --lockfile-only` in a scratch copy changed ~30 unrelated lines: pnpm 12 added `(supports-color@7.2.0)` peer suffixes, pnpm 10 added `libc:` fields and changed `deprecated` texts. Inserting only the package's three lockfile blocks (importer entry, `packages:` resolution, `snapshots:` entry) passed `install --frozen-lockfile` with both pnpm 10.34.7 and 12.9.1.
 - **Evidence:** `server/pnpm-lock.yaml` (`fflate@0.8.3`, 8 added lines); validated with `npx pnpm@10.34.7 install --frozen-lockfile --lockfile-only` and local `pnpm install --frozen-lockfile --lockfile-only` (lockfile byte-identical afterwards).
 - **Guidance:** Only with approval for the dependency: trial the add in a copy, diff with `--strip-trailing-cr`, keep only the new package's blocks, verify `--frozen-lockfile` under both pnpm versions, then install with the local pnpm (`--frozen-lockfile`) so `node_modules` stays consistent.
+
+### 2026-10-15 — `container.jobs` retries every job (runner-wide `retries: 2`): don't put a paid LLM call in it
+- **Category:** Codebase Patterns
+- **Status:** verified
+- **Discovery:** `JobRunner` takes `retries` once, in its constructor (default 2), and wraps every handler in `withRetry` + `withTimeout(120 s)`. A job cannot opt out, so a non-idempotent model call (a conventions scan) enqueued there could run and bill up to 3 times. The conventions scan instead runs fire-and-forget like review runs: a `convention_scans` row (`running` → `done` / `failed`) plus a boot-time reaper for rows left `running`.
+- **Evidence:** `server/src/platform/jobs.ts:42` (`this.retries = opts.retries ?? 2`), `:65` (`withRetry`); `server/src/modules/conventions/service.ts:62` (background `runScan` with a final `failScan` catch), `:174` (`reapInterruptedScans`), wired in `server/src/app.ts:90`.
+- **Guidance:** Use `container.jobs` only for idempotent work (clone, index, sync). For LLM work, persist your own status row, start it with `void …catch(fail)`, and reap stale `running` rows on boot.
+
+### 2026-10-15 — A fingerprint computed in both JS and Postgres must use ASCII-only normalization
+- **Category:** What Doesn't Work
+- **Status:** verified
+- **Discovery:** Migration 0011 backfills `conventions.fingerprint` in SQL, and the app computes the same sha256 in JS to dedupe rescans. JS `trim()` / `\s` / `toLowerCase()` handle Unicode whitespace and letters, while Postgres `btrim` (spaces only by default) and locale-dependent `lower()` do not. So legacy rows could get a different fingerprint and come back as duplicates. Making both sides ASCII-only (an explicit whitespace set, A–Z lowercased with `translate`) made them agree byte-for-byte.
+- **Evidence:** `server/src/modules/conventions/helpers.ts:23` (`normalizeRule`); `server/src/db/migrations/0011_perpetual_spot.sql:43` (`translate(regexp_replace(btrim(..., chr(9)…chr(13)) …))`). Validated on a throwaway pgvector container: rows with `É`, NBSP, `\v`/`\f` and mixed case all had SQL fingerprint == JS fingerprint, and a normalized duplicate got NULL instead of breaking the unique index.
+- **Guidance:** When the DB and the app must derive the same key, normalize with an explicit ASCII-only rule on both sides and test it against a real Postgres, never by reading the code.
