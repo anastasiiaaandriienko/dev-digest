@@ -128,8 +128,38 @@ export const Skill = z.object({
   enabled: z.boolean(),
   version: z.number().int(),
   evidence_files: z.array(z.string()).nullish(),
+  // Number of agents in the workspace this skill is linked to (agent_skills).
+  agent_count: z.number().int().nonnegative(),
 });
 export type Skill = z.infer<typeof Skill>;
+
+// POST /skills — a new skill starts at version 1.
+export const SkillCreate = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().max(2000).default(''),
+  type: SkillType,
+  source: SkillSource.default('manual'),
+  body: z.string().min(1).max(200_000),
+  enabled: z.boolean().default(true),
+  evidence_files: z.array(z.string().max(500)).max(100).nullish(),
+});
+export type SkillCreate = z.infer<typeof SkillCreate>;
+
+// PUT /skills/:id — partial; only a changed `body` creates a new version.
+export const SkillUpdate = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    description: z.string().max(2000),
+    type: SkillType,
+    body: z.string().min(1).max(200_000),
+    enabled: z.boolean(),
+    evidence_files: z.array(z.string().max(500)).max(100).nullable(),
+  })
+  .partial()
+  .refine((p) => Object.values(p).some((v) => v !== undefined), {
+    message: 'Provide at least one field to update',
+  });
+export type SkillUpdate = z.infer<typeof SkillUpdate>;
 
 export const CommunitySkill = z.object({
   name: z.string(),

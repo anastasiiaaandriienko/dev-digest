@@ -1,0 +1,116 @@
+import { and, desc, eq, sql } from 'drizzle-orm';
+import type { SkillCreate, SkillUpdate } from '@devdigest/shared';
+import type { Db } from '../../db/client.js';
+import * as t from '../../db/schema.js';
+import type { SkillRow } from '../../db/rows.js';
+import { bodyChanged, toUpdateValues } from './helpers.js';
+
+/** A skill row with the number of same-workspace agents it is linked to. */
+export interface SkillWithCount {
+  row: SkillRow;
+  agentCount: number;
+}
+
+/**
+ * Data access for `skills` + `skill_versions`. Every query is scoped by
+ * `workspaceId`; writes that touch both tables run in one transaction.
+ */
+export class SkillsRepository {
+  constructor(private db: Db) {}
+
+  /**
+   * Skills of the workspace with their agent_count: links (agent_skills) to
+   * agents of the SAME workspace only, aggregated in a grouped subquery and
+   * LEFT JOINed (a correlated subquery would be ambiguous: Drizzle renders
+   * `skills.id` unqualified there, so it would bind to `agents.id`).
+   */
+  private selectWithCount(workspaceId: string) {
+    const counts = this.db
+      .select({
+        skillId: t.agentSkills.skillId,
+        n: sql<number>`count(*)::int`.as('n'),
+      })
+      .from(t.agentSkills)
+      .innerJoin(t.agents, eq(t.agents.id, t.agentSkills.agentId))
+      .where(eq(t.agents.workspaceId, workspaceId))
+      .groupBy(t.agentSkills.skillId)
+      .as('agent_counts');
+    return this.db
+      .select({ row: t.skills, agentCount: sql<number>`coalesce(${counts.n}, 0)::int` })
+      .from(t.skills)
+      .leftJoin(counts, eq(counts.skillId, t.skills.id));
+  }
+
+  async list(workspaceId: string): Promise<SkillWithCount[]> {
+    return this.selectWithCount(workspaceId)
+      .where(eq(t.skills.workspaceId, workspaceId))
+      .orderBy(desc(t.skills.createdAt), desc(t.skills.id));
+  }
+
+  async getById(workspaceId: string, id: string): Promise<SkillWithCount | undefined> {
+    const [row] = await this.selectWithCount(workspaceId).where(
+      and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)),
+    );
+    return row;
+  }
+
+  /** Insert the skill at version 1 and its first `skill_versions` row, atomically. */
+  async create(workspaceId: string, input: SkillCreate): Promise<SkillRow> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(t.skills)
+        .values({
+          workspaceId,
+          name: input.name,
+          description: input.description,
+          type: input.type,
+          source: input.source,
+          body: input.body,
+          enabled: input.enabled,
+          version: 1,
+          evidenceFiles: input.evidence_files ?? null,
+        })
+        .returning();
+      await tx.insert(t.skillVersions).values({ skillId: row!.id, version: 1, body: row!.body });
+      return row!;
+    });
+  }
+
+  /**
+   * Apply a patch. The row is locked (`FOR UPDATE`) so concurrent edits cannot
+   * both claim the same next version; a changed body bumps `version` and appends
+   * a `skill_versions` row in the same transaction. undefined = not found.
+   */
+  async update(workspaceId: string, id: string, patch: SkillUpdate): Promise<SkillRow | undefined> {
+    return this.db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(t.skills)
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+        .for('update');
+      if (!current) return undefined;
+
+      const values = toUpdateValues(current, patch);
+      // e.g. only `body` sent and identical to the stored one: nothing to write.
+      if (Object.keys(values).length === 0) return current;
+      const [row] = await tx
+        .update(t.skills)
+        .set(values)
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+        .returning();
+      if (bodyChanged(current, patch)) {
+        await tx.insert(t.skillVersions).values({ skillId: id, version: row!.version, body: row!.body });
+      }
+      return row!;
+    });
+  }
+
+  /** Delete; `skill_versions` and `agent_skills` rows go with it (FK cascade). */
+  async deleteById(workspaceId: string, id: string): Promise<boolean> {
+    const rows = await this.db
+      .delete(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+      .returning({ id: t.skills.id });
+    return rows.length > 0;
+  }
+}
