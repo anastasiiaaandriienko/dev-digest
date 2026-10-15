@@ -24,10 +24,12 @@ vi.mock("@/components/app-shell", () => ({
 type Q = { data?: Skill[]; isLoading: boolean; isError: boolean; refetch: () => void };
 let query: Q;
 const mutate = vi.fn();
+const deleteSkill = vi.fn();
 vi.mock("@/lib/hooks/skills", () => ({
   useSkills: () => query,
   useUpdateSkill: () => ({ mutate }),
   useCreateSkill: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteSkill: () => ({ mutateAsync: deleteSkill, isPending: false }),
 }));
 vi.mock("@/lib/toast", () => ({ notify: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
@@ -170,5 +172,36 @@ describe("SkillsListView — ?preview= side panel", () => {
     params = new URLSearchParams("preview=missing");
     renderView();
     expect(screen.getByRole("dialog")).toHaveTextContent(messages.previewDrawer.notFound);
+  });
+});
+
+describe("SkillsListView — delete", () => {
+  afterEach(() => deleteSkill.mockReset());
+
+  it("the card's delete button opens the confirmation (not the preview); Cancel keeps the skill", () => {
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: "Delete breaking-change" }));
+    expect(replace).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(messages.delete.title);
+    expect(dialog).toHaveTextContent("breaking-change");
+    expect(dialog).toHaveTextContent("removed from 2 agents");
+    fireEvent.click(within(dialog).getByRole("button", { name: messages.delete.cancel }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(deleteSkill).not.toHaveBeenCalled();
+  });
+
+  it("confirming deletes that skill and closes its open preview", async () => {
+    deleteSkill.mockResolvedValue({ ok: true });
+    params = new URLSearchParams("preview=naming");
+    renderView();
+    fireEvent.click(screen.getByRole("button", { name: "Delete naming" }));
+    const confirm = screen
+      .getAllByRole("dialog")
+      .map((d) => within(d).queryByRole("button", { name: messages.delete.confirm }))
+      .find(Boolean)!;
+    fireEvent.click(confirm);
+    await vi.waitFor(() => expect(deleteSkill).toHaveBeenCalledWith("naming"));
+    await vi.waitFor(() => expect(replace).toHaveBeenCalledWith("/skills", { scroll: false }));
   });
 });

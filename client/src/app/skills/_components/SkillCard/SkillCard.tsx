@@ -1,14 +1,14 @@
-/* SkillCard — one skill in the Skills grid (HW2 #9, #22): type icon, name,
-   enabled toggle, description, type + source, version and agent count.
+/* SkillCard — one skill in the Skills grid (HW2 #9, #22, #23): type icon, name,
+   enabled toggle, delete, description, type + source, version and agent count.
    The card is a plain container (a click anywhere opens the preview, as a mouse
    convenience); the keyboard / screen-reader entry is the name button. The
-   toggle is a sibling control, so no interactive element is nested in another,
-   and toggling never opens the preview (same pattern as PRRow). */
+   toggle and delete buttons are sibling controls, so no interactive element is
+   nested in another, and neither ever opens the preview (same pattern as PRRow). */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Icon, Toggle } from "@devdigest/ui";
+import { Icon, IconBtn, Toggle } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { SOURCE_ICON, TYPE_COLOR } from "../../constants";
 import { s } from "./styles";
@@ -18,12 +18,15 @@ export function SkillCard({
   active,
   onOpen,
   onToggle,
+  onDelete,
 }: {
   skill: Skill;
   /** Highlighted while its preview is open. */
   active?: boolean;
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
+  /** Ask to delete (the parent shows the confirmation). Omit to hide the button. */
+  onDelete?: () => void;
 }) {
   const t = useTranslations("skills");
   const color = TYPE_COLOR[skill.type] ?? TYPE_COLOR.custom;
@@ -64,6 +67,11 @@ export function SkillCard({
             label={t("card.toggleLabel", { name: skill.name })}
           />
         </div>
+        {onDelete && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <IconBtn icon="Trash" size={24} danger label={t("card.deleteLabel", { name: skill.name })} onClick={onDelete} />
+          </div>
+        )}
       </div>
       <div style={s.description} title={skill.description || undefined}>
         {skill.description || t("card.noDescription")}

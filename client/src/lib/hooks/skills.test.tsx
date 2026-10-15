@@ -12,16 +12,18 @@ import type { Skill } from "@devdigest/shared";
 const get = vi.fn();
 const post = vi.fn();
 const put = vi.fn();
+const del = vi.fn();
 vi.mock("../api", () => ({
   api: {
     get: (...a: unknown[]) => get(...a),
     post: (...a: unknown[]) => post(...a),
     put: (...a: unknown[]) => put(...a),
+    del: (...a: unknown[]) => del(...a),
   },
   API_BASE: "",
 }));
 
-import { SKILLS_KEY, patchSkill, useCreateSkill, useSkills, useUpdateSkill } from "./skills";
+import { SKILLS_KEY, patchSkill, useCreateSkill, useDeleteSkill, useSkills, useUpdateSkill } from "./skills";
 
 function skill(id: string, o: Partial<Skill> = {}): Skill {
   return {
@@ -50,6 +52,7 @@ beforeEach(() => {
   get.mockReset();
   post.mockReset();
   put.mockReset();
+  del.mockReset();
 });
 
 describe("patchSkill", () => {
@@ -123,5 +126,27 @@ describe("useCreateSkill", () => {
       body: "# b",
     });
     expect(cached()!.map((s) => s.id)).toEqual(["new", "old"]);
+  });
+});
+
+describe("useDeleteSkill", () => {
+  it("DELETEs /skills/:id and drops the skill from the cached list", async () => {
+    qc.setQueryData(SKILLS_KEY, [skill("a"), skill("b")]);
+    del.mockResolvedValue({ ok: true });
+    get.mockReturnValue(new Promise(() => {}));
+    const { result } = renderHook(() => useDeleteSkill(), { wrapper });
+    await act(() => result.current.mutateAsync("a"));
+    expect(del).toHaveBeenCalledWith("/skills/a");
+    expect(cached()!.map((s) => s.id)).toEqual(["b"]);
+  });
+
+  it("a failed delete leaves the cache untouched", async () => {
+    qc.setQueryData(SKILLS_KEY, [skill("a")]);
+    del.mockRejectedValue(new Error("500"));
+    const { result } = renderHook(() => useDeleteSkill(), { wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync("a")).rejects.toThrow("500");
+    });
+    expect(cached()!.map((s) => s.id)).toEqual(["a"]);
   });
 });

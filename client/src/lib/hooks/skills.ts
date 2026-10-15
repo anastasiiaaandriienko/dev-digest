@@ -66,3 +66,19 @@ export function useUpdateSkill() {
     onSettled: () => qc.invalidateQueries({ queryKey: SKILLS_KEY }),
   });
 }
+
+/**
+ * DELETE /skills/:id. Not optimistic (it cannot be undone): the card disappears
+ * once the server confirms; versions and agent links go with it server-side,
+ * the agents themselves stay.
+ */
+export function useDeleteSkill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ ok: true }>(`/skills/${id}`),
+    onSuccess: (_d, id) => {
+      qc.setQueryData<Skill[]>(SKILLS_KEY, (old) => old?.filter((s) => s.id !== id));
+      return qc.invalidateQueries({ queryKey: SKILLS_KEY });
+    },
+  });
+}

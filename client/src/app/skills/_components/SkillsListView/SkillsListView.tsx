@@ -1,17 +1,20 @@
-/* /skills — Skills Lab skills grid (HW2 #9–#12): search, "Add Skill" menu
-   (create now; import is shown disabled until #15), skill cards with an enabled
-   toggle, a right-side preview drawer driven by `?preview=<id>`, and the create
-   modal. Data comes from useSkills / useUpdateSkill (server /skills API). */
+/* /skills — Skills Lab skills grid (HW2 #9–#12, #23–#24): search, "Add Skill"
+   menu (create now; import is shown disabled until #15), skill cards with an
+   enabled toggle and a delete button (with a confirmation dialog), a right-side
+   preview drawer driven by `?preview=<id>`, and the create modal. Data comes
+   from the useSkills hooks (server /skills API). */
 "use client";
 
 import React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Dropdown, EmptyState, ErrorState, Icon, Skeleton } from "@devdigest/ui";
+import type { Skill } from "@devdigest/shared";
 import { AppShell } from "@/components/app-shell";
 import { useSkills, useUpdateSkill } from "@/lib/hooks/skills";
 import { PREVIEW_PARAM } from "../../constants";
 import { CreateSkillModal } from "../CreateSkillModal";
+import { DeleteSkillModal } from "../DeleteSkillModal";
 import { SkillCard } from "../SkillCard";
 import { SkillPreviewDrawer } from "../SkillPreviewDrawer";
 import { SKELETON_CARDS } from "./constants";
@@ -27,6 +30,7 @@ export function SkillsListView() {
   const update = useUpdateSkill();
   const [query, setQuery] = React.useState("");
   const [creating, setCreating] = React.useState(false);
+  const [deleting, setDeleting] = React.useState<Skill | null>(null);
 
   const previewId = search.get(PREVIEW_PARAM);
   const preview = previewedSkill(skills, previewId);
@@ -49,6 +53,16 @@ export function SkillsListView() {
     <AppShell crumb={[{ label: t("page.crumbLab") }, { label: t("page.crumbSkills") }]}>
       {creating && <CreateSkillModal onClose={() => setCreating(false)} onCreated={(sk) => setPreview(sk.id)} />}
       {preview !== undefined && <SkillPreviewDrawer skill={preview} onClose={closePreview} />}
+      {deleting && (
+        <DeleteSkillModal
+          skill={deleting}
+          onClose={() => setDeleting(null)}
+          // A deleted skill's open preview would only say "not found": close it.
+          onDeleted={(id) => {
+            if (id === previewId) closePreview();
+          }}
+        />
+      )}
       <div style={s.page}>
         <div style={s.header}>
           <div style={s.headerText}>
@@ -110,6 +124,7 @@ export function SkillsListView() {
                 active={sk.id === previewId}
                 onOpen={() => setPreview(sk.id)}
                 onToggle={(enabled) => update.mutate({ id: sk.id, patch: { enabled } })}
+                onDelete={() => setDeleting(sk)}
               />
             ))}
           </div>

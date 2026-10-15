@@ -161,6 +161,26 @@ export const SkillUpdate = z
   });
 export type SkillUpdate = z.infer<typeof SkillUpdate>;
 
+// GET /skills/:id/versions — one immutable body snapshot (newest first).
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int().positive(),
+  body: z.string(),
+  created_at: z.string(),
+  // true for the snapshot of the skill's current version.
+  current: z.boolean(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+// POST /skills/:id/versions/:version/restore — the old body becomes a NEW
+// version; `restored: false` = no-op (that body is already current).
+export const SkillRestoreResult = z.object({
+  skill: Skill,
+  restored: z.boolean(),
+  restored_from: z.number().int().positive(),
+});
+export type SkillRestoreResult = z.infer<typeof SkillRestoreResult>;
+
 export const CommunitySkill = z.object({
   name: z.string(),
   repo: z.string(),

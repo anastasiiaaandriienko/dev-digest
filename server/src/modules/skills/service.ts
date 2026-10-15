@@ -1,7 +1,7 @@
-import type { Skill, SkillCreate, SkillUpdate } from '@devdigest/shared';
+import type { Skill, SkillCreate, SkillRestoreResult, SkillUpdate, SkillVersion } from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
 import { NotFoundError } from '../../platform/errors.js';
-import { toSkillDto } from './helpers.js';
+import { toSkillDto, toSkillVersionDto } from './helpers.js';
 import { SkillsRepository } from './repository.js';
 
 /**
@@ -35,6 +35,25 @@ export class SkillsService {
     const row = await this.repo.update(workspaceId, id, patch);
     if (!row) throw new NotFoundError('Skill not found');
     return this.get(workspaceId, row.id); // re-read for the current agent_count
+  }
+
+  /** Body history, newest first; the snapshot of the live version has `current: true`. */
+  async listVersions(workspaceId: string, id: string): Promise<SkillVersion[]> {
+    const found = await this.repo.listVersions(workspaceId, id);
+    if (!found) throw new NotFoundError('Skill not found');
+    return found.versions.map((v) => toSkillVersionDto(v, found.currentVersion));
+  }
+
+  /** Bring back an old body as a new version (no-op when it is already current). */
+  async restoreVersion(workspaceId: string, id: string, version: number): Promise<SkillRestoreResult> {
+    const outcome = await this.repo.restoreVersion(workspaceId, id, version);
+    if (outcome.kind === 'skill_missing') throw new NotFoundError('Skill not found');
+    if (outcome.kind === 'version_missing') throw new NotFoundError(`Skill version ${version} not found`);
+    return {
+      skill: await this.get(workspaceId, id),
+      restored: outcome.kind === 'restored',
+      restored_from: version,
+    };
   }
 
   async delete(workspaceId: string, id: string): Promise<void> {

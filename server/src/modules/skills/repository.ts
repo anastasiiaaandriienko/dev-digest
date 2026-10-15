@@ -2,7 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import type { SkillCreate, SkillUpdate } from '@devdigest/shared';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { SkillRow } from '../../db/rows.js';
+import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
 import { bodyChanged, toUpdateValues } from './helpers.js';
 
 /** A skill row with the number of same-workspace agents it is linked to. */
@@ -10,6 +10,13 @@ export interface SkillWithCount {
   row: SkillRow;
   agentCount: number;
 }
+
+/** Result of `restoreVersion` (the service maps the misses to 404). */
+export type RestoreOutcome =
+  | { kind: 'skill_missing' }
+  | { kind: 'version_missing' }
+  | { kind: 'noop'; row: SkillRow }
+  | { kind: 'restored'; row: SkillRow };
 
 /**
  * Data access for `skills` + `skill_versions`. Every query is scoped by
@@ -102,6 +109,65 @@ export class SkillsRepository {
         await tx.insert(t.skillVersions).values({ skillId: id, version: row!.version, body: row!.body });
       }
       return row!;
+    });
+  }
+
+  /**
+   * Body history of a skill, newest first, with the skill's current version.
+   * undefined = no such skill in this workspace (versions are only reachable
+   * through a workspace-scoped skill).
+   */
+  async listVersions(
+    workspaceId: string,
+    id: string,
+  ): Promise<{ currentVersion: number; versions: SkillVersionRow[] } | undefined> {
+    // ONE statement (skills LEFT JOIN skill_versions) so `current` and the list
+    // come from the same snapshot even while a restore commits concurrently.
+    const rows = await this.db
+      .select({ currentVersion: t.skills.version, snapshot: t.skillVersions })
+      .from(t.skills)
+      .leftJoin(t.skillVersions, eq(t.skillVersions.skillId, t.skills.id))
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+      .orderBy(desc(t.skillVersions.version));
+    if (rows.length === 0) return undefined;
+    return {
+      currentVersion: rows[0]!.currentVersion,
+      versions: rows.flatMap((r) => (r.snapshot ? [r.snapshot] : [])),
+    };
+  }
+
+  /**
+   * Restore version `version`'s body as a NEW version (history is never
+   * rewritten). Same lock as `update`, so a concurrent edit or restore cannot
+   * claim the same next version. Only `body` and `version` change; name,
+   * description, type, enabled and evidence are left as they are. If that body
+   * is already current, nothing is written.
+   */
+  async restoreVersion(workspaceId: string, id: string, version: number): Promise<RestoreOutcome> {
+    return this.db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(t.skills)
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+        .for('update');
+      if (!current) return { kind: 'skill_missing' } as const;
+
+      const [snapshot] = await tx
+        .select()
+        .from(t.skillVersions)
+        .where(and(eq(t.skillVersions.skillId, id), eq(t.skillVersions.version, version)));
+      if (!snapshot) return { kind: 'version_missing' } as const;
+
+      const values = toUpdateValues(current, { body: snapshot.body });
+      if (Object.keys(values).length === 0) return { kind: 'noop', row: current } as const;
+
+      const [row] = await tx
+        .update(t.skills)
+        .set(values)
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+        .returning();
+      await tx.insert(t.skillVersions).values({ skillId: id, version: row!.version, body: row!.body });
+      return { kind: 'restored', row: row! } as const;
     });
   }
 

@@ -32,7 +32,18 @@
     "noDescription": "No description",
     "agents": "{count, plural, =0 {no agents} one {# agent} other {# agents}}",
     "toggleLabel": "Enable {name}",
-    "openPreview": "Preview {name}"
+    "openPreview": "Preview {name}",
+    "deleteLabel": "Delete {name}"
+  },
+  "delete": {
+    "title": "Delete skill?",
+    "body": "Delete “{name}” and its whole version history?",
+    "usage": "{count, plural, =0 {No agent uses it.} one {It will be removed from # agent. The agent itself is kept.} other {It will be removed from # agents. The agents themselves are kept.}}",
+    "irreversible": "This can't be undone.",
+    "cancel": "Cancel",
+    "confirm": "Delete skill",
+    "deleting": "Deleting…",
+    "deleted": "Deleted skill “{name}”."
   },
   "previewDrawer": {
     "subtitle": "{type} skill · {source}",

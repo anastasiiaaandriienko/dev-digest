@@ -15,3 +15,4 @@ export type FindingRow = typeof t.findings.$inferSelect;
 export type PullRow = typeof t.pullRequests.$inferSelect;
 export type AgentRunRow = typeof t.agentRuns.$inferSelect;
 export type SkillRow = typeof t.skills.$inferSelect;
+export type SkillVersionRow = typeof t.skillVersions.$inferSelect;

@@ -66,10 +66,26 @@ describe("SkillCard", () => {
     expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
-  it("no interactive control is nested in another", () => {
-    renderCard();
+  it("no interactive control is nested in another (name, toggle, delete are siblings)", () => {
+    renderCard({ onDelete: vi.fn() });
+    expect(screen.getAllByRole("button")).toHaveLength(2); // name + delete
     for (const el of screen.getAllByRole("button").concat(screen.getAllByRole("switch"))) {
       expect(el.parentElement!.closest("button, [role='button'], a")).toBeNull();
     }
+  });
+});
+
+describe("SkillCard — delete", () => {
+  it("the delete button asks to delete WITHOUT opening the preview", () => {
+    const onDelete = vi.fn();
+    const { onOpen } = renderCard({ onDelete });
+    fireEvent.click(screen.getByRole("button", { name: "Delete breaking-change" }));
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("is hidden when no onDelete handler is given", () => {
+    renderCard();
+    expect(screen.queryByRole("button", { name: "Delete breaking-change" })).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
-import type { Skill, SkillSource, SkillType, SkillUpdate } from '@devdigest/shared';
-import type { SkillRow } from '../../db/rows.js';
+import type { Skill, SkillSource, SkillType, SkillUpdate, SkillVersion } from '@devdigest/shared';
+import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
 
 /**
  * Pure helpers for the skills module — row → DTO mapping and the version rule.
@@ -47,5 +47,16 @@ export function toUpdateValues(
     ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
     ...(patch.evidence_files !== undefined ? { evidenceFiles: patch.evidence_files } : {}),
     ...(bodyChanged(current, patch) ? { body: patch.body!, version: nextVersion(current, patch) } : {}),
+  };
+}
+
+/** Map a `skill_versions` row to the public DTO; `current` = the skill's live version. */
+export function toSkillVersionDto(row: SkillVersionRow, currentVersion: number): SkillVersion {
+  return {
+    skill_id: row.skillId,
+    version: row.version,
+    body: row.body,
+    created_at: row.createdAt.toISOString(),
+    current: row.version === currentVersion,
   };
 }

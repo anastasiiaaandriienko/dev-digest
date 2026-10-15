@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Skill, SkillCreate, SkillUpdate } from '@devdigest/shared';
-import { bodyChanged, nextVersion, toSkillDto, toUpdateValues } from '../src/modules/skills/helpers.js';
+import { Skill, SkillCreate, SkillRestoreResult, SkillUpdate, SkillVersion } from '@devdigest/shared';
+import { bodyChanged, nextVersion, toSkillDto, toSkillVersionDto, toUpdateValues } from '../src/modules/skills/helpers.js';
 import type { SkillRow } from '../src/db/rows.js';
 
 /**
@@ -110,5 +110,32 @@ describe('SkillCreate / SkillUpdate contracts', () => {
     expect(SkillUpdate.safeParse({ enabled: false }).success).toBe(true);
     expect(SkillUpdate.safeParse({}).success).toBe(false);
     expect(SkillUpdate.safeParse({ body: '' }).success).toBe(false);
+  });
+});
+
+describe('toSkillVersionDto / version contracts', () => {
+  const v = (version: number) => ({
+    skillId: ROW.id,
+    version,
+    body: `# v${version}`,
+    createdAt: new Date('2026-10-15T10:00:00.000Z'),
+  });
+
+  it('maps a snapshot and flags only the live version as current', () => {
+    expect(toSkillVersionDto(v(3), 3)).toEqual({
+      skill_id: ROW.id,
+      version: 3,
+      body: '# v3',
+      created_at: '2026-10-15T10:00:00.000Z',
+      current: true,
+    });
+    expect(toSkillVersionDto(v(2), 3).current).toBe(false);
+    expect(SkillVersion.parse(toSkillVersionDto(v(1), 3))).toMatchObject({ version: 1, current: false });
+  });
+
+  it('SkillRestoreResult carries the skill, whether anything changed, and the source version', () => {
+    const result = { skill: toSkillDto(ROW, 0), restored: false, restored_from: 2 };
+    expect(SkillRestoreResult.parse(result)).toEqual(result);
+    expect(SkillRestoreResult.safeParse({ ...result, restored_from: 0 }).success).toBe(false);
   });
 });
