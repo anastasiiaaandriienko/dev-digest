@@ -120,7 +120,9 @@ export function linksFromItems(agentId: string, items: readonly AgentSkillItem[]
  * enable/disable, reorder all go through here). Optimistic: the tab shows the
  * new order at once; on error the previous list comes back (the global
  * MutationCache onError shows the toast). Skill agent_count changes, so the
- * skills list is refreshed too.
+ * skills list is refreshed too, and so does the agent's skill_count, so after a
+ * saved change the agents list (cards on /agents and the /agents/:id sidebar)
+ * is refreshed as well.
  *
  * Quick successive edits (↑ ↑ ↑) each build on the optimistic list: the PUTs
  * run one at a time in click order (`scope`), and only the last one in flight
@@ -147,6 +149,7 @@ export function useSetAgentSkills(agentId: string) {
     },
     onSuccess: (links) => {
       if (isLast()) qc.setQueryData(key, links);
+      qc.invalidateQueries({ queryKey: ["agents"] }); // skill_count on the agent cards
     },
     onSettled: () => {
       if (isLast()) qc.invalidateQueries({ queryKey: key });

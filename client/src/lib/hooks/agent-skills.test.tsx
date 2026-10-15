@@ -16,7 +16,7 @@ vi.mock("../api", () => ({
   API_BASE: "",
 }));
 
-import { agentSkillsKey, linksFromItems, useAgentSkills, useSetAgentSkills } from "./agents";
+import { agentSkillsKey, linksFromItems, useAgents, useAgentSkills, useSetAgentSkills } from "./agents";
 
 let qc: QueryClient;
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -115,5 +115,60 @@ describe("useSetAgentSkills", () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(cached()).toEqual(BEFORE);
+  });
+});
+
+describe("useSetAgentSkills → agent cards' skill_count (regression: count stayed stale until reload)", () => {
+  /** Server state: how many skills each agent has; GET /agents reads it. */
+  let counts: Record<string, number>;
+  beforeEach(() => {
+    counts = { ag: 1 };
+    get.mockImplementation((path: string) =>
+      path === "/agents"
+        ? Promise.resolve([{ id: "ag", name: "API Contract Reviewer", skill_count: counts.ag }])
+        : new Promise(() => {}), // agent-skills refetch: keep pending
+    );
+  });
+
+  /** The agents list (what /agents and the /agents/:id sidebar render) + the save hook, one QueryClient. */
+  function renderBoth() {
+    return renderHook(() => ({ agents: useAgents(), save: useSetAgentSkills("ag") }), { wrapper });
+  }
+  const shownCount = (r: { current: { agents: { data?: { skill_count?: number }[] } } }) => r.current.agents.data?.[0]?.skill_count;
+
+  it("attaching a skill updates the card count without a reload", async () => {
+    const { result } = renderBoth();
+    await waitFor(() => expect(shownCount(result)).toBe(1));
+    put.mockImplementation(async (_p: string, body: { skills: unknown[] }) => {
+      counts.ag = body.skills.length; // the server now has 2 links
+      return linksFromItems("ag", body.skills as { skill_id: string; enabled: boolean }[]);
+    });
+    await act(() => result.current.save.mutateAsync([{ skill_id: "a", enabled: true }, { skill_id: "b", enabled: true }]));
+    await waitFor(() => expect(shownCount(result)).toBe(2));
+  });
+
+  it("detaching a skill updates the card count without a reload", async () => {
+    counts.ag = 2;
+    const { result } = renderBoth();
+    await waitFor(() => expect(shownCount(result)).toBe(2));
+    put.mockImplementation(async (_p: string, body: { skills: unknown[] }) => {
+      counts.ag = body.skills.length;
+      return linksFromItems("ag", body.skills as { skill_id: string; enabled: boolean }[]);
+    });
+    await act(() => result.current.save.mutateAsync([{ skill_id: "a", enabled: true }]));
+    await waitFor(() => expect(shownCount(result)).toBe(1));
+  });
+
+  it("a failed save does not refetch the agents list", async () => {
+    const { result } = renderBoth();
+    await waitFor(() => expect(shownCount(result)).toBe(1));
+    const agentsFetches = () => get.mock.calls.filter(([p]) => p === "/agents").length;
+    const before = agentsFetches();
+    put.mockRejectedValue(new Error("422"));
+    await act(() => result.current.save.mutateAsync([{ skill_id: "x", enabled: true }]).catch(() => undefined));
+    // Give a deferred refetch the chance to happen, so it would be caught too.
+    await act(() => new Promise((r) => setTimeout(r, 50)));
+    expect(agentsFetches()).toBe(before);
+    expect(shownCount(result)).toBe(1);
   });
 });
