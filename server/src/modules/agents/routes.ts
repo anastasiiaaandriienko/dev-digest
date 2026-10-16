@@ -21,7 +21,7 @@ const VersionParams = z.object({
  *   GET    /agents                  → list (workspace-scoped)
  *   GET    /agents/:id              → one agent
  *   POST   /agents                  → create
- *   PUT    /agents/:id              → update / toggle enabled (versions config)
+ *   PATCH  /agents/:id              → update / toggle enabled (versions config)
  *   GET    /agents/:id/versions     → config history (newest first)
  *   GET    /agents/:id/versions/:version → one config snapshot
  *   GET    /agents/:id/skills       → linked skills (ordered)
@@ -32,7 +32,7 @@ const VersionParams = z.object({
 
 const CreateAgentBody = z.object({
   name: z.string().min(1),
-  description: z.string().optional(),
+  description: z.string().min(1),
   provider: Provider,
   model: z.string().min(1),
   system_prompt: z.string().min(1),
@@ -106,7 +106,7 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
     return agent;
   });
 
-  app.put(
+  app.patch(
     '/agents/:id',
     { schema: { params: IdParams, body: UpdateAgentBody } },
     async (req) => {
