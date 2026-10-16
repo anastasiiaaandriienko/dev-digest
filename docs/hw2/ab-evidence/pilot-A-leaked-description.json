@@ -1,0 +1,166 @@
+{
+  "label": "pilot-A-leaked-description",
+  "pr": {
+    "number": 3,
+    "head_sha": "109471f2fdf128531aae4bdd5e036e3748a1cd1c"
+  },
+  "agent_run": {
+    "id": "4f911c38-b305-4eea-8318-bd676c8c5fa0",
+    "agent_id": "7e185d59-b4f5-4fca-9a88-d98bb4c1ee1c",
+    "pr_id": "8750ebba-c970-43f6-9cdb-82a30f5c62a0",
+    "ran_at": "2026-10-16T05:47:02.428152+00:00",
+    "provider": "openrouter",
+    "model": "deepseek/deepseek-v4-flash",
+    "duration_ms": 107465,
+    "tokens_in": 3294,
+    "tokens_out": 4196,
+    "status": "done",
+    "findings_count": 2,
+    "grounding": "2/2 passed",
+    "score": 30,
+    "blockers": 2,
+    "error": null
+  },
+  "review": {
+    "id": "7ced42fc-2486-4498-a9d8-7b717128d417",
+    "verdict": "request_changes",
+    "score": 30,
+    "model": "deepseek/deepseek-v4-flash",
+    "summary": "Two high-severity findings identified: a potential null pointer exception from the new `created_at` field without null guard, and a data integrity risk from switching to `PATCH` without corresponding service changes to handle partial updates. Both affect high-blast-risk files in the agents module."
+  },
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "category": "bug",
+      "file": "server/src/modules/agents/helpers.ts",
+      "start_line": 28,
+      "end_line": 28,
+      "confidence": 0.8,
+      "title": "Potential null pointer exception when serializing `created_at`",
+      "rationale": "The new field `created_at` is assigned as `row.createdAt.toISOString()` without a null check. The contract schema marks `created_at` as optional (`z.string().optional()`), implying the value may be absent. If the database column `createdAt` is nullable (e.g., for legacy rows or a future schema change), this call will throw a runtime error, crashing the response serialization. The implementation should guard against null/undefined or ensure the column is non-nullable."
+    },
+    {
+      "severity": "CRITICAL",
+      "category": "bug",
+      "file": "server/src/modules/agents/routes.ts",
+      "start_line": 109,
+      "end_line": 109,
+      "confidence": 0.7,
+      "title": "Inconsistent HTTP method change may cause data loss on partial updates",
+      "rationale": "The HTTP method for the update endpoint is changed from `PUT` to `PATCH` (line 109), but the request body schema (`UpdateAgentBody`) is not shown to be updated to accept partial data. If the service's `update` method expects a full object (as with `PUT`), a `PATCH` request with missing fields could overwrite existing fields with `undefined` or `null`, causing data loss. The PR description confirms this is a breaking change, but the service implementation is not included in the diff, suggesting it was not updated. This creates a data integrity risk."
+    }
+  ],
+  "trace": {
+    "stats": {
+      "cost_usd": 0.001291976,
+      "findings": 2,
+      "grounding": "2/2 passed",
+      "tokens_in": 3294,
+      "tokens_out": 4196,
+      "duration_ms": 107465
+    },
+    "config": {
+      "pr": 3,
+      "agent": "API Contract Reviewer",
+      "model": "deepseek/deepseek-v4-flash",
+      "source": "local",
+      "version": "2",
+      "provider": "openrouter"
+    },
+    "tool_calls": [
+      {
+        "ms": 107465,
+        "args": "all files",
+        "meta": "single-pass",
+        "tool": "review_file"
+      }
+    ],
+    "prompt_assembly": {
+      "skill_blocks": null,
+      "skills_tokens": null,
+      "pr_description": "> ⚠️ **DO NOT MERGE.** Test PR for the HW2 API Contract Reviewer A/B experiment (skills off vs on). It will be closed after the experiment.\n\nMinimal API contract change, used as a fixed review target:\n\n| # | Change | Expected |\n|---|---|---|\n| 1 | `Agent` response field `system_prompt` → `instructions` | breaking |\n| 2 | `PUT /agents/:id` → `PATCH /agents/:id` | breaking |\n| 3 | `POST /agents` body: `description` becomes required | breaking |\n| 4 | New optional `created_at` in the `Agent` response | non-breaking (decoy) |\n\nBased on `main` (`28c84bb`). CI may fail typecheck for a reason that predates this change: `main` misses `cost.js` / `trace-cost.js`, which arrive with HW2.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+      "system_chars": 1223,
+      "user_chars": 11224,
+      "user_md5": "ef9141bc5e195d9bfe409d6e4a0cc032",
+      "system_md5": "e698263e3e596724650e510df79f772e"
+    },
+    "log": [
+      {
+        "t": "08:47:02",
+        "msg": "Loading PR diff…",
+        "kind": "tool"
+      },
+      {
+        "t": "08:47:02",
+        "msg": "Loading PR diff done (43ms)",
+        "kind": "tool"
+      },
+      {
+        "t": "08:47:02",
+        "msg": "Diff ready — 3 changed file(s); starting 1 agent run(s)",
+        "kind": "info"
+      },
+      {
+        "t": "08:47:02",
+        "msg": "Starting review with agent \"API Contract Reviewer\" (openrouter/deepseek/deepseek-v4-flash)",
+        "kind": "info"
+      },
+      {
+        "t": "08:47:02",
+        "msg": "Resolving openrouter provider…",
+        "kind": "tool"
+      },
+      {
+        "t": "08:47:02",
+        "msg": "Resolving openrouter provider done (0ms)",
+        "kind": "tool"
+      },
+      {
+        "t": "08:47:03",
+        "msg": "callers digest: 5 caller signature(s) attached",
+        "kind": "info"
+      },
+      {
+        "t": "08:47:03",
+        "msg": "repo map: 1500 token(s) attached (cached=true)",
+        "kind": "info"
+      },
+      {
+        "t": "08:47:03",
+        "msg": "file rank: 2/3 changed file(s) in top 5%",
+        "kind": "info"
+      },
+      {
+        "t": "08:47:03",
+        "msg": "skills: none applied",
+        "kind": "info"
+      },
+      {
+        "t": "08:47:03",
+        "msg": "Reviewing 3 changed file(s) in one pass",
+        "kind": "info"
+      },
+      {
+        "t": "08:47:03",
+        "msg": "Reviewing all files in one pass",
+        "kind": "tool"
+      },
+      {
+        "t": "08:48:49",
+        "msg": "all files: 2 candidate finding(s)",
+        "kind": "result"
+      },
+      {
+        "t": "08:48:49",
+        "msg": "Reduced to 2 finding(s); verdict=request_changes, score=0",
+        "kind": "result"
+      },
+      {
+        "t": "08:48:49",
+        "msg": "Citation grounding: 2/2 passed",
+        "kind": "result"
+      }
+    ],
+    "raw_output": "{\n  \"findings\": [\n    {\n      \"category\": \"bug\",\n      \"confidence\": 0.8,\n      \"end_line\": 28,\n      \"evidence\": [\n        {\n          \"component\": \"untrusted_input\",\n          \"file\": \"server/src/modules/agents/helpers.ts\",\n          \"line\": 28\n        }\n      ],\n      \"file\": \"server/src/modules/agents/helpers.ts\",\n      \"id\": \"1\",\n      \"kind\": \"finding\",\n      \"rationale\": \"The new field `created_at` is assigned as `row.createdAt.toISOString()` without a null check. The contract schema marks `created_at` as optional (`z.string().optional()`), implying the value may be absent. If the database column `createdAt` is nullable (e.g., for legacy rows or a future schema change), this call will throw a runtime error, crashing the response serialization. The implementation should guard against null/undefined or ensure the column is non-nullable.\",\n      \"severity\": \"CRITICAL\",\n      \"start_line\": 28,\n      \"suggestion\": \"Add a null check: `created_at: row.createdAt ? row.createdAt.toISOString() : undefined` or ensure the database column is `NOT NULL` and the type reflects that.\",\n      \"title\": \"Potential null pointer exception when serializing `created_at`\"\n    ,\n      \"trifecta_components\": [\n        \"untrusted_input\"\n      ]\n    },\n    {\n      \"category\": \"bug\",\n      \"confidence\": 0.7,\n      \"end_line\": 109,\n      \"evidence\": [\n        {\n          \"component\": \"untrusted_input\",\n          \"file\": \"server/src/modules/agents/routes.ts\",\n          \"line\": 109\n        }\n      ],\n      \"file\": \"server/src/modules/agents/routes.ts\",\n      \"id\": \"2\",\n      \"kind\": \"finding\",\n      \"rationale\": \"The HTTP method for the update endpoint is changed from `PUT` to `PATCH` (line 109), but the request body schema (`UpdateAgentBody`) is not shown to be updated to accept partial data. If the service's `update` method expects a full object (as with `PUT`), a `PATCH` request with missing fields could overwrite existing fields with `undefined` or `null`, causing data loss. The PR description confirms this is a breaking change, but the service implementation is not included in the diff, suggesting it was not updated. This creates a data integrity risk.\",\n      \"severity\": \"CRITICAL\",\n      \"start_line\": 109,\n      \"suggestion\": \"Either keep `PUT` and update the service to handle partial updates, or change `UpdateAgentBody` to make all fields optional and update the service to merge only provided fields.\",\n      \"title\": \"Inconsistent HTTP method change may cause data loss on partial updates\"\n    ,\n      \"trifecta_components\": [\n        \"untrusted_input\"\n      ]\n    }\n  ]\n,\n  \"score\": 0\n,\n  \"summary\": \"Two high-severity findings identified: a potential null pointer exception from the new `created_at` field without null guard, and a data integrity risk from switching to `PATCH` without corresponding service changes to handle partial updates. Both affect high-blast-risk files in the agents module.\"\n,\n  \"verdict\": \"request_changes\"\n}"
+  }
+}

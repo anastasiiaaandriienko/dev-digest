@@ -58,6 +58,10 @@ export const agentSkills = pgTable(
       .notNull()
       .references(() => skills.id, { onDelete: 'cascade' }),
     order: integer('order').notNull().default(0),
+    // Per-agent switch (HW2 #13/#20): a linked but disabled skill keeps its
+    // position and is left out of this agent's prompt. Independent of the
+    // global `skills.enabled`, which disables a skill for every agent.
+    enabled: boolean('enabled').notNull().default(true),
   },
   (t) => ({ pk: primaryKey({ columns: [t.agentId, t.skillId] }) }),
 );

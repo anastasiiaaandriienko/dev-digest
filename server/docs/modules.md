@@ -2,7 +2,7 @@
 
 Verified against the source on 2026-10-11. Naming rules (kebab-case files,
 `XService`, `XRepository`, `*.repo.ts` exporting functions) are in the root
-[../../CLAUDE.md](../../CLAUDE.md); this page shows how they are applied in practice.
+[../../AGENTS.md](../../AGENTS.md); this page shows how they are applied in practice.
 
 ## Registration (implemented)
 
@@ -98,7 +98,7 @@ For new lesson modules, copy `agents`, not `pulls` or `workspace`.
   `eval_*`, `memory` and `digests` sit empty until a lesson uses them. Check there
   before proposing a new table.
 - **Schema changes.** Changing a schema file requires a new migration. Ask first
-  (see the safety rules in [../CLAUDE.md](../CLAUDE.md)).
+  (see the safety rules in [../AGENTS.md](../AGENTS.md)).
 - **Contracts.** Request and response contracts come from `@devdigest/shared`
   (`src/vendor/shared/contracts/*`). When you change one, update the client copy as
   well; [../INSIGHTS.md](../INSIGHTS.md) lists the files where the copies already differ.

@@ -1,9 +1,9 @@
 /* hooks/agents.ts — React Query hooks for the A2 Agents tab + Agent Editor. */
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Agent, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
+import type { Agent, AgentSkillLink, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
 
 export function useAgents() {
   return useQuery({
@@ -74,9 +74,10 @@ export function useDeleteAgent() {
   return useMutation({
     mutationFn: (id: string) => api.del<{ ok: boolean }>(`/agents/${id}`),
     onSuccess: (_d, id) => {
-      qc.invalidateQueries({ queryKey: ["agents"] });
       qc.removeQueries({ queryKey: ["agent", id] });
     },
+    // Also after a failure: a 404 means the agent is already gone, so the list must not keep showing it.
+    onSettled: () => qc.invalidateQueries({ queryKey: ["agents"] }),
   });
 }
 
@@ -87,5 +88,105 @@ export function useProviderModels(provider: Provider | null | undefined) {
     queryFn: () => api.get<ModelInfo[]>(`/providers/${provider}/models`),
     enabled: !!provider,
     staleTime: 5 * 60_000,
+  });
+}
+
+// ---- Agent ↔ skills (HW2 #13): the ordered list that becomes the prompt ----
+
+export const agentSkillsKey = (agentId: string) => ["agent-skills", agentId] as const;
+
+/** The agent's linked skills, in prompt order, with the per-agent `enabled` switch. */
+export function useAgentSkills(agentId: string | null | undefined) {
+  return useQuery({
+    queryKey: agentSkillsKey(agentId ?? ""),
+    queryFn: () => api.get<AgentSkillLink[]>(`/agents/${agentId}/skills`),
+    enabled: !!agentId,
+  });
+}
+
+/** An agent that has a skill attached, with that link's per-agent switch. */
+export interface AgentUsingSkill {
+  agent: Agent;
+  /** Whether the skill is switched on for this agent (false = attached but off). */
+  enabled: boolean;
+}
+
+/**
+ * The agents a skill is attached to (Skill Editor · Stats). There is no
+ * per-skill endpoint, so this reads the agents list and each agent's links
+ * through the same cached queries the agent editor uses. Read-only.
+ */
+export function useAgentsUsingSkill(skillId: string) {
+  const agents = useAgents();
+  const ids = (agents.data ?? []).map((a) => a.id);
+  const links = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: agentSkillsKey(id),
+      queryFn: () => api.get<AgentSkillLink[]>(`/agents/${id}/skills`),
+    })),
+  });
+  const using: AgentUsingSkill[] = [];
+  (agents.data ?? []).forEach((agent, i) => {
+    const link = links[i]?.data?.find((l) => l.skill_id === skillId);
+    if (link) using.push({ agent, enabled: link.enabled });
+  });
+  return {
+    data: using,
+    isLoading: agents.isLoading || links.some((q) => q.isLoading),
+    isError: agents.isError || links.some((q) => q.isError),
+  };
+}
+
+/** One entry of the list sent to PUT (array order = prompt order). */
+export interface AgentSkillItem {
+  skill_id: string;
+  enabled: boolean;
+}
+
+/** The links an item list would produce (pure; used for the optimistic update). */
+export function linksFromItems(agentId: string, items: readonly AgentSkillItem[]): AgentSkillLink[] {
+  return items.map((i, order) => ({ agent_id: agentId, skill_id: i.skill_id, order, enabled: i.enabled }));
+}
+
+/**
+ * PUT /agents/:id/skills — replace the whole ordered list (attach, detach,
+ * enable/disable, reorder all go through here). Optimistic: the tab shows the
+ * new order at once; on error the previous list comes back (the global
+ * MutationCache onError shows the toast). Skill agent_count changes, so the
+ * skills list is refreshed too, and so does the agent's skill_count, so after a
+ * saved change the agents list (cards on /agents and the /agents/:id sidebar)
+ * is refreshed as well.
+ *
+ * Quick successive edits (↑ ↑ ↑) each build on the optimistic list: the PUTs
+ * run one at a time in click order (`scope`), and only the last one in flight
+ * writes the server answer / rolls back / refetches — an earlier response
+ * must not put an older order back under a newer optimistic one.
+ */
+export function useSetAgentSkills(agentId: string) {
+  const qc = useQueryClient();
+  const key = agentSkillsKey(agentId);
+  // `isMutating` still counts the mutation whose callback is running.
+  const isLast = () => qc.isMutating({ mutationKey: key }) <= 1;
+  return useMutation({
+    mutationKey: key,
+    scope: { id: key.join(":") },
+    mutationFn: (items: AgentSkillItem[]) => api.put<AgentSkillLink[]>(`/agents/${agentId}/skills`, { skills: items }),
+    onMutate: async (items) => {
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<AgentSkillLink[]>(key);
+      qc.setQueryData<AgentSkillLink[]>(key, linksFromItems(agentId, items));
+      return { previous };
+    },
+    onError: (_err, _items, ctx) => {
+      if (ctx && isLast()) qc.setQueryData(key, ctx.previous);
+    },
+    onSuccess: (links) => {
+      if (isLast()) qc.setQueryData(key, links);
+      qc.invalidateQueries({ queryKey: ["agents"] }); // skill_count on the agent cards
+    },
+    onSettled: () => {
+      if (isLast()) qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: ["skills"] });
+    },
   });
 }

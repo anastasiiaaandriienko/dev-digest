@@ -7,6 +7,8 @@ export interface DropdownItemDef {
   icon?: IconName;
   hint?: string;
   muted?: boolean;
+  /** Shown but not actionable (e.g. a "Coming soon" entry): a native `disabled` button, no click. */
+  disabled?: boolean;
   divider?: boolean;
   onClick?: () => void;
   /** Optional trailing remove (trash) action shown on the right of the row. */

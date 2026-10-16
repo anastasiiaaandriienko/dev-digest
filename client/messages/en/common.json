@@ -17,5 +17,18 @@
     "title": "No repo selected",
     "body": "This repository isn't in your workspace — it may have been removed, or the link is stale. Add a repo or pick another from the switcher to get started.",
     "cta": "Add repository"
+  },
+  "unsaved": {
+    "title": "Unsaved changes",
+    "body": "“{name}” has changes that aren’t saved yet.",
+    "hint": "Save them before leaving, or discard them. A failed save keeps your edits here.",
+    "save": "Save and continue",
+    "saving": "Saving…",
+    "discard": "Discard changes",
+    "cancel": "Cancel"
+  },
+  "markdownEditor": {
+    "unsaved": "unsaved",
+    "tokens": "~{tokens, number} tokens"
   }
 }

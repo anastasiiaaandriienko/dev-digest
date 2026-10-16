@@ -6,7 +6,7 @@ import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
 import { RECONCILE_DEADLINE_MS, REVIEW_STRATEGY } from './constants.js';
-import { taskLine } from './helpers.js';
+import { appliedSkillsLine, planSkills, taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
@@ -208,6 +208,15 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // HW2 #14/#19/#20 — the agent's skills, read ONCE for this run: linked,
+      // enabled for this agent and globally, in agent_skills order. The same
+      // snapshot feeds the prompt, the trace and the log line, so a later edit
+      // or reorder never changes what this run's trace says it sent.
+      const skillPlan = planSkills(await this.agents.effectiveSkills(workspaceId, agent.id), (text) =>
+        this.container.tokenizer.count(text),
+      );
+      runLog.info(appliedSkillsLine(skillPlan));
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -228,6 +237,8 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Skills go into the SYSTEM message in this order (omitted when none).
+        ...(skillPlan.prompt.length > 0 ? { skills: skillPlan.prompt } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -266,7 +277,13 @@ export class ReviewRunExecutor {
           // reviewer-core's figure as is: a number, or null when unknown (never 0).
           cost_usd: costUsd,
         },
-        prompt_assembly: outcome.assembly,
+        prompt_assembly: {
+          ...outcome.assembly,
+          // Run-time snapshot of what was applied (ids, names, versions, order,
+          // per-block tokens) + the Skills-section-only token count.
+          skill_blocks: skillPlan.applied.length > 0 ? skillPlan.applied : null,
+          skills_tokens: skillPlan.sectionTokens,
+        },
         tool_calls: outcome.chunks.map((c) => ({
           tool: 'review_file',
           args: c.label,

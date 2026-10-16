@@ -7,27 +7,161 @@
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
     "menu": {
+      "createFromScratch": "Create from scratch",
       "fromFile": "Import from file",
       "fromUrl": "Import from URL",
-      "community": "Search community skills…"
+      "community": "Search community skills…",
+      "comingSoon": "Coming soon",
+      "fromFileHint": ".md or .zip"
     },
     "empty": {
       "title": "No skills yet",
-      "body": "Import a skill from a file, a URL, or the community catalog.",
-      "cta": "Import from file"
+      "body": "Create your first skill: a Markdown rule set an agent applies when it reviews a PR.",
+      "cta": "Create skill"
+    },
+    "noMatch": {
+      "title": "No matching skills",
+      "body": "No skill name or description matches “{query}”."
     },
     "selectPrompt": {
       "title": "Select a skill",
-      "body": "Pick a skill on the left to preview its body."
+      "body": "Pick a skill on the left to edit it, preview its body and browse its versions."
+    }
+  },
+  "card": {
+    "noDescription": "No description",
+    "agents": "{count, plural, =0 {no agents} one {# agent} other {# agents}}",
+    "toggleLabel": "Enable {name}",
+    "open": "Open {name}"
+  },
+  "delete": {
+    "title": "Delete skill?",
+    "body": "Delete “{name}” and its whole version history?",
+    "usage": "{count, plural, =0 {No agent uses it.} one {It will be removed from # agent. The agent itself is kept.} other {It will be removed from # agents. The agents themselves are kept.}}",
+    "irreversible": "This can't be undone.",
+    "cancel": "Cancel",
+    "confirm": "Delete skill",
+    "deleting": "Deleting…",
+    "deleted": "Deleted skill “{name}”."
+  },
+  "previewDrawer": {
+    "subtitle": "{type} skill · {source}",
+    "status": "Status",
+    "usedBy": "Used by",
+    "version": "Version",
+    "source": "Source",
+    "body": "Skill body",
+    "notFound": "This skill no longer exists.",
+    "openSkill": "Open skill"
+  },
+  "create": {
+    "title": "Create skill",
+    "subtitle": "A skill is a Markdown rule set. The body is the only text sent to the model.",
+    "name": "Name",
+    "namePlaceholder": "breaking-change",
+    "description": "Description",
+    "descriptionPlaceholder": "What this skill makes the agent check",
+    "type": "Type",
+    "body": "Skill body (Markdown)",
+    "bodyPlaceholder": "# Rule\nDescribe what the reviewer must flag, with a good / bad example.",
+    "write": "Write",
+    "preview": "Preview",
+    "previewEmpty": "Nothing to preview yet.",
+    "cancel": "Cancel",
+    "submit": "Create skill",
+    "creating": "Creating…",
+    "created": "Created skill \"{name}\".",
+    "errors": {
+      "name": "Enter a name (up to 120 characters).",
+      "description": "Keep the description under 2000 characters.",
+      "body": "Enter the skill body in Markdown."
     }
   },
   "detail": {
     "crumbSkill": "Skill",
-    "back": "← All skills",
     "loadError": "Could not load this skill.",
     "notFound": {
       "title": "Skill not found",
       "body": "It may have been deleted."
+    },
+    "tabs": {
+      "config": "Config",
+      "preview": "Preview",
+      "evals": "Evals",
+      "stats": "Stats",
+      "versioning": "Versions"
+    },
+    "config": {
+      "title": "Configuration",
+      "enabled": "Enabled",
+      "name": "Name",
+      "description": "Description",
+      "type": "Type",
+      "body": "Skill body (Markdown)",
+      "bodyHint": "The only text sent to the model. Saving a changed body snapshots it as v{next}; other fields are metadata and keep v{current}.",
+      "bodyStats": "{lines, plural, one {# line} other {# lines}} · ~{tokens} tokens",
+      "save": "Save skill",
+      "saving": "Saving…",
+      "reset": "Cancel",
+      "noChanges": "No unsaved changes",
+      "saved": "Saved “{name}”.",
+      "savedVersion": "Saved “{name}” as v{version}.",
+      "dangerTitle": "Delete skill",
+      "dangerBody": "Removes it from every agent that uses it and deletes its version history. This can’t be undone.",
+      "delete": "Delete",
+      "saveNote": "Saving snapshots the body as <b>v{version}</b>",
+      "saveNoteMeta": "Metadata only — the body stays <b>v{version}</b>"
+    },
+    "previewTab": {
+      "title": "Preview",
+      "subtitle": "Rendered as the reviewing agent receives it."
+    },
+    "versioning": {
+      "title": "Version history",
+      "count": "{count, plural, one {# version} other {# versions}}",
+      "subtitle": "Every save snapshots the body, so each version keeps the exact text it had. Restoring one adds a new version — history is never overwritten.",
+      "current": "Current",
+      "sameAs": "Same body as v{version}",
+      "diff": "Diff",
+      "hideDiff": "Hide diff",
+      "restore": "Restore",
+      "restoring": "Restoring…",
+      "restoreSame": "This body is already current",
+      "restored": "Restored v{from} as v{version}.",
+      "alreadyCurrent": "v{from} already matches the current body — nothing to restore.",
+      "loadError": "Could not load the version history.",
+      "empty": "No versions recorded for this skill.",
+      "initial": "Initial version",
+      "changed": "+{added} −{removed} lines vs v{prev}",
+      "restoreBlocked": "Save or discard your Config changes before restoring a version."
+    },
+    "diff": {
+      "title": "v{from} → v{to} (current)",
+      "stats": "+{added} −{removed}",
+      "identical": "No differences — this version has the same body as the current one.",
+      "label": "Changes from v{from} to the current version"
+    },
+    "evals": {
+      "title": "Eval cases",
+      "unavailableBadge": "Not available yet",
+      "unavailableTitle": "Eval cases aren’t supported yet",
+      "unavailableBody": "This DevDigest build has no API to create, store results for, or run eval cases, so nothing is listed here — no sample data is shown in its place."
+    },
+    "stats": {
+      "usedBy": "Used by",
+      "agentsSuffix": "{count, plural, one {agent} other {agents}}",
+      "pullFrequency": "Pull frequency",
+      "acceptRate": "Accept rate",
+      "findings30d": "Findings (30d)",
+      "notTracked": "Not tracked yet",
+      "agentsTitle": "Agents using this skill",
+      "noAgents": "No agent uses this skill yet. Attach it from an agent’s Skills tab.",
+      "agentsError": "Could not load the agents.",
+      "offForAgent": "off for this agent",
+      "open": "Open",
+      "openAgent": "Open {name}",
+      "categoriesTitle": "Findings by category",
+      "categoriesUnavailable": "Not tracked yet: findings don’t record which skill produced them."
     }
   },
   "drawer": {
@@ -82,6 +216,7 @@
     },
     "source": {
       "manual": "Manual",
+      "imported": "Imported file",
       "extracted": "Extracted",
       "community": "Community",
       "imported_url": "Imported"
@@ -97,5 +232,44 @@
     "bodyLabel": "Skill body (Markdown)",
     "bodyHint": "Saving a changed body creates a new immutable version.",
     "version": "v{version}"
+  },
+  "importFile": {
+    "title": "Import skills from a file",
+    "subtitle": "A .md skill, or a .zip of .md skills. Review each one before importing.",
+    "inputLabel": "Skill file (.md or .zip)",
+    "drop": "Drop a .md or .zip file here, or",
+    "browse": "browse files…",
+    "dropHint": "Up to {size} MB. Only Markdown is imported: executables, scripts and unsafe archives are rejected.",
+    "reading": "Reading {filename}…",
+    "errors": {
+      "type": "Only .md and .zip files can be imported.",
+      "size": "The file is larger than {size} MB.",
+      "empty": "The file is empty.",
+      "read": "The file could not be read.",
+      "failed": "This file cannot be imported",
+      "duplicateInFile": "\"{name}\" is used by more than one skill in this import",
+      "taken": "A skill named \"{name}\" already exists"
+    },
+    "rejectedEntries": "Rejected entries",
+    "found": "{count, plural, one {# skill} other {# skills}} found in {filename}",
+    "skipped": "{count, plural, one {# metadata entry} other {# metadata entries}} ignored",
+    "vetting": "Imported skills are saved disabled (needs vetting). Read each one, then enable it on the Skills page.",
+    "include": "Import {name}",
+    "from": "From {path}",
+    "name": "Name",
+    "description": "Description",
+    "type": "Type",
+    "body": "Body (Markdown)",
+    "rendered": "Rendered",
+    "edit": "Edit",
+    "bodyEmpty": "Empty body",
+    "problems": "{count, plural, one {# problem} other {# problems}}",
+    "ready": "Ready",
+    "excluded": "Not imported",
+    "chooseAnother": "Choose another file",
+    "cancel": "Cancel",
+    "submit": "{count, plural, =0 {Import} one {Import # skill} other {Import # skills}}",
+    "importing": "Importing…",
+    "success": "{count, plural, one {Imported # skill} other {Imported # skills}}: disabled until you review and enable {count, plural, one {it} other {them}}."
   }
 }

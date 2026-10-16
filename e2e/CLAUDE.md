@@ -1,6 +1,6 @@
 # CLAUDE.md — e2e (`@devdigest/e2e`)
 
-Package-level guide. The root [`../CLAUDE.md`](../CLAUDE.md) (repo layout, global
+Package-level guide. The root [`../AGENTS.md`](../AGENTS.md) (repo layout, global
 "do not touch" rules) still applies; this file adds only what is specific to the
 browser suite. Details live in the linked docs — open them only when needed.
 
@@ -73,4 +73,4 @@ global install (`npm i -g agent-browser && agent-browser install`) — also ask.
   [../client/docs/architecture.md](../client/docs/architecture.md)
 - **The API behaviour behind the pages (runs, SSE, traces)** →
   [../server/docs/architecture.md](../server/docs/architecture.md)
-- **Repo-wide rules** → [../CLAUDE.md](../CLAUDE.md)
+- **Repo-wide rules** → [../AGENTS.md](../AGENTS.md)

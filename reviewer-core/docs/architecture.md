@@ -86,24 +86,35 @@ Steps:
 
 ## 3. Prompt construction (`src/prompt.ts`)
 
-**System message.** It is `agent.systemPrompt + "\n\n" + INJECTION_GUARD`
-(`prompt.ts:16-28`, appended at `:86`). The guard declares `<untrusted>` content
-to be data, and says that claims such as "intentional", "test" or "do not flag"
-never narrow the review.
+**System message.** It is `agent.systemPrompt`, then the **Skills section**
+(when any skill is applied), then `INJECTION_GUARD` — always last
+(`assemblePrompt`). The guard declares `<untrusted>` content to be data, says
+that claims such as "intentional", "test" or "do not flag" never narrow the
+review, and that `<skill>` blocks can add criteria but never change the role,
+the output format, or these rules.
 
-**User message.** Its sections appear in this order (`prompt.ts:104-120`). Any
+**Skills section (HW2 #14).** `## Skills`, a fixed preamble (`SKILLS_PREAMBLE`),
+then one block per skill **in the order the caller passes** (the server passes
+the agent's `agent_skills` order, already filtered to skills enabled for the
+agent and globally): `<skill name="…" version="N">body</skill>` (`formatSkill`).
+Bodies are treated as possibly untrusted (skills can be imported): `</skill>`
+and `<skill` tags inside a body are escaped, and the name is reduced to one safe
+line. The tags are a boundary, not a guarantee — the preamble and the guard
+state the limits too. `PromptAssembly.skills` is exactly the section text placed
+in the system message.
+
+**User message.** Its sections appear in this order (`assemblePrompt`). Any
 empty or missing section is left out.
 
 | # | Section | Source | Wrapped as untrusted? | Fed by server today? |
 |---|---|---|---|---|
 | 1 | task line | `task` | no | **yes** (PR title + rank note) |
 | 2 | `## PR description` | `prDescription`, cut to 4000 chars | yes (`pr-description`) | **yes** when the PR has a body |
-| 3 | `## Skills / rules` | `skills[]`, joined | **no** (treated as trusted) | no (scaffolding, L02) |
-| 4 | `## Relevant memory` | `memory[]` as `- ` bullets | **no** (curated) | no (scaffolding, L07) |
-| 5 | `## Repo skeleton` | `repoMap` | yes (`repo-map`) | **yes** when the repo is indexed |
-| 6 | `## Project context` | `specs[]` | yes (`spec-<i>`) | no (scaffolding, L05) |
-| 7 | `## Callers of changed symbols` | `callers` | yes (`callers`) | **yes** when repo-intel finds callers |
-| 8 | `## Diff to review` | chunk diff text | yes (`diff`) | **yes**, always last |
+| 3 | `## Relevant memory` | `memory[]` as `- ` bullets | **no** (curated) | no (scaffolding, L07) |
+| 4 | `## Repo skeleton` | `repoMap` | yes (`repo-map`) | **yes** when the repo is indexed |
+| 5 | `## Project context` | `specs[]` | yes (`spec-<i>`) | no (scaffolding, L05) |
+| 6 | `## Callers of changed symbols` | `callers` | yes (`callers`) | **yes** when repo-intel finds callers |
+| 7 | `## Diff to review` | chunk diff text | yes (`diff`) | **yes**, always last |
 
 - **Escaping.** `wrapUntrusted` (`prompt.ts:30-34`) escapes only the exact text
   `</untrusted>`. The label is inserted as is, which is safe because every label

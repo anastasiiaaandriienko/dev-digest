@@ -1,0 +1,205 @@
+{
+  "label": "B-skills-on",
+  "pr": {
+    "number": 3,
+    "head_sha": "109471f2fdf128531aae4bdd5e036e3748a1cd1c"
+  },
+  "agent_run": {
+    "id": "c7c7a025-27c0-4b6c-ae2e-f56e7624200f",
+    "agent_id": "7e185d59-b4f5-4fca-9a88-d98bb4c1ee1c",
+    "pr_id": "8750ebba-c970-43f6-9cdb-82a30f5c62a0",
+    "ran_at": "2026-10-16T05:54:34.67414+00:00",
+    "provider": "openrouter",
+    "model": "deepseek/deepseek-v4-flash",
+    "duration_ms": 54703,
+    "tokens_in": 8389,
+    "tokens_out": 3146,
+    "status": "done",
+    "findings_count": 3,
+    "grounding": "3/3 passed",
+    "score": 18,
+    "blockers": 2,
+    "error": null
+  },
+  "review": {
+    "id": "ea4c421f-bf12-46cf-b61b-7a5a82672bae",
+    "verdict": "request_changes",
+    "score": 18,
+    "model": "deepseek/deepseek-v4-flash",
+    "summary": "The PR introduces three breaking changes to the agents API: (1) the update route method changed from PUT to PATCH without deprecation, (2) the response field `system_prompt` was renamed to `instructions` without a deprecation period, and (3) the `description` field in the create agent body was made required and non-empty. The first two are critical because they silently break existing clients; the third is a warning. No response-schema or semver issues were found (the server is private, so version bumps are not required)."
+  },
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "category": "bug",
+      "file": "server/src/modules/agents/helpers.ts",
+      "start_line": 19,
+      "end_line": 19,
+      "confidence": 1,
+      "title": "CRITICAL - Breaking: Response field `system_prompt` renamed to `instructions` without deprecation",
+      "rationale": "The response field `system_prompt` was renamed to `instructions` in the `Agent` DTO without a deprecation period. Clients that read `system_prompt` from any agent endpoint will now receive `undefined`. This is a breaking change that should have been done in two steps: first add `instructions` while keeping `system_prompt` (marked deprecated), then remove `system_prompt` in a later major release."
+    },
+    {
+      "severity": "WARNING",
+      "category": "bug",
+      "file": "server/src/modules/agents/routes.ts",
+      "start_line": 35,
+      "end_line": 35,
+      "confidence": 0.9,
+      "title": "WARNING - Breaking: Request body field `description` made required and non-empty",
+      "rationale": "The `description` field in the `POST /agents` request body was changed from optional (`z.string().optional()`) to required with a minimum length of 1 (`z.string().min(1)`). Clients that previously omitted `description` or sent an empty string will now receive a 422 validation error. This is a breaking change that should be communicated to clients."
+    },
+    {
+      "severity": "CRITICAL",
+      "category": "bug",
+      "file": "server/src/modules/agents/routes.ts",
+      "start_line": 109,
+      "end_line": 109,
+      "confidence": 1,
+      "title": "CRITICAL - Breaking: Route method changed from PUT to PATCH without deprecation",
+      "rationale": "The route method for updating an agent was changed from PUT to PATCH without any deprecation period. Clients that send PUT requests to `/agents/:id` will now receive a 404 or method-not-allowed error. This is a breaking change that should have been preceded by a deprecation phase where both methods were accepted."
+    }
+  ],
+  "trace": {
+    "stats": {
+      "cost_usd": 0.00205534,
+      "findings": 3,
+      "grounding": "3/3 passed",
+      "tokens_in": 8389,
+      "tokens_out": 3146,
+      "duration_ms": 54703
+    },
+    "config": {
+      "pr": 3,
+      "agent": "API Contract Reviewer",
+      "model": "deepseek/deepseek-v4-flash",
+      "source": "local",
+      "version": "2",
+      "provider": "openrouter"
+    },
+    "tool_calls": [
+      {
+        "ms": 54703,
+        "args": "all files",
+        "meta": "single-pass",
+        "tool": "review_file"
+      }
+    ],
+    "prompt_assembly": {
+      "skill_blocks": [
+        {
+          "name": "breaking-change",
+          "order": 0,
+          "tokens": 1481,
+          "version": 1,
+          "skill_id": "af8a2c94-d0ab-47f5-a495-6f021b345ec6"
+        },
+        {
+          "name": "response-schema",
+          "order": 1,
+          "tokens": 1184,
+          "version": 1,
+          "skill_id": "cd49f7b1-4d18-45a7-baa0-24caeb08ac63"
+        },
+        {
+          "name": "semver-discipline",
+          "order": 2,
+          "tokens": 1192,
+          "version": 1,
+          "skill_id": "99176142-fb8a-4d6b-9c6b-fc737382b94a"
+        },
+        {
+          "name": "deprecation-policy",
+          "order": 3,
+          "tokens": 1160,
+          "version": 1,
+          "skill_id": "51181c6d-a29d-40fb-a525-d5b02fb42e50"
+        }
+      ],
+      "skills_tokens": 5090,
+      "pr_description": "> Do not merge — test pull request used for reviewer evaluation. It will be closed afterwards.\n",
+      "system_chars": 21169,
+      "user_chars": 10568,
+      "user_md5": "4e4d7cab857c876f77d4abd6cc1a57be",
+      "system_md5": "2c54e125749c5351c16f40dbb4c9ecc6"
+    },
+    "log": [
+      {
+        "t": "08:54:34",
+        "msg": "Loading PR diff…",
+        "kind": "tool"
+      },
+      {
+        "t": "08:54:34",
+        "msg": "Loading PR diff done (34ms)",
+        "kind": "tool"
+      },
+      {
+        "t": "08:54:34",
+        "msg": "Diff ready — 3 changed file(s); starting 1 agent run(s)",
+        "kind": "info"
+      },
+      {
+        "t": "08:54:34",
+        "msg": "Starting review with agent \"API Contract Reviewer\" (openrouter/deepseek/deepseek-v4-flash)",
+        "kind": "info"
+      },
+      {
+        "t": "08:54:34",
+        "msg": "Resolving openrouter provider…",
+        "kind": "tool"
+      },
+      {
+        "t": "08:54:34",
+        "msg": "Resolving openrouter provider done (0ms)",
+        "kind": "tool"
+      },
+      {
+        "t": "08:54:35",
+        "msg": "callers digest: 5 caller signature(s) attached",
+        "kind": "info"
+      },
+      {
+        "t": "08:54:35",
+        "msg": "repo map: 1500 token(s) attached (cached=true)",
+        "kind": "info"
+      },
+      {
+        "t": "08:54:35",
+        "msg": "file rank: 2/3 changed file(s) in top 5%",
+        "kind": "info"
+      },
+      {
+        "t": "08:54:35",
+        "msg": "skills: applied 4 — breaking-change v1 → response-schema v1 → semver-discipline v1 → deprecation-policy v1 (5090 tokens)",
+        "kind": "info"
+      },
+      {
+        "t": "08:54:35",
+        "msg": "Reviewing 3 changed file(s) in one pass",
+        "kind": "info"
+      },
+      {
+        "t": "08:54:35",
+        "msg": "Reviewing all files in one pass",
+        "kind": "tool"
+      },
+      {
+        "t": "08:55:29",
+        "msg": "all files: 3 candidate finding(s)",
+        "kind": "result"
+      },
+      {
+        "t": "08:55:29",
+        "msg": "Reduced to 3 finding(s); verdict=request_changes, score=0",
+        "kind": "result"
+      },
+      {
+        "t": "08:55:29",
+        "msg": "Citation grounding: 3/3 passed",
+        "kind": "result"
+      }
+    ],
+    "raw_output": "{\n  \"findings\": [\n    {\n      \"category\": \"bug\",\n      \"confidence\": 1.0,\n      \"end_line\": 109,\n      \"evidence\": [\n        {\n          \"component\": \"exfil_path\",\n          \"file\": \"server/src/modules/agents/routes.ts\",\n          \"line\": 109\n        }\n      ],\n      \"file\": \"server/src/modules/agents/routes.ts\",\n      \"id\": \"breaking-route-method-change\",\n      \"kind\": \"finding\",\n      \"rationale\": \"The route method for updating an agent was changed from PUT to PATCH without any deprecation period. Clients that send PUT requests to `/agents/:id` will now receive a 404 or method-not-allowed error. This is a breaking change that should have been preceded by a deprecation phase where both methods were accepted.\",\n      \"severity\": \"CRITICAL\",\n      \"start_line\": 109,\n      \"suggestion\": \"Keep the PUT route working and mark it as deprecated (e.g., with a `Deprecation` response header and a `Sunset` date). Add the PATCH route alongside it. Remove the PUT route in a future major release after the deprecation window.\",\n      \"title\": \"CRITICAL - Breaking: Route method changed from PUT to PATCH without deprecation\"\n   ,\n      \"trifecta_components\": [\n        \"exfil_path\"\n      ]\n    },\n    {\n      \"category\": \"bug\",\n      \"confidence\": 1.0,\n      \"end_line\": 19,\n      \"evidence\": [\n        {\n          \"component\": \"exfil_path\",\n          \"file\": \"server/src/modules/agents/helpers.ts\",\n          \"line\": 19\n        }\n      ],\n      \"file\": \"server/src/modules/agents/helpers.ts\",\n      \"id\": \"breaking-field-rename\",\n      \"kind\": \"finding\",\n      \"rationale\": \"The response field `system_prompt` was renamed to `instructions` in the `Agent` DTO without a deprecation period. Clients that read `system_prompt` from any agent endpoint will now receive `undefined`. This is a breaking change that should have been done in two steps: first add `instructions` while keeping `system_prompt` (marked deprecated), then remove `system_prompt` in a later major release.\",\n      \"severity\": \"CRITICAL\",\n      \"start_line\": 19,\n      \"suggestion\": \"Return both `system_prompt` (deprecated) and `instructions` in the response. Mark `system_prompt` as deprecated in the schema (e.g., with `.describe('Deprecated: use instructions')`). Remove `system_prompt` in a future major release.\",\n      \"title\": \"CRITICAL - Breaking: Response field `system_prompt` renamed to `instructions` without deprecation\"\n    ,\n      \"trifecta_components\": [\n        \"exfil_path\"\n      ]\n    },\n    {\n      \"category\": \"bug\",\n      \"confidence\": 0.9,\n      \"end_line\": 35,\n      \"evidence\": [\n        {\n          \"component\": \"exfil_path\",\n          \"file\": \"server/src/modules/agents/routes.ts\",\n          \"line\": 35\n        }\n      ],\n      \"file\": \"server/src/modules/agents/routes.ts\",\n      \"id\": \"breaking-request-body-stricter\",\n      \"kind\": \"finding\",\n      \"rationale\": \"The `description` field in the `POST /agents` request body was changed from optional (`z.string().optional()`) to required with a minimum length of 1 (`z.string().min(1)`). Clients that previously omitted `description` or sent an empty string will now receive a 422 validation error. This is a breaking change that should be communicated to clients.\",\n      \"severity\": \"WARNING\",\n      \"start_line\": 35,\n      \"suggestion\": \"If the field must be required, consider a deprecation period where the old behavior is still accepted but logged, or document the change in a changelog and bump the API version.\",\n      \"title\": \"WARNING - Breaking: Request body field `description` made required and non-empty\"\n    ,\n      \"trifecta_components\": [\n        \"exfil_path\"\n      ]\n    }\n  ],\n  \"score\": 0\n,\n  \"summary\": \"The PR introduces three breaking changes to the agents API: (1) the update route method changed from PUT to PATCH without deprecation, (2) the response field `system_prompt` was renamed to `instructions` without a deprecation period, and (3) the `description` field in the create agent body was made required and non-empty. The first two are critical because they silently break existing clients; the third is a warning. No response-schema or semver issues were found (the server is private, so version bumps are not required).\"\n,\n  \"verdict\": \"request_changes\"\n}"
+  }
+}

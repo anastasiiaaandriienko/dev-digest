@@ -1,0 +1,156 @@
+{
+  "label": "A-skills-off",
+  "pr": {
+    "number": 3,
+    "head_sha": "109471f2fdf128531aae4bdd5e036e3748a1cd1c"
+  },
+  "agent_run": {
+    "id": "e7c00193-954c-4982-b0b0-7170e3462522",
+    "agent_id": "7e185d59-b4f5-4fca-9a88-d98bb4c1ee1c",
+    "pr_id": "8750ebba-c970-43f6-9cdb-82a30f5c62a0",
+    "ran_at": "2026-10-16T05:53:02.96704+00:00",
+    "provider": "openrouter",
+    "model": "deepseek/deepseek-v4-flash",
+    "duration_ms": 63463,
+    "tokens_in": 3102,
+    "tokens_out": 2747,
+    "status": "done",
+    "findings_count": 1,
+    "grounding": "1/1 passed",
+    "score": 65,
+    "blockers": 1,
+    "error": null
+  },
+  "review": {
+    "id": "67ecb735-7626-4030-a9f9-5e21a276483f",
+    "verdict": "request_changes",
+    "score": 65,
+    "model": "deepseek/deepseek-v4-flash",
+    "summary": "1 finding: a critical null-safety bug in the new `created_at` field mapping."
+  },
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "category": "bug",
+      "file": "server/src/modules/agents/helpers.ts",
+      "start_line": 22,
+      "end_line": 22,
+      "confidence": 0.8,
+      "title": "Potential null pointer exception when mapping `createdAt` to ISO string",
+      "rationale": "`row.createdAt` is used without a null check. If the database column `created_at` is nullable (e.g., due to a schema migration or a bug), calling `.toISOString()` on `null` will throw a runtime error. The contract marks `created_at` as optional, but the code always includes it, creating a mismatch that can cause crashes in production."
+    }
+  ],
+  "trace": {
+    "stats": {
+      "cost_usd": 0.00120344,
+      "findings": 1,
+      "grounding": "1/1 passed",
+      "tokens_in": 3102,
+      "tokens_out": 2747,
+      "duration_ms": 63463
+    },
+    "config": {
+      "pr": 3,
+      "agent": "API Contract Reviewer",
+      "model": "deepseek/deepseek-v4-flash",
+      "source": "local",
+      "version": "2",
+      "provider": "openrouter"
+    },
+    "tool_calls": [
+      {
+        "ms": 63463,
+        "args": "all files",
+        "meta": "single-pass",
+        "tool": "review_file"
+      }
+    ],
+    "prompt_assembly": {
+      "skill_blocks": null,
+      "skills_tokens": null,
+      "pr_description": "> Do not merge — test pull request used for reviewer evaluation. It will be closed afterwards.\n",
+      "system_chars": 1223,
+      "user_chars": 10568,
+      "user_md5": "4e4d7cab857c876f77d4abd6cc1a57be",
+      "system_md5": "e698263e3e596724650e510df79f772e"
+    },
+    "log": [
+      {
+        "t": "08:53:02",
+        "msg": "Loading PR diff…",
+        "kind": "tool"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "Loading PR diff done (35ms)",
+        "kind": "tool"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "Diff ready — 3 changed file(s); starting 1 agent run(s)",
+        "kind": "info"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "Starting review with agent \"API Contract Reviewer\" (openrouter/deepseek/deepseek-v4-flash)",
+        "kind": "info"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "Resolving openrouter provider…",
+        "kind": "tool"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "Resolving openrouter provider done (0ms)",
+        "kind": "tool"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "callers digest: 5 caller signature(s) attached",
+        "kind": "info"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "repo map: 1500 token(s) attached (cached=true)",
+        "kind": "info"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "file rank: 2/3 changed file(s) in top 5%",
+        "kind": "info"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "skills: none applied",
+        "kind": "info"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "Reviewing 3 changed file(s) in one pass",
+        "kind": "info"
+      },
+      {
+        "t": "08:53:03",
+        "msg": "Reviewing all files in one pass",
+        "kind": "tool"
+      },
+      {
+        "t": "08:54:06",
+        "msg": "all files: 1 candidate finding(s)",
+        "kind": "result"
+      },
+      {
+        "t": "08:54:06",
+        "msg": "Reduced to 1 finding(s); verdict=request_changes, score=0",
+        "kind": "result"
+      },
+      {
+        "t": "08:54:06",
+        "msg": "Citation grounding: 1/1 passed",
+        "kind": "result"
+      }
+    ],
+    "raw_output": "{\n  \"findings\": [\n    {\n      \"category\": \"bug\",\n      \"confidence\": 0.8,\n      \"end_line\": 22,\n      \"evidence\": [\n        {\n          \"component\": \"untrusted_input\",\n          \"file\": \"server/src/modules/agents/helpers.ts\",\n          \"line\": 22\n        }\n      ],\n      \"file\": \"server/src/modules/agents/helpers.ts\",\n      \"id\": \"null-created-at\",\n      \"kind\": \"finding\",\n      \"rationale\": \"`row.createdAt` is used without a null check. If the database column `created_at` is nullable (e.g., due to a schema migration or a bug), calling `.toISOString()` on `null` will throw a runtime error. The contract marks `created_at` as optional, but the code always includes it, creating a mismatch that can cause crashes in production.\",\n      \"severity\": \"CRITICAL\",\n      \"start_line\": 22\n    ,\n    \"suggestion\": \"Add a null guard: `created_at: row.createdAt ? row.createdAt.toISOString() : undefined,` or ensure the DB column is non-nullable and has a default value.\"\n  ,\n    \"title\": \"Potential null pointer exception when mapping `createdAt` to ISO string\"\n  ,\n    \"trifecta_components\": [\n      \"untrusted_input\"\n    ]\n  }\n  ]\n,\n  \"score\": 0\n,\n  \"summary\": \"1 finding: a critical null-safety bug in the new `created_at` field mapping.\"\n,\n  \"verdict\": \"request_changes\"\n}"
+  }
+}

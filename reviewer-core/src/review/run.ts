@@ -7,7 +7,7 @@ import type {
   UnifiedDiff,
 } from '@devdigest/shared';
 import { Review as ReviewSchema } from '@devdigest/shared';
-import { assemblePrompt } from '../prompt.js';
+import { assemblePrompt, type PromptSkill } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 
@@ -22,8 +22,9 @@ import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
  * (no DB, GitHub, fs, memory retrieval, intent, or persistence) — those stay in
  * the caller (server persists + streams SSE; runner posts + writes an artifact).
  *
- * Skill bodies / memory / specs are RESOLVED strings here: the caller turns
- * AgentManifest skill slugs into bodies (DB in the studio, fs in the runner).
+ * Skills / memory / specs are RESOLVED here: the caller turns AgentManifest skill
+ * slugs into { name, version, body } (DB in the studio, fs in the runner) and
+ * passes only the skills to apply, already in prompt order.
  */
 
 /** Default map-reduce threshold (matches the server's FILE_MAP_THRESHOLD_LINES). */
@@ -52,8 +53,8 @@ export interface ReviewInput {
   llm: LLMProvider;
   /** 'auto' (default) picks single-pass unless the diff is large + multi-file. */
   strategy?: ReviewStrategy;
-  /** Resolved skill bodies (NOT slugs). */
-  skills?: string[];
+  /** Skills to apply, resolved (NOT slugs) and already in prompt order. */
+  skills?: readonly PromptSkill[];
   /** Curated memory items. */
   memory?: string[];
   /** Project-context spec chunks (untrusted; delimiter-wrapped downstream). */

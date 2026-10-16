@@ -7,9 +7,12 @@ function DropdownItem({ it, onClose }: { it: DropdownItemDef; onClose: () => voi
   const I = it.icon ? Icon[it.icon] : null;
   return (
     <button
+      type="button"
+      disabled={it.disabled}
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
       onClick={() => {
+        if (it.disabled) return;
         it.onClick?.();
         onClose();
       }}
@@ -21,12 +24,13 @@ function DropdownItem({ it, onClose }: { it: DropdownItemDef; onClose: () => voi
         padding: "8px 10px",
         borderRadius: 6,
         border: "none",
-        background: h ? "var(--bg-hover)" : "transparent",
-        color: it.muted ? "var(--text-secondary)" : "var(--text-primary)",
+        background: h && !it.disabled ? "var(--bg-hover)" : "transparent",
+        color: it.muted || it.disabled ? "var(--text-secondary)" : "var(--text-primary)",
+        opacity: it.disabled ? 0.6 : 1,
         fontSize: 14,
         fontWeight: 500,
         textAlign: "left",
-        cursor: "pointer",
+        cursor: it.disabled ? "not-allowed" : "pointer",
       }}
     >
       {I && <I size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />}

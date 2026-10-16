@@ -9,6 +9,7 @@ import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
 import { NO_COST, costByPullRequest } from './cost.js';
+import { findingsSummaryByPullRequest } from './findings-summary.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -114,8 +115,8 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
 
     // Latest-review SCORE per PR for the list's score ring. Computed on read
     // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // grouping is cheap. (The FINDINGS summary below has its own rule: the
+    // latest completed review of EACH agent.)
     const prIds = rows.map((r) => r.id);
     const latestReviewByPr = new Map<string, { score: number | null }>();
     if (prIds.length > 0) {
@@ -132,6 +133,8 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
 
     // L01 — spend over successful runs per PR (separate query; score logic untouched).
     const costByPr = await costByPullRequest(container.db, workspaceId, prIds);
+    // L01 — FINDINGS over every agent's latest completed review (separate query).
+    const findingsByPr = await findingsSummaryByPullRequest(container.db, workspaceId, prIds);
 
     const now = Date.now();
     return rows.map((r) => {
@@ -160,6 +163,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         score: review ? review.score : null,
         cost_usd: cost.cost_usd,
         cost_partial: cost.cost_partial,
+        findings_summary: findingsByPr.get(r.id) ?? null,
       };
     });
   });

@@ -1,0 +1,58 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for SkillPreviewDrawer. */
+export const s = {
+  title: { display: "inline-flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
+  iconBox: (color: string, bg: string): CSSProperties => ({
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    background: bg,
+    color,
+    display: "inline-grid",
+    placeItems: "center",
+    flexShrink: 0,
+  }),
+  description: { fontSize: 14, color: "var(--text-secondary)", margin: "0 0 16px", lineHeight: 1.5 } satisfies CSSProperties,
+  meta: {
+    display: "grid",
+    gridTemplateColumns: "110px 1fr",
+    rowGap: 10,
+    columnGap: 12,
+    margin: "0 0 20px",
+    padding: 14,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--bg-elevated)",
+    fontSize: 13,
+  } satisfies CSSProperties,
+  metaLabel: { color: "var(--text-muted)", fontSize: 12, fontWeight: 600, alignSelf: "center" } satisfies CSSProperties,
+  metaValue: { margin: 0, display: "flex", alignItems: "center", gap: 8, color: "var(--text-primary)" } satisfies CSSProperties,
+  source: { display: "inline-flex", alignItems: "center", gap: 4, color: "var(--text-secondary)" } satisfies CSSProperties,
+  typeChip: (color: string, bg: string): CSSProperties => ({
+    fontSize: 11,
+    fontWeight: 600,
+    color,
+    background: bg,
+    padding: "1px 7px",
+    borderRadius: 4,
+  }),
+  bodyLabel: {
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color: "var(--text-muted)",
+    marginBottom: 8,
+  } satisfies CSSProperties,
+  body: {
+    padding: "16px 18px",
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    background: "var(--bg-primary)",
+    fontSize: 14,
+    color: "var(--text-primary)",
+  } satisfies CSSProperties,
+  muted: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
+  footer: { display: "flex", justifyContent: "flex-end" } satisfies CSSProperties,
+} as const;
