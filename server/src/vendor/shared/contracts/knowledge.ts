@@ -179,7 +179,7 @@ export const Agent = z.object({
   description: z.string(),
   provider: Provider,
   model: z.string(),
-  system_prompt: z.string(),
+  instructions: z.string(),
   output_schema: z.unknown().nullish(),
   enabled: z.boolean(),
   version: z.number().int(),
@@ -188,6 +188,8 @@ export const Agent = z.object({
   // Inject repo-intel context (repo skeleton + callers + rank note) into this
   // agent's review prompt. Default on; gated again by the global flag.
   repo_intel: z.boolean().default(true),
+  // When the agent was created (ISO 8601). Informational.
+  created_at: z.string().optional(),
 });
 export type Agent = z.infer<typeof Agent>;
 
