@@ -1,6 +1,6 @@
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
+import type { Finding, RunSummary, RunTrace } from '@devdigest/shared';
 
 /**
  * A2 — review data-access. The ONLY layer touching the DB for the review
@@ -21,6 +21,7 @@ export type ReviewRow = typeof t.reviews.$inferSelect;
 import * as reviewRepo from './repository/review.repo.js';
 import * as runRepo from './repository/run.repo.js';
 import * as pullRepo from './repository/pull.repo.js';
+import * as intentRepo from './repository/intent.repo.js';
 import { RECONCILE_DB_TIMEOUT_MS } from './constants.js';
 export type { FinalizeDoneRunInput, FinalizeDoneRunResult } from './repository/run.repo.js';
 
@@ -129,12 +130,18 @@ export class ReviewRepository {
 
   // ---- intent -------------------------------------------------------------
 
-  upsertIntent(prId: string, intent: Intent): Promise<void> {
-    return pullRepo.upsertIntent(this.db, prId, intent);
+  getIntentRow(prId: string): Promise<intentRepo.IntentRow | undefined> {
+    return intentRepo.getIntentRow(this.db, prId);
   }
 
-  getIntent(prId: string): Promise<Intent | undefined> {
-    return pullRepo.getIntent(this.db, prId);
+  /** PR + files + the time they were read (workspace-scoped; local rows only). */
+  getIntentInputs(workspaceId: string, prId: string): Promise<intentRepo.IntentInputs | undefined> {
+    return intentRepo.getIntentInputs(this.db, workspaceId, prId);
+  }
+
+  /** Conditional upsert; false when a newer input snapshot already holds the row. */
+  saveIntent(values: intentRepo.SaveIntentValues): Promise<boolean> {
+    return intentRepo.saveIntent(this.db, values);
   }
 
   // ---- observability: agent_runs + run_traces ----------------------------

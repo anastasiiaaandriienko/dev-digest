@@ -30,4 +30,25 @@ describe("Markdown", () => {
     cleanup();
     expect(render(<Markdown>{""}</Markdown>).container).toBeEmptyDOMElement();
   });
+
+  // Observed: img is a void element, so unwrapDisallowed leaves nothing — the alt text is dropped.
+  it("does not render images (no remote fetch); surrounding text survives", () => {
+    const { container } = render(<Markdown>{"before ![alt text](http://x/y.png) after"}</Markdown>);
+    expect(container.querySelector("img")).toBeNull();
+    expect(container).toHaveTextContent("before after");
+    expect(container.innerHTML).not.toContain("http://x/y.png");
+  });
+
+  it("keeps a linked image's link and drops only the img", () => {
+    const { container } = render(<Markdown>{"[![logo](http://x/y.png)](https://e.com)"}</Markdown>);
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("a")).toHaveAttribute("href", "https://e.com");
+  });
+
+  it("neutralises javascript: hrefs on links", () => {
+    const { container } = render(<Markdown>{"[click](javascript:alert(1))"}</Markdown>);
+    const href = container.querySelector("a")?.getAttribute("href") ?? "";
+    expect(href).not.toMatch(/^javascript:/i);
+    expect(container).toHaveTextContent("click");
+  });
 });

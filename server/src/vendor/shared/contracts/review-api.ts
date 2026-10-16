@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Finding, Verdict } from './findings.js';
-import { Intent, SmartDiff } from './brief.js';
+import { Intent, IntentConfidence, SmartDiff } from './brief.js';
 
 /**
  * A2 — Review-Core API surface contracts. These extend the core
@@ -59,6 +59,64 @@ export type ReviewRunResponse = z.infer<typeof ReviewRunResponse>;
 /** Intent persisted for a PR (the Intent plus the pr_id it scopes). */
 export const PrIntentRecord = Intent.extend({ pr_id: z.string() });
 export type PrIntentRecord = z.infer<typeof PrIntentRecord>;
+
+// ---- L03 Intent block: GET/POST /pulls/:id/intent ----
+
+export const IntentStaleReason = z.enum(['pr_changed', 'model_changed', 'prompt_changed']);
+export type IntentStaleReason = z.infer<typeof IntentStaleReason>;
+
+/**
+ * fresh   = stored intent matches the current PR input, prompt version and model.
+ * stale   = at least one definite stale reason (see stale_reasons).
+ * unknown = no definite reason, but the PR file data needed to compare is not
+ *           loaded locally; also returned when no intent has been generated yet
+ *           (then `intent` and `meta` are null).
+ */
+export const IntentFreshness = z.enum(['fresh', 'stale', 'unknown']);
+export type IntentFreshness = z.infer<typeof IntentFreshness>;
+
+export const IntentModelSource = z.enum(['override', 'fallback_onboarding']);
+export type IntentModelSource = z.infer<typeof IntentModelSource>;
+
+export const IntentModelInfo = z.object({
+  provider: z.string(),
+  model: z.string(),
+  source: IntentModelSource,
+});
+export type IntentModelInfo = z.infer<typeof IntentModelInfo>;
+
+export const PrIntentMeta = z.object({
+  provider: z.string().nullable(),
+  model: z.string().nullable(),
+  prompt_version: z.string().nullable(),
+  confidence: IntentConfidence.nullable(),
+  generated_at: z.string(),
+  head_sha: z.string().nullable(),
+  input_snapshot_at: z.string().nullable(),
+  tokens_in: z.number().int().nullable(),
+  tokens_out: z.number().int().nullable(),
+  cost_usd: z.number().nullable(),
+});
+export type PrIntentMeta = z.infer<typeof PrIntentMeta>;
+
+export const PrIntentState = z.object({
+  pr_id: z.string(),
+  intent: Intent.nullable(),
+  meta: PrIntentMeta.nullable(),
+  freshness: IntentFreshness,
+  stale_reasons: z.array(IntentStaleReason),
+  current_model: IntentModelInfo.nullable(),
+  /** Why no model could be resolved (current_model is null). */
+  model_error: z.string().nullish(),
+  /** POST only: true when this call ran the LLM, false on a cache hit. */
+  computed: z.boolean().optional(),
+});
+export type PrIntentState = z.infer<typeof PrIntentState>;
+
+export const IntentRunRequest = z.object({
+  force: z.boolean().default(false),
+});
+export type IntentRunRequest = z.infer<typeof IntentRunRequest>;
 
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;

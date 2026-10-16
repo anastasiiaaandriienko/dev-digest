@@ -69,7 +69,7 @@ The sketch above follows the pattern of `src/modules/reviews/routes.ts`. Points 
 |---|---|---|
 | `agents` | `routes`, `service`, `repository`, `helpers`, `constants` | full layering; **best template** |
 | `repos` | `routes`, `service`, `repository`, `helpers`, `constants` | full layering + JobRunner handlers (clone → index) |
-| `reviews` | `routes`, `service`, `run-executor`, `diff-loader`, `findings`, `helpers`, `constants`, `repository.ts` + `repository/{pull,review,run}.repo.ts` | service plus a background executor; the repository class delegates to the function files |
+| `reviews` | `routes`, `service`, `run-executor`, `diff-loader`, `findings`, `helpers`, `constants`, `intent/{constants,fingerprint,freshness,prompt,model,service}`, `repository.ts` + `repository/{pull,review,run,intent}.repo.ts` | service plus a background executor; the repository class delegates to the function files. `intent/` is a sub-folder with its own `IntentService` (constructed in `routes.ts:26`), not a separate module; see [architecture.md](architecture.md#8-pr-intent-l03-intent-block-p1-backend) |
 | `repo-intel` | `routes`, `service`, `repository`, `types`, `constants`, `pipeline/*` | a facade exposed as `container.repoIntel` (see [repo-intel.md](repo-intel.md)) |
 | `pulls` | `routes`, `status` | **counter-example**: Drizzle queries live in the route handlers |
 | `workspace` | `routes` | smallest module; queries the DB directly and does not use the zod type provider |
@@ -94,9 +94,10 @@ For new lesson modules, copy `agents`, not `pulls` or `workspace`.
 ## Schema and contracts
 
 - **Tables.** All tables already exist in `src/db/schema/*.ts` (exported through
-  `src/db/schema.ts`). Lesson tables such as `skills`, `pr_intent`, `pr_brief`,
-  `eval_*`, `memory` and `digests` sit empty until a lesson uses them. Check there
-  before proposing a new table.
+  `src/db/schema.ts`). Lesson tables such as `skills`, `pr_brief`, `eval_*`,
+  `memory` and `digests` sit empty until a lesson uses them. `pr_intent` is now in
+  use (L03: `GET`/`POST /pulls/:id/intent`, migration `0012`). Check there before
+  proposing a new table.
 - **Schema changes.** Changing a schema file requires a new migration. Ask first
   (see the safety rules in [../AGENTS.md](../AGENTS.md)).
 - **Contracts.** Request and response contracts come from `@devdigest/shared`

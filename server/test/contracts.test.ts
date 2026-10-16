@@ -18,6 +18,8 @@ import {
   Repo,
   PrDetail,
   PrMeta,
+  PrIntentState,
+  IntentRunRequest,
 } from '@devdigest/shared';
 
 /**
@@ -268,5 +270,58 @@ describe('L01 cost contracts', () => {
     expect(PrMeta.parse({ ...pr, cost_usd: null, cost_partial: false }).cost_usd).toBeNull();
     expect(PrMeta.parse(pr).cost_usd).toBeUndefined();
     expect(PrMeta.safeParse({ ...pr, cost_partial: 'yes' }).success).toBe(false);
+  });
+});
+
+describe('L03 intent contracts', () => {
+  const base = { intent: 'Add retry to webhooks', in_scope: ['retry'], out_of_scope: ['queue'] };
+
+  it('Intent parses with and without risk_areas (pre-L03 payloads)', () => {
+    expect(Intent.parse(base).risk_areas).toBeUndefined();
+    expect(Intent.parse({ ...base, risk_areas: ['billing'] }).risk_areas).toEqual(['billing']);
+    expect(Intent.safeParse({ ...base, risk_areas: 'billing' }).success).toBe(false);
+  });
+
+  it('PrIntentState parses a fresh state and an empty (never generated) one', () => {
+    const model = { provider: 'openrouter', model: 'deepseek/deepseek-v4-flash', source: 'fallback_onboarding' };
+    const fresh = PrIntentState.parse({
+      pr_id: 'pr-1',
+      intent: { ...base, risk_areas: [] },
+      meta: {
+        provider: 'openrouter',
+        model: 'deepseek/deepseek-v4-flash',
+        prompt_version: 'intent-v1',
+        confidence: 'medium',
+        generated_at: '2026-10-16T10:00:00.000Z',
+        head_sha: 'abc',
+        input_snapshot_at: '2026-10-16T09:59:59.000Z',
+        tokens_in: 100,
+        tokens_out: 50,
+        cost_usd: null,
+      },
+      freshness: 'stale',
+      stale_reasons: ['pr_changed', 'model_changed'],
+      current_model: model,
+      computed: false,
+    });
+    expect(fresh.stale_reasons).toEqual(['pr_changed', 'model_changed']);
+    const empty = PrIntentState.parse({
+      pr_id: 'pr-1',
+      intent: null,
+      meta: null,
+      freshness: 'unknown',
+      stale_reasons: [],
+      current_model: null,
+      model_error: 'No model',
+    });
+    expect(empty.intent).toBeNull();
+    expect(PrIntentState.safeParse({ ...empty, freshness: 'old' }).success).toBe(false);
+    expect(PrIntentState.safeParse({ ...empty, stale_reasons: ['nope'] }).success).toBe(false);
+  });
+
+  it('IntentRunRequest defaults force to false', () => {
+    expect(IntentRunRequest.parse({})).toEqual({ force: false });
+    expect(IntentRunRequest.parse({ force: true }).force).toBe(true);
+    expect(IntentRunRequest.safeParse({ force: 'yes' }).success).toBe(false);
   });
 });

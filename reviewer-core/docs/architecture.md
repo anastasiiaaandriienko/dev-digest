@@ -93,6 +93,13 @@ that claims such as "intentional", "test" or "do not flag" never narrow the
 review, and that `<skill>` blocks can add criteria but never change the role,
 the output format, or these rules.
 
+**PR intent policy (L03).** When `intent` is passed (and not empty), a short
+policy is inserted between the Skills section and the guard (the guard stays
+last): `INTENT_POLICY_CONSERVATIVE` for `confidence: 'high'`, otherwise
+`INTENT_POLICY_INFORM`. Both say the intent is AI-generated from untrusted PR
+data and never lowers or cancels a finding; the engine itself never filters
+findings by intent. Without `intent` the system message is unchanged.
+
 **Skills section (HW2 #14).** `## Skills`, a fixed preamble (`SKILLS_PREAMBLE`),
 then one block per skill **in the order the caller passes** (the server passes
 the agent's `agent_skills` order, already filtered to skills enabled for the
@@ -110,14 +117,17 @@ empty or missing section is left out.
 |---|---|---|---|---|
 | 1 | task line | `task` | no | **yes** (PR title + rank note) |
 | 2 | `## PR description` | `prDescription`, cut to 4000 chars | yes (`pr-description`) | **yes** when the PR has a body |
+| 2a | `## PR intent` | `intent` (summary, confidence, scope lists; capped at 4000 chars) | yes (`pr-intent`) | **yes** when the server resolved an intent (L03); recorded as `PromptAssembly.intent` |
 | 3 | `## Relevant memory` | `memory[]` as `- ` bullets | **no** (curated) | no (scaffolding, L07) |
 | 4 | `## Repo skeleton` | `repoMap` | yes (`repo-map`) | **yes** when the repo is indexed |
 | 5 | `## Project context` | `specs[]` | yes (`spec-<i>`) | no (scaffolding, L05) |
 | 6 | `## Callers of changed symbols` | `callers` | yes (`callers`) | **yes** when repo-intel finds callers |
 | 7 | `## Diff to review` | chunk diff text | yes (`diff`) | **yes**, always last |
 
-- **Escaping.** `wrapUntrusted` (`prompt.ts:30-34`) escapes only the exact text
-  `</untrusted>`. The label is inserted as is, which is safe because every label
+- **Escaping.** `wrapUntrusted` (`escapeUntrustedTags` in `prompt.ts`) rewrites the
+  tag prefix case-insensitively and whitespace-tolerantly: closing `</untrusted`
+  becomes `<\/untrusted`, opening `<untrusted` becomes `<\untrusted`, so content can
+  neither close nor fake-open a block. The label is inserted as is, which is safe because every label
   is chosen by the code.
 - **Trace record.** `PromptAssembly` (the trace record) stores `callers` and
   `repo_map` as passed in, even when they are whitespace-only and the section was

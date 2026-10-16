@@ -3,6 +3,7 @@ import type { FindingRecord, PrFindingsSummary, ReviewRecord } from "@devdigest/
 import {
   countBySeverity,
   findingLocation,
+  inlineReviews,
   openCriticals,
   severityKeys,
   summaryReviews,
@@ -123,5 +124,58 @@ describe("summaryReviews", () => {
     expect(summaryReviews([rev("a", "a1")], summary(["a", "gone"])).map((r) => r.id)).toEqual(["a"]);
     expect(summaryReviews(undefined, summary(["a"]))).toEqual([]);
     expect(summaryReviews([rev("a", "a1")], null)).toEqual([]);
+  });
+});
+
+describe("inlineReviews", () => {
+  const rev = (id: string, agentId: string, kind: ReviewRecord["kind"] = "review"): ReviewRecord => ({
+    id,
+    pr_id: "pr",
+    agent_id: agentId,
+    run_id: null,
+    agent_name: agentId,
+    kind,
+    verdict: null,
+    summary: null,
+    score: null,
+    model: null,
+    grounding: null,
+    created_at: "2026-10-11T10:00:00.000Z",
+    findings: [],
+  });
+  const summary = (ids: string[]): PrFindingsSummary => ({
+    total: ids.length,
+    counts: { CRITICAL: 0, WARNING: ids.length, SUGGESTION: 0, INFO: 0 },
+    agents: ids.map((id) => ({
+      agent_id: null,
+      agent_name: null,
+      review_id: id,
+      verdict: null,
+      created_at: "2026-10-11T10:00:00.000Z",
+      total: 1,
+      counts: { CRITICAL: 0, WARNING: 1, SUGGESTION: 0, INFO: 0 },
+    })),
+  });
+
+  it("returns [] without reviews", () => {
+    expect(inlineReviews(undefined, undefined)).toEqual([]);
+    expect(inlineReviews(undefined, summary(["a"]))).toEqual([]);
+  });
+
+  it("summary not computed (undefined): every review-kind record, summaries excluded", () => {
+    const reviews = [rev("a", "a1"), rev("s", "a1", "summary"), rev("b", "a2")];
+    expect(inlineReviews(reviews, undefined).map((r) => r.id)).toEqual(["a", "b"]);
+    expect(inlineReviews(reviews, undefined).every((r) => r.kind === "review")).toBe(true);
+  });
+
+  it("null summary (no completed review): nothing", () => {
+    expect(inlineReviews([rev("a", "a1")], null)).toEqual([]);
+  });
+
+  it("summary: latest completed review per agent only; two agents both included", () => {
+    const reviews = [rev("a1-new", "a1"), rev("a1-old", "a1"), rev("a2", "a2")];
+    const ids = inlineReviews(reviews, summary(["a1-new", "a2"])).map((r) => r.id);
+    expect(ids).toEqual(["a1-new", "a2"]);
+    expect(ids).not.toContain("a1-old");
   });
 });

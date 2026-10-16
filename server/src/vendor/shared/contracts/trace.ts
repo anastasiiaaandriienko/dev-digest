@@ -61,6 +61,8 @@ export const PromptAssembly = z.object({
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
+  /** AI-generated PR intent (L03), rendered data; absent when no intent. */
+  intent: z.string().nullish(),
   /** Skills applied to this run, in prompt order (enabled for the agent AND
       globally). Absent in traces written before HW2 #19. */
   skill_blocks: z.array(AppliedSkill).nullish(),

@@ -200,3 +200,82 @@ describe('reviewPullRequest (engine)', () => {
     });
   });
 });
+
+// L03: the PR intent reaches every LLM call and never filters findings.
+describe('reviewPullRequest — PR intent (L03)', () => {
+  const TWO_FILE_DIFF = parseUnifiedDiff(
+    [
+      'diff --git a/src/a.ts b/src/a.ts',
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -1,1 +1,2 @@',
+      ' const a = 1;',
+      '+const b = 2;',
+      'diff --git a/src/b.ts b/src/b.ts',
+      '--- a/src/b.ts',
+      '+++ b/src/b.ts',
+      '@@ -1,1 +1,2 @@',
+      ' const c = 1;',
+      '+const d = 2;',
+    ].join('\n'),
+  );
+  const intent = {
+    summary: 'Only touches the number constants.',
+    in_scope: ['constants'],
+    out_of_scope: ['style'],
+    risk_areas: [],
+    confidence: 'high' as const,
+  };
+  const styleNit = {
+    id: 's1',
+    severity: 'SUGGESTION',
+    category: 'style',
+    title: 'naming nit',
+    file: 'src/a.ts',
+    start_line: 2,
+    end_line: 2,
+    rationale: 'out of stated scope',
+    confidence: 0.5,
+    kind: 'finding',
+  };
+  const fixture = { verdict: 'comment', summary: 's', score: 90, findings: [styleNit] };
+
+  const messagesOf = (llm: MockLLMProvider) =>
+    llm.calls
+      .filter((c) => c.method === 'completeStructured')
+      .map((c) => (c.req as { messages: { role: string; content: string }[] }).messages);
+
+  it('map-reduce: intent is present in every LLM call', async () => {
+    const llm = new MockLLMProvider('openai', { structured: fixture });
+    await reviewPullRequest({
+      systemPrompt: 's', model: 'm', diff: TWO_FILE_DIFF, llm, strategy: 'map-reduce', intent,
+    });
+    const all = messagesOf(llm);
+    expect(all).toHaveLength(2);
+    for (const msgs of all) {
+      expect(msgs[1]!.content).toContain('<untrusted source="pr-intent">');
+      expect(msgs[0]!.content).toContain('You MAY omit a finding ONLY if ALL hold');
+    }
+  });
+
+  it('without intent the prompts carry no intent section', async () => {
+    const llm = new MockLLMProvider('openai', { structured: fixture });
+    const outcome = await reviewPullRequest({
+      systemPrompt: 's', model: 'm', diff: TWO_FILE_DIFF, llm, strategy: 'map-reduce',
+    });
+    for (const msgs of messagesOf(llm)) {
+      expect(msgs[1]!.content).not.toContain('pr-intent');
+      expect(msgs[0]!.content).not.toContain('PR INTENT POLICY');
+    }
+    expect(outcome.assembly.intent).toBeUndefined();
+  });
+
+  it('does not filter findings: an out-of-scope SUGGESTION/style finding passes through', async () => {
+    const llm = new MockLLMProvider('openai', { structured: fixture });
+    const outcome = await reviewPullRequest({
+      systemPrompt: 's', model: 'm', diff: TWO_FILE_DIFF, llm, strategy: 'single-pass', intent,
+    });
+    expect(outcome.review.findings.map((f) => f.id)).toEqual(['s1']);
+    expect(outcome.assembly.intent).toContain('Summary: Only touches');
+  });
+});

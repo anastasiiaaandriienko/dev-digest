@@ -52,6 +52,20 @@ export const prIntent = pgTable('pr_intent', {
   intent: text('intent').notNull(),
   inScope: jsonb('in_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   outOfScope: jsonb('out_of_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  // L03: provenance + freshness inputs. All nullable (legacy rows predate them),
+  // except riskAreas / generatedAt which have defaults.
+  riskAreas: jsonb('risk_areas').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  confidence: text('confidence'),
+  inputFingerprint: text('input_fingerprint'),
+  promptVersion: text('prompt_version'),
+  provider: text('provider'),
+  model: text('model'),
+  headSha: text('head_sha'),
+  inputSnapshotAt: timestamp('input_snapshot_at', { withTimezone: true }),
+  generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow().notNull(),
+  tokensIn: integer('tokens_in'),
+  tokensOut: integer('tokens_out'),
+  costUsd: doublePrecision('cost_usd'),
 });
 
 export const prBrief = pgTable('pr_brief', {

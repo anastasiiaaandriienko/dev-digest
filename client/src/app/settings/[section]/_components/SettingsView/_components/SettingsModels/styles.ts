@@ -10,6 +10,7 @@ export const s = {
     fontWeight: 500,
     color: "var(--text-muted)",
   } satisfies CSSProperties,
+  fallbackHint: { marginTop: 4, color: "var(--text-secondary)" } satisfies CSSProperties,
   note: {
     display: "flex",
     gap: 10,

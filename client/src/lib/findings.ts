@@ -71,3 +71,18 @@ export function summaryReviews(
   const byId = new Map(reviews.map((r) => [r.id, r]));
   return summary.agents.flatMap((a) => byId.get(a.review_id) ?? []);
 }
+
+/**
+ * Reviews whose findings are shown inline in the diff: the summary's reviews
+ * (latest completed review of each agent) when the PR list computed a summary;
+ * `null` summary = no completed review = none; `undefined` = not computed, so
+ * fall back to every "review"-kind record.
+ */
+export function inlineReviews(
+  reviews: readonly ReviewRecord[] | undefined,
+  summary: PrFindingsSummary | null | undefined,
+): ReviewRecord[] {
+  if (!reviews) return [];
+  if (summary === undefined) return reviews.filter((r) => r.kind === "review");
+  return summaryReviews(reviews, summary);
+}

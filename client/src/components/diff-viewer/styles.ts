@@ -57,6 +57,46 @@ export const s = {
     userSelect: "none",
     flexShrink: 0,
   } satisfies CSSProperties,
+  findingPill: {
+    alignSelf: "center",
+    flexShrink: 0,
+    margin: "0 10px 0 4px",
+    padding: "0 6px",
+    borderRadius: 4,
+    fontSize: 10.5,
+    fontWeight: 700,
+    letterSpacing: "0.04em",
+    lineHeight: "16px",
+    textTransform: "uppercase",
+    background: "var(--bg-elevated)",
+  } satisfies CSSProperties,
+  findingCards: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    padding: "8px 12px 8px 62px",
+  } satisfies CSSProperties,
+  findingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "var(--crit)",
+    flexShrink: 0,
+  } satisfies CSSProperties,
+  unanchored: {
+    borderTop: "1px solid var(--border)",
+    marginTop: 8,
+    padding: "10px 12px 2px",
+  } satisfies CSSProperties,
+  unanchoredTitle: {
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
+    color: "var(--text-muted)",
+    marginBottom: 8,
+  } satisfies CSSProperties,
+  unanchoredList: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
   lineText: {
     flex: 1,
     whiteSpace: "pre-wrap",
@@ -79,6 +119,11 @@ export function chevronFor(open: boolean): CSSProperties {
 export function lineRowFor(kind: Line["kind"]): CSSProperties {
   const background = kind === "add" ? "var(--code-add)" : kind === "del" ? "var(--code-del)" : "transparent";
   return { display: "flex", alignItems: "stretch", fontSize: 13, lineHeight: "20px", background };
+}
+
+/** Severity left border for a diff line that carries a finding (longhand only). */
+export function findingLineBorderFor(color: string): CSSProperties {
+  return { borderLeftStyle: "solid", borderLeftWidth: 3, borderLeftColor: color };
 }
 
 /** Gutter sign colour per line kind. */

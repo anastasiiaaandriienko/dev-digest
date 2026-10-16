@@ -5,3 +5,5 @@ export { DiffViewer } from "./DiffViewer";
 export { CodeLine } from "./CodeLine";
 export type { DiffCommentApi } from "./comments";
 export type { Line } from "./helpers";
+export type { DiffFindingsApi } from "./findings";
+export { UnanchoredFindings } from "./UnanchoredFindings";

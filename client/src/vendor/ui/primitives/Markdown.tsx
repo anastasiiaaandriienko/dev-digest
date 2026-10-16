@@ -32,6 +32,8 @@ export function Markdown({ children }: { children?: string | null }) {
     <div className="dd-md" style={{ fontSize: "inherit", lineHeight: 1.55 }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        disallowedElements={["img"]}
+        unwrapDisallowed
         components={{
           h1: ({ children }) => <h1 style={heading("1.35em", 4)}>{children}</h1>,
           h2: ({ children }) => <h2 style={heading("1.15em", 14)}>{children}</h2>,
