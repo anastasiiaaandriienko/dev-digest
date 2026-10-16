@@ -67,7 +67,9 @@ what was **not** done or **not** demonstrated is listed explicitly at the end.
 | Evidence | every candidate's `file:line` exists in the clone; links open GitHub at commit `c3c8042` on that line |
 | Reject / Edit / Accept | camelCase rule rejected; path-alias rule edited; 5 rules accepted → **7 accepted / 15 pending / 1 rejected** |
 | Create skill | `repo-conventions` (convention, extracted, v1, enabled) from the 7 accepted rules, attached to **General Reviewer** |
-| API Contract Reviewer | 4 imported skills attached in order, all enabled |
+| API Contract Reviewer | 4 imported skills attached in order, all enabled; switched to `openrouter/deepseek/deepseek-v4-flash` for the A/B experiment |
+| A/B experiment (skills off vs on) | draft test PR [#3](https://github.com/anastasiiaaandriienko/dev-digest/pull/3) (3 breaking changes + 1 non-breaking decoy, ground truth fixed beforehand), same SHA `109471f`, same model and prompt: **A (skills off) 0 / 3 found, 1 false positive, $0.00120**; **B (skills on) 3 / 3 found, 0 false positives, $0.00206**. Full report: [`AB_EXPERIMENT.md`](AB_EXPERIMENT.md) |
+| Real review with skills | run B's trace contains `prompt_assembly.skill_blocks` with the 4 skills in order (breaking-change → response-schema → semver-discipline → deprecation-policy) and `skills_tokens = 5090`; run A's trace has none |
 
 Skills CRUD, versioning (v1→v5, Restore → v6), import, agent creation with
 OpenRouter, skill attachment / ordering and both unsaved-changes flows were
@@ -118,14 +120,13 @@ since the original snapshot (`587c46a`) and HW2 does not touch repo-intel.
   and are shown as unavailable, without sample data.
 
 ## 6. Not yet done / not demonstrated
-- **API Contract Reviewer A/B experiment (skills off vs on) — NOT run.** No
-  sandbox repository or PR was created; no comparison results exist.
-- **No real review has been executed with skills attached.** Prompt injection
-  and the Trace fields are implemented and unit-tested, but none of the real
-  traces in the development database contains `skill_blocks` yet. (The API
-  Contract Reviewer is configured as `openai/gpt-4.1` while no OpenAI key is
-  set; it must be switched to OpenRouter before such a run.)
 - **Demo video — does not exist yet.**
+
+The A/B experiment and a real skills-enabled review are now done (see §2 and
+[`AB_EXPERIMENT.md`](AB_EXPERIMENT.md)). It is one run per arm on one small PR,
+so it is a clear signal rather than a measured rate. One extra pilot run was
+excluded because its PR description leaked the expected answers; the report
+documents it.
 
 ## 7. Evidence
 Screenshots in [`screenshots/`](screenshots/): 01–06 from the isolated test
@@ -133,3 +134,9 @@ database (Skills versions / diff / unsaved changes, Agent config / skills /
 empty state), 07–12 from the real development database (Conventions scan,
 GitHub evidence, edited rule, create-skill modal, `repo-conventions` skill,
 General Reviewer skills).
+
+A/B evidence in [`ab-evidence/`](ab-evidence/): the ground truth and one JSON per
+run (run row, findings, trace stats, `skill_blocks`, prompt hashes, live log,
+raw model output). It contains no prompts, keys or credentials. There are no UI
+screenshots for the A/B runs: opening the PR pages would have synced every open
+PR into the development database.
