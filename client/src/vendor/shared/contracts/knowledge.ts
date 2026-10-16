@@ -134,13 +134,25 @@ export const Skill = z.object({
 });
 export type Skill = z.infer<typeof Skill>;
 
-// POST /skills — a new skill starts at version 1.
+// POST /skills — a new skill starts at version 1. Clients only create MANUAL
+// skills: imported / extracted / community sources are set by the server's own
+// import and conventions paths, so a client cannot label its own text as an
+// import. Text fields pass the same executable-content check as imports
+// (`safeText` is defined below; the wrapper defers the lookup to parse time).
 export const SkillCreate = z.object({
   name: z.string().trim().min(1).max(120),
-  description: z.string().max(2000).default(''),
+  description: z
+    .string()
+    .max(2000)
+    .superRefine((s, ctx) => safeText(s, ctx))
+    .default(''),
   type: SkillType,
-  source: SkillSource.default('manual'),
-  body: z.string().min(1).max(200_000),
+  source: z.literal('manual').default('manual'),
+  body: z
+    .string()
+    .min(1)
+    .max(200_000)
+    .superRefine((s, ctx) => safeText(s, ctx)),
   enabled: z.boolean().default(true),
   evidence_files: z.array(z.string().max(500)).max(100).nullish(),
 });
@@ -150,9 +162,16 @@ export type SkillCreate = z.infer<typeof SkillCreate>;
 export const SkillUpdate = z
   .object({
     name: z.string().trim().min(1).max(120),
-    description: z.string().max(2000),
+    description: z
+      .string()
+      .max(2000)
+      .superRefine((s, ctx) => safeText(s, ctx)),
     type: SkillType,
-    body: z.string().min(1).max(200_000),
+    body: z
+      .string()
+      .min(1)
+      .max(200_000)
+      .superRefine((s, ctx) => safeText(s, ctx)),
     enabled: z.boolean(),
     evidence_files: z.array(z.string().max(500)).max(100).nullable(),
   })
@@ -210,8 +229,10 @@ const UNSAFE_CHARS_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2
 const EXECUTABLE_PATTERNS: readonly (readonly [RegExp, string])[] = [
   [/<\s*script\b/i, '<script> tag'],
   [/<\s*(?:iframe|frame|frameset|object|embed|applet)\b/i, 'embedded frame or object'],
-  [/<\s*meta\b[^>]*http-equiv/i, '<meta http-equiv>'],
-  [/<[a-z][^>]*[\s/]on[a-z]+\s*=/i, 'inline event handler (on…=)'],
+  // Bounded tag windows: an unbounded [^>]* backtracks quadratically on a long
+  // run of "<a" with no ">" (event-loop DoS on a large upload).
+  [/<\s*meta\b[^>\n]{0,500}?http-equiv/i, '<meta http-equiv>'],
+  [/<[a-z][^>\n]{0,500}?[\s/]on[a-z]+\s*=/i, 'inline event handler (on…=)'],
   [/\b(?:javascript|vbscript)\s*:/i, 'script URL'],
   [/\bdata\s*:\s*text\/html/i, 'data:text/html URL'],
 ];
@@ -228,7 +249,12 @@ export function findExecutableContent(text: string): string | null {
   return null;
 }
 
+/** Longest text any schema accepts (a skill body); longer input already fails `.max()`. */
+const SAFE_TEXT_MAX = 200_000;
+
 const safeText = (s: string, ctx: z.RefinementCtx) => {
+  // Zod still runs refinements after `.max()` failed: never scan oversized input.
+  if (s.length > SAFE_TEXT_MAX) return;
   if (UNSAFE_CHARS_RE.test(s)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Contains control or bidi characters' });
   const exec = findExecutableContent(s);
   if (exec) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Executable content is not allowed (${exec}); put examples in code spans` });

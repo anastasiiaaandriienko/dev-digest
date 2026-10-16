@@ -194,4 +194,31 @@ d('Skills CRUD (Testcontainers pg)', () => {
     expect((await app.inject({ method: 'PUT', url: `/skills/${skill.id}`, payload: {} })).statusCode).toBe(422);
     expect((await app.inject({ method: 'PUT', url: `/skills/${skill.id}`, payload: { body: '' } })).statusCode).toBe(422);
   });
+
+  it('a client creates only manual skills, and executable content is refused on create and update', async () => {
+    const asImport = await app.inject({
+      method: 'POST',
+      url: '/skills',
+      payload: { name: 'fake-import', type: 'rubric', body: '# x', source: 'imported' },
+    });
+    expect(asImport.statusCode).toBe(422);
+
+    const script = await app.inject({
+      method: 'POST',
+      url: '/skills',
+      payload: { name: 'scripted', type: 'rubric', body: '# x\n<script>alert(1)</script>' },
+    });
+    expect(script.statusCode).toBe(422);
+
+    const skill = await create();
+    const put = await app.inject({
+      method: 'PUT',
+      url: `/skills/${skill.id}`,
+      payload: { body: '# x\n<img src=x onerror=alert(1)>' },
+    });
+    expect(put.statusCode).toBe(422);
+    const [row] = await db().select().from(t.skills).where(eq(t.skills.id, skill.id));
+    expect(row!.body).toBe('# Rule\nv1'); // unchanged
+    expect(row!.version).toBe(1);
+  });
 });
