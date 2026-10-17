@@ -1,0 +1,222 @@
+{
+  "label": "B-skills-on",
+  "pr": {
+    "id": "886a7a27-aba3-4867-9a15-3d9ebb56a42c"
+  },
+  "agent": {
+    "id": "5b50ff0b-325b-438a-84f3-fbdf85ce9d6e",
+    "name": "Test Quality Reviewer",
+    "provider": "openrouter",
+    "model": "deepseek/deepseek-v4-flash",
+    "version": 1
+  },
+  "skill_links": [
+    {
+      "skill_id": "799c14e2-3e94-4c3e-b883-3fd1e615e0e5",
+      "enabled": true
+    }
+  ],
+  "agent_run": {
+    "run_id": "a0399001-7999-4cff-81f7-9768a1905ee2",
+    "agent_id": "5b50ff0b-325b-438a-84f3-fbdf85ce9d6e",
+    "agent_name": "Test Quality Reviewer",
+    "provider": "openrouter",
+    "model": "deepseek/deepseek-v4-flash",
+    "status": "done",
+    "error": null,
+    "duration_ms": 49945,
+    "tokens_in": 6083,
+    "tokens_out": 4931,
+    "findings_count": 4,
+    "grounding": "4/4 passed",
+    "ran_at": "2026-10-17T12:40:59.810Z",
+    "score": 70,
+    "blockers": 0,
+    "cost_usd": 0.0002879667
+  },
+  "review": {
+    "id": "5f5c152d-eeec-49ba-bbeb-b27c2ce51210",
+    "verdict": "request_changes",
+    "score": 70,
+    "model": "deepseek/deepseek-v4-flash",
+    "summary": "The tests for the new skill budget helpers cover only the happy path and miss several important cases: input validation for fitSkillsToBudget, the missing-skill error path in loadSkillBodies, and the skip-and-fit algorithm logic. Additionally, the loadSkillBodies test makes a weak assertion. These gaps mean that realistic bugs (invalid budget, missing skills, broken algorithm) would not be caught."
+  },
+  "findings": [
+    {
+      "severity": "SUGGESTION",
+      "category": "test",
+      "file": "server/src/modules/skills/budget.ts",
+      "start_line": 20,
+      "end_line": 21,
+      "confidence": 0.8,
+      "title": "Missing test for skip-and-fit logic in fitSkillsToBudget",
+      "rationale": "The algorithm skips an enabled skill that exceeds remaining budget but may include a smaller one later. The test only has one enabled skill that fits; it does not verify this behavior.",
+      "suggestion": "Add a test with a large skill that does not fit and a smaller one that does, e.g. [{id:'big', tokens:200, enabled:true},{id:'small', tokens:50, enabled:true}] with budget 100 -> expected ['small']."
+    },
+    {
+      "severity": "WARNING",
+      "category": "test",
+      "file": "server/src/modules/skills/budget.ts",
+      "start_line": 14,
+      "end_line": 14,
+      "confidence": 0.9,
+      "title": "Untested input validation in fitSkillsToBudget",
+      "rationale": "The guard at line 14 throws RangeError for non-positive or non-integer budget. No test exercises this path. A regression that removes or inverts the guard would go unnoticed.",
+      "suggestion": "Add tests with budget = 0, -1, 1.5 expecting RangeError."
+    },
+    {
+      "severity": "WARNING",
+      "category": "test",
+      "file": "server/src/modules/skills/budget.ts",
+      "start_line": 35,
+      "end_line": 35,
+      "confidence": 0.9,
+      "title": "Untested error path in loadSkillBodies",
+      "rationale": "At line 35, if repo.getBody returns undefined, a NotFoundError is thrown. The test only supplies a mock that always returns '# x', so the error path is never exercised.",
+      "suggestion": "Add a test where repo.getBody returns undefined for one id, then await expect(loadSkillBodies(...)).rejects.toThrow(NotFoundError)."
+    },
+    {
+      "severity": "SUGGESTION",
+      "category": "test",
+      "file": "server/test/skills-budget.test.ts",
+      "start_line": 19,
+      "end_line": 19,
+      "confidence": 0.8,
+      "title": "Weak assertion in loadSkillBodies test",
+      "rationale": "The test only checks that `bodies` is defined. A wrong implementation (e.g., returning a map with a different key or no value) would still pass.",
+      "suggestion": "Assert the actual content: `expect(bodies.get('a')).toBe('# x')` and verify map size."
+    }
+  ],
+  "trace": {
+    "stats": {
+      "cost_usd": 0.0002879667,
+      "findings": 4,
+      "grounding": "4/4 passed",
+      "tokens_in": 6083,
+      "tokens_out": 4931,
+      "duration_ms": 49945
+    },
+    "config": {
+      "pr": 5,
+      "agent": "Test Quality Reviewer",
+      "model": "deepseek/deepseek-v4-flash",
+      "source": "local",
+      "version": "1",
+      "provider": "openrouter"
+    },
+    "tool_calls": [
+      {
+        "ms": 49945,
+        "args": "all files",
+        "meta": "single-pass",
+        "tool": "review_file"
+      }
+    ],
+    "prompt_assembly": {
+      "skill_blocks": [
+        {
+          "name": "test-quality",
+          "order": 0,
+          "tokens": 1781,
+          "version": 1,
+          "skill_id": "799c14e2-3e94-4c3e-b883-3fd1e615e0e5"
+        }
+      ],
+      "skills_tokens": 1854,
+      "pr_description": "Do not merge — test pull request used for reviewer evaluation.",
+      "system_chars": 9066,
+      "user_chars": 9521,
+      "system_md5": "57742d4024e600e2d6e44b3b974ba5ec",
+      "system_without_skills_md5": "ac042498d42a9fbb9a861919cd31760a",
+      "user_md5": "b9909e905e9720b57b4c8c42a984d1ea"
+    },
+    "log": [
+      {
+        "t": "15:40:59",
+        "msg": "Loading PR diff…",
+        "kind": "tool"
+      },
+      {
+        "t": "15:40:59",
+        "msg": "Loading PR diff done (42ms)",
+        "kind": "tool"
+      },
+      {
+        "t": "15:40:59",
+        "msg": "Diff ready — 2 changed file(s); starting 1 agent run(s)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:59",
+        "msg": "intent: resolving PR intent…",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:59",
+        "msg": "intent: resolving PR intent done (8ms)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:59",
+        "msg": "intent: reused stored intent (no model call)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:59",
+        "msg": "intent: attached (confidence=medium, policy=inform)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:59",
+        "msg": "Starting review with agent \"Test Quality Reviewer\" (openrouter/deepseek/deepseek-v4-flash)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:59",
+        "msg": "Resolving openrouter provider…",
+        "kind": "tool"
+      },
+      {
+        "t": "15:40:59",
+        "msg": "Resolving openrouter provider done (0ms)",
+        "kind": "tool"
+      },
+      {
+        "t": "15:40:59",
+        "msg": "repo map: 1500 token(s) attached (cached=true)",
+        "kind": "info"
+      },
+      {
+        "t": "15:41:00",
+        "msg": "skills: applied 1 — test-quality v1 (1854 tokens)",
+        "kind": "info"
+      },
+      {
+        "t": "15:41:00",
+        "msg": "Reviewing 2 changed file(s) in one pass",
+        "kind": "info"
+      },
+      {
+        "t": "15:41:00",
+        "msg": "Reviewing all files in one pass",
+        "kind": "tool"
+      },
+      {
+        "t": "15:41:49",
+        "msg": "all files: 4 candidate finding(s)",
+        "kind": "result"
+      },
+      {
+        "t": "15:41:49",
+        "msg": "Reduced to 4 finding(s); verdict=request_changes, score=60",
+        "kind": "result"
+      },
+      {
+        "t": "15:41:49",
+        "msg": "Citation grounding: 4/4 passed",
+        "kind": "result"
+      }
+    ]
+  },
+  "raw_output": "{\n  \"verdict\": \"request_changes\",\n  \"summary\": \"The tests for the new skill budget helpers cover only the happy path and miss several important cases: input validation for fitSkillsToBudget, the missing-skill error path in loadSkillBodies, and the skip-and-fit algorithm logic. Additionally, the loadSkillBodies test makes a weak assertion. These gaps mean that realistic bugs (invalid budget, missing skills, broken algorithm) would not be caught.\",\n  \"score\": 60,\n  \"findings\": [\n    {\n      \"id\": \"T001\",\n      \"severity\": \"WARNING\",\n      \"category\": \"test\",\n      \"title\": \"Untested input validation in fitSkillsToBudget\",\n      \"file\": \"server/src/modules/skills/budget.ts\",\n      \"start_line\": 14,\n      \"end_line\": 14,\n      \"rationale\": \"The guard at line 14 throws RangeError for non-positive or non-integer budget. No test exercises this path. A regression that removes or inverts the guard would go unnoticed.\",\n      \"suggestion\": \"Add tests with budget = 0, -1, 1.5 expecting RangeError.\",\n      \"confidence\": 0.9,\n      \"kind\": \"finding\",\n      \"trifecta_components\": null,\n      \"evidence\": null\n    },\n    {\n      \"id\": \"T002\",\n      \"severity\": \"WARNING\",\n      \"category\": \"test\",\n      \"title\": \"Untested error path in loadSkillBodies\",\n      \"file\": \"server/src/modules/skills/budget.ts\",\n      \"start_line\": 35,\n      \"end_line\": 35,\n      \"rationale\": \"At line 35, if repo.getBody returns undefined, a NotFoundError is thrown. The test only supplies a mock that always returns '# x', so the error path is never exercised.\",\n      \"suggestion\": \"Add a test where repo.getBody returns undefined for one id, then await expect(loadSkillBodies(...)).rejects.toThrow(NotFoundError).\",\n      \"confidence\": 0.9,\n      \"kind\": \"finding\",\n      \"trifecta_components\": null,\n      \"evidence\": null\n    },\n    {\n      \"id\": \"T003\",\n      \"severity\": \"SUGGESTION\",\n      \"category\": \"test\",\n      \"title\": \"Missing test for skip-and-fit logic in fitSkillsToBudget\",\n      \"file\": \"server/src/modules/skills/budget.ts\",\n      \"start_line\": 20,\n      \"end_line\": 21,\n      \"rationale\": \"The algorithm skips an enabled skill that exceeds remaining budget but may include a smaller one later. The test only has one enabled skill that fits; it does not verify this behavior.\",\n      \"suggestion\": \"Add a test with a large skill that does not fit and a smaller one that does, e.g. [{id:'big', tokens:200, enabled:true},{id:'small', tokens:50, enabled:true}] with budget 100 -> expected ['small'].\",\n      \"confidence\": 0.8,\n      \"kind\": \"finding\",\n      \"trifecta_components\": null,\n      \"evidence\": null\n    },\n    {\n      \"id\": \"T004\",\n      \"severity\": \"SUGGESTION\",\n      \"category\": \"test\",\n      \"title\": \"Weak assertion in loadSkillBodies test\",\n      \"file\": \"server/test/skills-budget.test.ts\",\n      \"start_line\": 19,\n      \"end_line\": 19,\n      \"rationale\": \"The test only checks that `bodies` is defined. A wrong implementation (e.g., returning a map with a different key or no value) would still pass.\",\n      \"suggestion\": \"Assert the actual content: `expect(bodies.get('a')).toBe('# x')` and verify map size.\",\n      \"confidence\": 0.8,\n      \"kind\": \"finding\",\n      \"trifecta_components\": null,\n      \"evidence\": null\n    }\n  ]\n}"
+}

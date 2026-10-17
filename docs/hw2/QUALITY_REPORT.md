@@ -69,7 +69,7 @@ what was **not** done or **not** demonstrated is listed explicitly at the end.
 | Create skill | `repo-conventions` (convention, extracted, v1, enabled) from the 7 accepted rules, attached to **General Reviewer** |
 | API Contract Reviewer | 4 imported skills attached in order, all enabled; switched to `openrouter/deepseek/deepseek-v4-flash` for the A/B experiment |
 | A/B experiment (skills off vs on) | draft test PR [#3](https://github.com/anastasiiaaandriienko/dev-digest/pull/3) (3 breaking changes + 1 non-breaking decoy, ground truth fixed beforehand), same SHA `109471f`, same model and prompt: **A (skills off) 0 / 3 found, 1 false positive, $0.00120**; **B (skills on) 3 / 3 found, 0 false positives, $0.00206**. Full report: [`AB_EXPERIMENT.md`](AB_EXPERIMENT.md) |
-| Test Quality Reviewer A/B (skill off vs on) | **not run yet** (paid LLM calls + DB writes need approval). Prepared: idempotent agent+skill setup (`server/src/db/seed-test-quality.ts`), happy-path-only control PR fixture with ground truth, per-arm run script. Report: [`TEST_QUALITY_AB_EXPERIMENT.md`](TEST_QUALITY_AB_EXPERIMENT.md) |
+| Test Quality Reviewer A/B (skill off vs on) | **run 2026-10-17** on draft PR #5 (head `960fa5a`), one run per arm: recall **4/5 in both arms, GT3 missed by both**; no false positives, DECOY not flagged. B (skill on): narrower findings (one GT each, on or within ±2 of the GT line), no off-topic finding, +1854 skills tokens, $0.00028797 vs $0.00018979 per run. Report: [`TEST_QUALITY_AB_EXPERIMENT.md`](TEST_QUALITY_AB_EXPERIMENT.md) |
 | Real review with skills | run B's trace contains `prompt_assembly.skill_blocks` with the 4 skills in order (breaking-change → response-schema → semver-discipline → deprecation-policy) and `skills_tokens = 5090`; run A's trace has none |
 
 Skills CRUD, versioning (v1→v5, Restore → v6), import, agent creation with
@@ -127,7 +127,10 @@ The A/B experiment and a real skills-enabled review are now done (see §2 and
 [`AB_EXPERIMENT.md`](AB_EXPERIMENT.md)). It is one run per arm on one small PR,
 so it is a clear signal rather than a measured rate. One extra pilot run was
 excluded because its PR description leaked the expected answers; the report
-documents it.
+documents it. The Test Quality Reviewer A/B is done too
+([`TEST_QUALITY_AB_EXPERIMENT.md`](TEST_QUALITY_AB_EXPERIMENT.md)): one run per arm on draft PR #5,
+same recall in both arms (4/5, GT3 missed by both), so it shows better-targeted findings,
+not more detections.
 
 ## 7. Evidence
 Screenshots in [`screenshots/`](screenshots/): 01–06 from the isolated test
@@ -140,4 +143,5 @@ A/B evidence in [`ab-evidence/`](ab-evidence/): the ground truth and one JSON pe
 run (run row, findings, trace stats, `skill_blocks`, prompt hashes, live log,
 raw model output). It contains no prompts, keys or credentials. There are no UI
 screenshots for the A/B runs: opening the PR pages would have synced every open
-PR into the development database.
+PR into the development database. The Test Quality Reviewer A/B evidence (same
+format) is in [`test-quality-ab/ab-evidence/`](test-quality-ab/ab-evidence/).
