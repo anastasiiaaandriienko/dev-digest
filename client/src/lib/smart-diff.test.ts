@@ -6,7 +6,7 @@ import {
   defaultGroupOpen,
   type SmartGroupKey,
 } from "./smart-diff";
-import { SMART_CLASSIFICATION_PRIORITY, matchingSmartCategories } from "@devdigest/shared";
+import { SMART_CLASSIFICATION_PRIORITY, matchingSmartCategories } from "@devdigest/shared/smart-diff-rules";
 
 const CASES: [SmartGroupKey, string][] = [
   ["boilerplate", "pnpm-lock.yaml"],

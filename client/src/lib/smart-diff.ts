@@ -3,7 +3,7 @@
    fetching. The classification rules live in the shared module
    (vendor/shared/smart-diff-rules.ts), which the server's
    GET /pulls/:id/smart-diff uses too; this file only groups and re-exports. */
-import { SMART_GROUP_ORDER, classifySmartFile, type SmartGroupKey } from "@devdigest/shared";
+import { SMART_GROUP_ORDER, classifySmartFile, type SmartGroupKey } from "@devdigest/shared/smart-diff-rules";
 
 export { SMART_GROUP_ORDER, type SmartGroupKey };
 
