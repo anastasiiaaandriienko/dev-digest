@@ -1,0 +1,58 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  wrap: { display: "flex", flexDirection: "column", gap: 10 } satisfies CSSProperties,
+  header: (clickable: boolean): CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    padding: "9px 12px",
+    border: "1px solid var(--border)",
+    borderRadius: 7,
+    background: "var(--bg-elevated)",
+    color: "var(--text-primary)",
+    font: "inherit",
+    textAlign: "left",
+    cursor: clickable ? "pointer" : "default",
+  }),
+  chevron: (open: boolean, clickable: boolean): CSSProperties => ({
+    color: "var(--text-muted)",
+    transform: open ? "rotate(90deg)" : "none",
+    transition: "transform .12s",
+    opacity: clickable ? 1 : 0.4,
+    flexShrink: 0,
+  }),
+  square: (color: string): CSSProperties => ({
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    background: color,
+    flexShrink: 0,
+  }),
+  label: { fontSize: 13.5, fontWeight: 700 } satisfies CSSProperties,
+  hint: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12.5,
+    color: "var(--text-muted)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  } satisfies CSSProperties,
+  findingsBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--crit)",
+  } satisfies CSSProperties,
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "var(--crit)",
+  } satisfies CSSProperties,
+  count: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+} as const;

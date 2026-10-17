@@ -43,6 +43,32 @@ function renderModels() {
 /** The FormField block of one feature, found by its label. */
 const row = (label: string) => screen.getByText(label).closest("div")!.parentElement as HTMLElement;
 
+describe("SettingsModels — PR Review · Intent fallback", () => {
+  it("without an override shows the Onboarding-model fallback hint, not 'default gpt-4.1'; nothing is saved", () => {
+    renderModels();
+    const intent = row("PR Review · Intent");
+    expect(within(intent).getByText(/Not set — Intent uses the Onboarding model \(deepseek\/deepseek-v4-flash\)/)).toBeInTheDocument();
+    expect(within(intent).queryByText(messages.models.usingDefault)).toBeNull();
+    expect(within(intent).queryByText("gpt-4.1")).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it("the hint follows an Onboarding override", () => {
+    settings = { feature_models: { onboarding: { provider: "openrouter", model: "z-ai/glm-4.6" } } };
+    renderModels();
+    expect(within(row("PR Review · Intent")).getByText(/Onboarding model \(z-ai\/glm-4\.6\)/)).toBeInTheDocument();
+  });
+
+  it("with an override shows the chosen model and no fallback hint", () => {
+    settings = { feature_models: { review_intent: { provider: "openrouter", model: "minimax/minimax-m2" } } };
+    renderModels();
+    const intent = row("PR Review · Intent");
+    expect(within(intent).getByText(/minimax\/minimax-m2/)).toBeInTheDocument();
+    expect(within(intent).queryByText(/Not set/)).toBeNull();
+    expect(within(intent).queryByText(messages.models.usingDefault)).toBeNull();
+  });
+});
+
 describe("SettingsModels — Conventions", () => {
   it("has a Conventions row showing the registry default until one is chosen", () => {
     renderModels();

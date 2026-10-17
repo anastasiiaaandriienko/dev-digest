@@ -85,6 +85,13 @@
       "when": 1792088748017,
       "tag": "0011_perpetual_spot",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792178057460,
+      "tag": "0012_breezy_genesis",
+      "breakpoints": true
     }
   ]
 }

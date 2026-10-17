@@ -155,6 +155,7 @@ Agents run one after another; one agent failing does not stop the others.
 | `agent_runs` (`src/db/schema/runs.ts`) | `createAgentRun`, `completeAgentRun` | per-run metrics. `status` is free text (no enum or check). **No cost column**: `cost_usd` was dropped by migration `0009`. |
 | `run_traces` | `saveRunTrace` (upsert, PK = run id) | the whole `RunTrace` as one jsonb document |
 | `reviews`, `findings` | `insertReview`, `insertFindings` | verdict, summary, score, model; only findings that passed grounding |
+| `pr_intent` (`src/db/schema/reviews.ts`) | `saveIntent` (conditional upsert, PK = PR id) | stored PR intent, fingerprint, model, prompt version, tokens, cost. See [section 8](#8-pr-intent-l03-intent-block-p1-backend) |
 
 `ReviewRepository` (`src/modules/reviews/repository.ts`) is a facade class over
 the function-style `repository/*.repo.ts` files.
@@ -180,4 +181,149 @@ the function-style `repository/*.repo.ts` files.
 
 - `src/platform/trace-builder.ts`: a zod-validated trace builder, not imported anywhere.
 - `src/platform/model-router.ts`: `routeModel` and `PromptCache`, not imported by the review flow.
-- The `pr_intent` read/write functions in `src/modules/reviews/repository/pull.repo.ts`.
+
+## 8. PR intent (L03 Intent block, P1 backend)
+
+**Implemented.** A short, model-generated statement of what a PR is for. It is a
+separate flow from review runs: no `agent_runs` row, no `RunBus`, no SSE. Code is in
+`src/modules/reviews/intent/` (`constants`, `failures`, `fingerprint`, `freshness`, `prompt`,
+`model`, `service`) plus `repository/intent.repo.ts`.
+
+### Endpoints (`src/modules/reviews/routes.ts:135-148`)
+
+| Route | Behaviour |
+|---|---|
+| `GET /pulls/:id/intent` | Returns `PrIntentState`. A pure local read of DB, settings and the secrets store: **no LLM call, no network, no GitHub sync** (`intent/service.ts:126`). Carries `current_model` and `model_error` (the 422 text as data, instead of throwing). |
+| `POST /pulls/:id/intent` body `{force?}` | Returns `PrIntentState` plus `computed` (`false` on a cache hit). Rate limit 10/min. An empty body is accepted (`IntentRunRequest.parse(req.body ?? {})`). |
+
+Errors of `POST` (all messages are fixed; raw provider text is never returned or logged,
+`intent/failures.ts`): `404` for an unknown or foreign-workspace PR; `422
+intent_model_unavailable` when no model is usable; `409 intent_inputs_incomplete` when the
+PR's files are not stored locally and there is no stored intent for the current head (also
+with `force`: it means "ignore the cache", not "accept incomplete input"); `502
+external_service_error` with a fixed message for provider 401/403, 429, invalid output or
+any other provider error; `504 intent_timeout` when this caller's wait (60 s,
+`INTENT_TIMEOUT_MS`) elapsed. The provider call is **not** aborted on `504`: it keeps
+running, its result is still saved and visible via `GET`. On failures the stored intent is
+left unchanged. Failures are logged with safe fields only (error name, HTTP status, short
+code, provider, model, prId).
+
+### Model choice (`intent/model.ts:29`)
+
+1. `settings.feature_models.review_intent` override, used as-is. If its provider has no
+   key the result is `422`; there is no substitution.
+2. Otherwise the `onboarding` feature model (its override, else its registry default),
+   if its provider has a key. `source` is `fallback_onboarding`.
+3. Otherwise `422` with the hint "Settings > Models > PR Review · Intent".
+
+The registry default of `review_intent` (`openai/gpt-4.1`) is never used. The key check
+is local: `container.llm(provider)` builds the client from the stored key and a
+`ConfigError` means "no key" (`intent/service.ts:60-67`).
+
+### Fingerprint and freshness
+
+- **Fingerprint v1** (`intent/fingerprint.ts:50-68`): sha256 over canonical JSON of
+  `v`, normalized `title` and `body` (CRLF→LF, trimmed), `head_sha`, `base`, and `files`
+  sorted by path, each as `{path, hunks}` where `hunks` are the full `@@ … @@` header
+  lines including function context. `files` is `null` (unknown) whenever no `pr_files`
+  are stored (`knownFiles`): absence of rows never means "no files", because the list sync
+  stores `files_count: 0` for every imported PR. Intents are never computed or saved from
+  an unknown file list.
+- **Model and prompt version are not in the fingerprint.** They are stored in their own
+  columns so staleness can name the reason. Bump `INTENT_PROMPT_VERSION`
+  (`intent/constants.ts:9`, currently `intent-v1`) whenever the prompt or output schema
+  changes.
+- **Freshness** (`intent/freshness.ts:41-54`):
+  - `unknown`: no stored row, or no stale reason but the file data is not synced.
+  - `stale` with reasons `pr_changed` (fingerprint differs; with unknown files only a
+    different `head_sha` counts), `prompt_changed`, `model_changed`. A legacy row with
+    NULL fingerprint or NULL prompt version is stale.
+  - `fresh`: none of the above and files known.
+- **Cache hit** (`isCacheHit`): `POST` without `force` skips the model when the row is
+  `fresh`. With unknown files `POST` never calls the model: a stored intent with the same
+  `head_sha` is returned as-is (`computed: false`, freshness `unknown`), otherwise `409`.
+  `resolveForRun` follows the same rule (stored intent or `null`, never computes).
+
+### Concurrency
+
+```mermaid
+sequenceDiagram
+  participant UI as client
+  participant S as IntentService
+  participant DB as Postgres
+  participant L as LLM provider
+
+  UI->>S: POST /pulls/:id/intent {force?}
+  S->>DB: read PR + files (snapshotAt = now)
+  S->>S: pick model (422 if none), fingerprint
+  alt not force and cache hit
+    S-->>UI: state, computed=false
+  else in-flight key exists
+    S->>S: await the running promise (join)
+    S-->>UI: fresh state, computed=false
+  else
+    S->>L: completeStructured (no DB transaction held)
+    L-->>S: intent + tokens
+    S->>DB: conditional upsert on input_snapshot_at
+    S-->>UI: fresh state, computed=true
+  end
+```
+
+- **Single-flight** (`intent/service.ts`, `inflight` / `run` / `waitFor`): a process-wide
+  map keyed by `prId|fingerprint|provider|model|prompt_version`. The flight is the whole
+  work (LLM call → validate → conditional save) with **no timeout**; each HTTP caller
+  (originator or joiner) waits for it through `withTimeout`. The entry is removed only by
+  the flight's own `finally`, so a retry after a caller timeout joins the running call
+  instead of paying twice, `force` included. A different key computes separately. Single
+  API instance assumed. It does not go through `container.jobs`. There is no true
+  cancellation (that needs an abort signal in reviewer-core); the flight is bounded only by
+  the provider SDK's own timeout/retries.
+- **Provider timeout is disabled on purpose.** The service passes `timeoutMs: 0`
+  (`INTENT_PROVIDER_TIMEOUT_MS`) so the OpenAI/Anthropic adapters skip their outer 60 s
+  `withTimeout` race (`platform/resilience.ts`: `ms <= 0` returns the promise unchanged).
+  Otherwise the flight would settle at 60 s while the SDK request kept running and billing,
+  and a retry after `504` would start a second paid call. Consequence: the provider request
+  may run long (SDK defaults: about 10 min × retries for OpenAI/Anthropic, 90 s × retries
+  for OpenRouter); meanwhile identical requests (including `force`) join it and get `504`
+  until it ends. Cancelling the HTTP wait does **not** cancel the provider request and does
+  not guarantee no billing; real cancellation needs an adapter change (separate approval).
+- **Snapshot at read.** Inputs are read once with `snapshotAt`
+  (`repository/intent.repo.ts:32-42`). The row is saved with the fingerprint of the input
+  actually sent, and `input_snapshot_at = snapshotAt`.
+- **Older never overwrites newer.** `saveIntent` is an `INSERT … ON CONFLICT (pr_id) DO UPDATE`
+  guarded by `input_snapshot_at IS NULL OR input_snapshot_at <= excluded.input_snapshot_at`
+  (`intent.repo.ts:67-91`); it returns `false` when a newer snapshot already holds the row.
+- **No DB transaction** is held across the LLM call.
+- After the call the response is rebuilt from the **current** state, so a PR edited
+  during the call reports `stale` (`pr_changed`) (`service.ts:165-167`).
+
+### Cost
+
+Tokens and cost are stored on `pr_intent` (`tokens_in`, `tokens_out`, `cost_usd`; cost is
+the provider value, else `priceBook.estimate`, `service.ts:206`). They are **not** written
+to `agent_runs` and are not part of run cost.
+
+### Schema
+
+Migration `0012_breezy_genesis.sql` adds to `pr_intent`: `risk_areas` (jsonb, default
+`[]`), `confidence`, `input_fingerprint`, `prompt_version`, `provider`, `model`,
+`head_sha`, `input_snapshot_at`, `generated_at` (default `now()`), `tokens_in`,
+`tokens_out`, `cost_usd`. The contract field `Intent.risk_areas` is optional
+(`vendor/shared/contracts/brief.ts:17`).
+
+### Review prompt integration (P3)
+
+`ReviewService` builds `ReviewRunExecutor` with an `IntentService` (`service.ts`). In `executeRuns`, after
+"Diff ready" and before the agents loop, the executor calls `resolveForRun` **once** for all queued runs
+(`resolveIntent`, `run-executor.ts`). A stored non-stale intent is reused with no model call; otherwise it is
+generated first (the first run can wait for that call before agents start). The result is mapped by
+`toPromptIntent` (`intent/for-run.ts`) and passed to `reviewPullRequest` for every agent; reviewer-core renders
+it as an untrusted `## PR intent` block plus a system policy (see `reviewer-core/docs/architecture.md` §3) and
+records it as `PromptAssembly.intent`. Intent is context only: nothing filters findings by it.
+
+- **Failure is soft.** `null`/throw → `info` line `intent: unavailable — continuing without intent` (+ a server
+  `warn`), prompt unchanged. No `error` event and no provider error text reaches the Live Log.
+- **Cost.** The intent generation is billed to the intent feature (`pr_intent.cost_usd`), not to the review run:
+  `stats.cost_usd` and token counts come only from the review calls. The Live Log says `billed separately`.
+- **No resolver** (3-arg construction, e.g. in tests) → the step is skipped entirely.
+- Only explicit Run Review reaches this path (`executeRuns`); opening a PR page never starts a model call.

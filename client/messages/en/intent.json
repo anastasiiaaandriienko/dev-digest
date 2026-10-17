@@ -1,0 +1,50 @@
+{
+  "title": "Intent",
+  "loading": "Loading intent…",
+  "loadError": "Couldn't load the intent for this pull request.",
+  "retryLoad": "Retry",
+  "emptyBody": "No intent has been generated for this pull request yet. Intent summarises what the PR is meant to do, what is in and out of scope, and where the risks are.",
+  "willUse": "Will use: {model} ({source})",
+  "sourceOverride": "from Settings",
+  "sourceFallback": "fallback from Onboarding",
+  "modelErrorHint": "Choose a model under Settings → Models → PR Review · Intent.",
+  "settingsLink": "Open Model settings",
+  "runIntent": "Run intent",
+  "recalculate": "Recalculate intent",
+  "running": "Generating intent…",
+  "waitingForPr": "Waiting for PR data…",
+  "costNotice": "May trigger a paid LLM call.",
+  "summary": "Summary",
+  "inScope": "In scope",
+  "outOfScope": "Out of scope",
+  "riskAreas": "Risk areas",
+  "none": "None listed",
+  "metaModel": "Generated with: {model}",
+  "recalcWillUse": "Recalculate will use: {model} ({source})",
+  "recalcUnavailable": "Recalculate is unavailable until a model is available.",
+  "modelErrorFallback": "No model could be resolved for Intent.",
+  "metaCost": "Cost: {cost}",
+  "metaGenerated": "Generated {time}",
+  "metaHead": "computed for head {sha}",
+  "freshness": {
+    "fresh": "Up to date",
+    "stale": "Stale",
+    "unknown": "Freshness unknown — PR files not synced locally"
+  },
+  "staleReasons": {
+    "pr_changed": "PR changed",
+    "model_changed": "Model changed",
+    "prompt_changed": "Prompt changed"
+  },
+  "errors": {
+    "inputs_incomplete": "The PR's files are not synced locally yet. Open or refresh the pull request, then try again.",
+    "model_unavailable": "No model is configured for Intent. Choose one in Settings → Models → PR Review · Intent.",
+    "rate_limited": "Too many requests. Wait a minute and try again.",
+    "provider_error": "The model provider returned an error. Try again, or choose another model in Settings.",
+    "timeout": "Generation is still running on the server and may complete. Refresh the status in a moment.",
+    "save_failed": "The intent was generated but could not be saved. Try again.",
+    "not_found": "This pull request could not be found.",
+    "unknown": "Something went wrong while generating the intent. Try again."
+  },
+  "refreshStatus": "Refresh status"
+}

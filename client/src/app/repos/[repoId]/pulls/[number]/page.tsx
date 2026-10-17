@@ -24,10 +24,12 @@ import {
   usePrRuns,
   useDeleteRun,
   useRefreshCostOnRunSettled,
+  useRefreshReviewsOnRunsSettled,
 } from "../../../../../lib/hooks/reviews";
 import { useActiveRepo, useRepoNotFound } from "../../../../../lib/repo-context";
 import { ApiError } from "../../../../../lib/api";
 import { githubPrUrl } from "../../../../../lib/github-urls";
+import { inlineReviews } from "../../../../../lib/findings";
 import type { FindingRecord } from "@devdigest/shared";
 
 export default function PRDetailPage() {
@@ -53,6 +55,9 @@ export default function PRDetailPage() {
   const { data: prRuns } = usePrRuns(prId);
   // L01: a run settling refreshes the PR list cost total and its trace.
   useRefreshCostOnRunSettled(prRuns, repoId);
+  // A run leaving the active set refreshes findings on any tab (inline findings
+  // on Files changed included), not only where the SSE stream is subscribed.
+  useRefreshReviewsOnRunsSettled(activeRuns, prId, repoId);
   const deleteRun = useDeleteRun(prId, repoId);
   const liveRunIds = (activeRuns ?? []).map((r) => r.run_id);
   const reviewRunning = liveRunIds.length > 0;
@@ -82,6 +87,20 @@ export default function PRDetailPage() {
     () => runs.flatMap((r) => r.findings),
     [reviews],
   );
+  // Inline diff findings: the latest completed review of each agent (as counted
+  // on the PR list); never merged across agents. Derived from loaded data only.
+  const prMeta = pulls?.find((p) => p.number === Number(number));
+  const findingsSummary = prMeta?.findings_summary;
+  const { diffFindings, agentNames } = React.useMemo(() => {
+    const picked = inlineReviews(reviews, findingsSummary);
+    return {
+      diffFindings: picked.flatMap((r) => r.findings),
+      agentNames: Object.fromEntries(picked.map((r) => [r.id, r.agent_name ?? null])) as Record<
+        string,
+        string | null
+      >,
+    };
+  }, [reviews, findingsSummary]);
   const lethalTrifecta = allFindings.filter((f) => f.kind === "lethal_trifecta");
   const findingsCount = allFindings.length;
 
@@ -143,7 +162,7 @@ export default function PRDetailPage() {
       />
 
       <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
-        {tab === "overview" && <OverviewTab prBody={pr.body} />}
+        {tab === "overview" && <OverviewTab prBody={pr.body} prId={prId} />}
 
         {tab === "findings" && (
           <FindingsTab
@@ -177,6 +196,10 @@ export default function PRDetailPage() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            findings={diffFindings}
+            agentNames={agentNames}
+            repoFullName={repoFullName}
+            headSha={pr.head_sha}
           />
         )}
       </div>

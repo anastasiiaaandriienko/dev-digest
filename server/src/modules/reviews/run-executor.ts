@@ -1,6 +1,6 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import type { PrIntentState, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import { reviewPullRequest, countBlockers, type PromptIntent } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -8,6 +8,13 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { RECONCILE_DEADLINE_MS, REVIEW_STRATEGY } from './constants.js';
 import { appliedSkillsLine, planSkills, taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import {
+  INTENT_UNAVAILABLE_LINE,
+  intentAttachedLine,
+  intentSourceLine,
+  toPromptIntent,
+  type IntentResolver,
+} from './intent/for-run.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -63,8 +70,8 @@ export type RunOutcome = {
 
 /**
  * Owns the background execution of queued agent runs (extracted from
- * ReviewService; behaviour unchanged). Loads the diff + intent once, then
- * map-reduces each agent, streaming events over the runBus and persisting each
+ * ReviewService; behaviour unchanged). Loads the diff once and (when an intent
+ * resolver is wired) resolves the PR intent once, then runs each agent, streaming events over the runBus and persisting each
  * review. Per-agent failures are isolated.
  */
 export class ReviewRunExecutor {
@@ -72,12 +79,15 @@ export class ReviewRunExecutor {
     private container: Container,
     private repo: ReviewRepository,
     private agents: Container['agentsRepo'],
+    /** Optional L03 intent source; absent → no intent step, prompt unchanged. */
+    private intent?: IntentResolver,
   ) {}
 
   /**
    * Background execution of the queued agent runs (NOT awaited by the route).
-   * Loads the diff + intent once, then map-reduces each agent, streaming events
-   * over the runBus and persisting each review. Per-agent failures are isolated.
+   * Loads the diff once and resolves the PR intent once (when wired), then runs
+   * each agent, streaming events over the runBus and persisting each review.
+   * Per-agent failures are isolated.
    */
   async executeRuns(
     workspaceId: string,
@@ -86,8 +96,8 @@ export class ReviewRunExecutor {
     jobs: { agent: AgentRow; runId: string }[],
     logger?: Logger,
   ): Promise<void> {
-    // ONE logger fanned out over every queued run: shared pre-work (diff +
-    // intent) is streamed into each target agent's Live Log and persisted into
+    // ONE logger fanned out over every queued run: shared pre-work (diff and,
+    // when wired, intent) is streamed into each target agent's Live Log and persisted into
     // each run's trace. Per-agent work below narrows it to a single run.
     const runLog = new RunLogger(
       this.container.runBus,
@@ -129,6 +139,18 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // L03 — resolve the PR intent ONCE for all queued runs. Best-effort: the
+    // resolver never throws, and any failure just means "no intent". Only 'info'
+    // lines are written (an 'error' line would read as a failed run in the UI),
+    // and never the provider's error text.
+    // Skipped when every run is already cancelled: no point paying for it.
+    let promptIntent: PromptIntent | null = null;
+    if (this.intent && jobs.every((j) => this.container.runBus.isCancelled(j.runId))) {
+      runLog.info('intent: skipped — run cancelled');
+    } else {
+      promptIntent = await this.resolveIntent(workspaceId, pull, runLog, logger);
+    }
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -136,7 +158,16 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(
+          workspaceId,
+          pull,
+          repo,
+          diff,
+          agent,
+          runId,
+          runLog,
+          promptIntent,
+        );
         logger?.info(
           {
             runId,
@@ -159,6 +190,40 @@ export class ReviewRunExecutor {
     }
   }
 
+  /**
+   * The PR intent for the prompt, or null. Skipped entirely (no log lines) when
+   * no resolver is wired. The model call, if any, is billed to the intent
+   * feature, not to these runs.
+   */
+  private async resolveIntent(
+    workspaceId: string,
+    pull: PullRow,
+    runLog: RunLogger,
+    logger?: Logger,
+  ): Promise<PromptIntent | null> {
+    const resolver = this.intent;
+    if (!resolver) return null;
+    const label = 'intent: resolving PR intent';
+    const t0 = Date.now();
+    runLog.info(`${label}…`);
+    let state: PrIntentState | null;
+    try {
+      state = await resolver.resolveForRun(workspaceId, pull.id, logger);
+    } catch {
+      state = null; // contract says it never throws; stay defensive, log nothing from the error
+    }
+    runLog.info(`${label} done (${Date.now() - t0}ms)`);
+    const promptIntent = toPromptIntent(state);
+    if (!state || !promptIntent) {
+      runLog.info(INTENT_UNAVAILABLE_LINE);
+      logger?.warn({ prId: pull.id }, 'review: intent unavailable');
+      return null;
+    }
+    runLog.info(intentSourceLine(state));
+    runLog.info(intentAttachedLine(promptIntent));
+    return promptIntent;
+  }
+
   /** Execute a single agent's review against a PR, streaming progress. */
   private async runOneAgent(
     workspaceId: string,
@@ -168,10 +233,11 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    promptIntent: PromptIntent | null = null,
   ): Promise<RunOutcome> {
     const start = Date.now();
-    // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
-    // events are already in this run's buffer, so the persisted trace below
+    // Narrow the fanned-out pre-work logger to THIS run; the shared diff (and
+    // intent, when wired) events are already in this run's buffer, so the persisted trace below
     // (built from the buffer) includes them too.
     const runLog = parentLog.forRun(runId, { agent: agent.name });
 
@@ -237,6 +303,9 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // L03 — AI-generated PR intent (context only; reviewer-core never filters
+        // findings by it). Omitted when unavailable → prompt unchanged.
+        ...(promptIntent ? { intent: promptIntent } : {}),
         // Skills go into the SYSTEM message in this order (omitted when none).
         ...(skillPlan.prompt.length > 0 ? { skills: skillPlan.prompt } : {}),
         task,
@@ -275,6 +344,7 @@ export class ReviewRunExecutor {
           findings: keptFindings.length,
           grounding,
           // reviewer-core's figure as is: a number, or null when unknown (never 0).
+          // Excludes the intent generation call (billed separately, see the Live Log).
           cost_usd: costUsd,
         },
         prompt_assembly: {
@@ -294,7 +364,7 @@ export class ReviewRunExecutor {
         memory_pulled: [],
         specs_read: [],
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
-        // diff load + intent), not just events recorded inside this method.
+        // diff load, intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
       };
 

@@ -16,6 +16,7 @@ import type {
 // The CLIENT's lifecycle-phase classifier (pure, import-free). Pinning it here
 // against the messages the real executor + reviewer-core emit means a server
 // wording change breaks this test instead of silently breaking the UI stepper.
+import type { IntentResolver } from '../src/modules/reviews/intent/for-run.js';
 import { phasesFrom } from '../../client/src/lib/run-phases.js';
 import { DIFF, REVIEW_FIXTURE, agentRow, pullRow, repoRow } from './helpers/run-cost-fixtures.js';
 
@@ -90,7 +91,7 @@ function setup(o: {
     ...(o.repoIntel ? { repoIntel: o.repoIntel as never } : {}),
   });
   const fake = fakeRepo({ finalize: o.finalize, prFilesError: o.prFilesError });
-  const executor = new ReviewRunExecutor(container, fake.repo, NO_SKILLS);
+  const executor = new ReviewRunExecutor(container, fake.repo, NO_SKILLS, o.intent);
   const runId = randomUUID();
   const lines = () => container.runBus.buffer(runId).map((e) => ({ kind: e.kind, msg: e.msg }));
   const run = () => executor.executeRuns('ws', pullRow(), repoRow(), [{ agent: agentRow(o.agent), runId }]);
@@ -119,6 +120,32 @@ describe('lifecycle phases from REAL executor + reviewer-core events', () => {
     const persisted = s.finalizeInputs[0]!.trace.log;
     expect(code(phasesFrom(persisted, 'done'))).toBe('CSCCC');
     expect(code(phasesFrom(persisted, 'running'))).toBe('CSCCA');
+  });
+
+  it('L03 intent lines (resolver wired) do not create or change phases; unavailable/skipped intent is not a failure', async () => {
+    const state = {
+      pr_id: 'p', intent: { intent: 'Adds retry', in_scope: ['retry'], out_of_scope: [], risk_areas: [] },
+      meta: { provider: null, model: null, prompt_version: null, confidence: 'high', generated_at: 'x', head_sha: null,
+        input_snapshot_at: null, tokens_in: null, tokens_out: null, cost_usd: 1 },
+      freshness: 'fresh', stale_reasons: [], current_model: null, computed: true,
+    };
+    const resolvers: IntentResolver[] = [
+      { resolveForRun: async () => state as never },
+      { resolveForRun: async () => null },
+    ];
+    const baseline = setup();
+    await baseline.run();
+    for (const intent of resolvers) {
+      const s = setup({ intent });
+      await s.run();
+      expect(s.lines().some((l) => l.msg.startsWith('intent: '))).toBe(true);
+      expect(s.lines().some((l) => l.kind === 'error')).toBe(false);
+      expect(code(phasesFrom(s.lines()))).toBe('CSCCC');
+      expect(phasesFrom(s.lines()).outcome).toBe('done');
+      expect(phasesFrom(s.lines()).phases.map((p) => p.state)).toEqual(
+        phasesFrom(baseline.lines()).phases.map((p) => p.state),
+      );
+    }
   });
 
   it('map-reduce: file progress comes from the real map events', async () => {

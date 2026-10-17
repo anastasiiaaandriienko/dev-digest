@@ -108,6 +108,45 @@ export function useRefreshCostOnRunSettled(
   }, [runs, repoId, qc]);
 }
 
+/** Run ids present in `prev` and absent from `next`; [] while either side is unknown. */
+export function finishedActiveRunIds(
+  prev: ActiveRun[] | null | undefined,
+  next: ActiveRun[] | undefined,
+): string[] {
+  if (!prev || !next) return [];
+  const still = new Set(next.map((r) => r.run_id));
+  return prev.map((r) => r.run_id).filter((id) => !still.has(id));
+}
+
+/**
+ * Refresh findings when a review finishes, whatever tab is open (the SSE stream
+ * only exists on the Findings tab). Completion = a run id that was in the
+ * previous `usePrActiveRuns` data and is gone now. Nothing fires on first load
+ * (no previous data) or while the query is loading (`undefined` resets the
+ * baseline), and each finished run id triggers one invalidation round.
+ */
+export function useRefreshReviewsOnRunsSettled(
+  activeRuns: ActiveRun[] | undefined,
+  prId: string | null | undefined,
+  repoId: string | null | undefined,
+) {
+  const qc = useQueryClient();
+  const prev = React.useRef<{ prId: string | null | undefined; runs: ActiveRun[] | undefined }>({
+    prId,
+    runs: undefined,
+  });
+  React.useEffect(() => {
+    // A different PR starts with no baseline (its cached runs must not look like "finished").
+    const base = prev.current.prId === prId ? prev.current.runs : undefined;
+    const finished = finishedActiveRunIds(base, activeRuns);
+    prev.current = { prId, runs: activeRuns };
+    if (finished.length === 0) return;
+    qc.invalidateQueries({ queryKey: ["reviews", prId] });
+    qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
+    qc.invalidateQueries({ queryKey: pullsKey(repoId) });
+  }, [activeRuns, prId, repoId, qc]);
+}
+
 /** Request cancellation of an in-flight run (takes effect at the next step). */
 export function useCancelRun() {
   return useMutation({

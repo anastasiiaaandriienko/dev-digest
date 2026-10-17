@@ -6,10 +6,15 @@ import { z } from 'zod';
  */
 
 // ---- Intent ----
+export const IntentConfidence = z.enum(['high', 'medium', 'low']);
+export type IntentConfidence = z.infer<typeof IntentConfidence>;
+
 export const Intent = z.object({
   intent: z.string(),
   in_scope: z.array(z.string()),
   out_of_scope: z.array(z.string()),
+  // Optional so payloads persisted before L03 (no risk areas) still parse.
+  risk_areas: z.array(z.string()).optional(),
 });
 export type Intent = z.infer<typeof Intent>;
 
