@@ -1,4 +1,4 @@
-import type { IntentModelInfo, PrIntentState } from '@devdigest/shared';
+import type { GitHubClient, IntentModelInfo, PrIntentState } from '@devdigest/shared';
 import type { Container } from '../../../platform/container.js';
 import { ConfigError, NotFoundError } from '../../../platform/errors.js';
 import { TimeoutError, withTimeout } from '../../../platform/resilience.js';
@@ -8,6 +8,7 @@ import type { IntentInputs, IntentRow, SaveIntentValues } from '../repository/in
 import {
   INTENT_FALLBACK_FEATURE_ID,
   INTENT_FEATURE_ID,
+  INTENT_ISSUE_FETCH_TIMEOUT_MS,
   INTENT_MODEL_SETTINGS_HINT,
   INTENT_PROMPT_VERSION,
   INTENT_PROVIDER_TIMEOUT_MS,
@@ -24,6 +25,19 @@ import { computeFingerprint, knownFiles, type IntentFileInput } from './fingerpr
 import { evaluateFreshness, isCacheHit, toIntent, toMeta, type CurrentIntentInput } from './freshness.js';
 import { IntentModelUnavailableError, pickIntentModel } from './model.js';
 import { buildIntentMessages, IntentGeneration, normalizeGeneration, SCHEMA_NAME } from './prompt.js';
+import {
+  buildLocalContext,
+  contextSources,
+  issuesKey,
+  localContextFingerprint,
+  storedIssuesKey,
+  toContextSources,
+  type IntentContext,
+  type IssueResult,
+} from './context.js';
+
+/** The current PR input as compared with the stored row, plus what the prompt needs. */
+type CurrentInput = CurrentIntentInput & { files: IntentFileInput[] | null; context: IntentContext };
 
 /** The slice of `ReviewRepository` the intent service needs (a fake in unit tests). */
 export interface IntentStore {
@@ -38,6 +52,8 @@ export interface IntentServiceOptions {
   pickModel?: (workspaceId: string) => Promise<IntentModelInfo>;
   /** How long one HTTP caller waits for the flight (default INTENT_TIMEOUT_MS). The flight itself has no timeout. */
   timeoutMs?: number;
+  /** Test seam: replaces `container.github()` for linked-issue lookups. */
+  github?: () => Promise<Pick<GitHubClient, 'getIssue'>>;
 }
 
 /**
@@ -52,8 +68,9 @@ const inflight = new Map<string, Promise<void>>();
 /** Count of settled flights; lets `run` detect a flight that finished (and saved) during its cache read. */
 let settledFlights = 0;
 
-export function intentFlightKey(prId: string, fingerprint: string, model: IntentModelInfo): string {
-  return [prId, fingerprint, model.provider, model.model, INTENT_PROMPT_VERSION].join('|');
+/** `contextKey` = `issuesKey` of the fetched linked issues ('' when none), so changed issue text is new work. */
+export function intentFlightKey(prId: string, fingerprint: string, model: IntentModelInfo, contextKey = ''): string {
+  return [prId, fingerprint, model.provider, model.model, INTENT_PROMPT_VERSION, contextKey].join('|');
 }
 
 /**
@@ -108,7 +125,7 @@ export class IntentService {
     return inputs;
   }
 
-  private current(inputs: IntentInputs, model: IntentModelInfo | null): CurrentIntentInput & { files: IntentFileInput[] | null } {
+  private current(inputs: IntentInputs, model: IntentModelInfo | null): CurrentInput {
     const all: IntentFileInput[] = inputs.files.map((f) => ({
       path: f.path,
       additions: f.additions,
@@ -116,14 +133,17 @@ export class IntentService {
       patch: f.patch,
     }));
     const files = knownFiles(all);
+    // Local only: refs parsed from the description + planning docs from the stored diff (no GitHub).
+    const context = buildLocalContext(inputs.pull.body, inputs.repo ?? null, inputs.pull.number, files);
     const fingerprint = computeFingerprint({
       title: inputs.pull.title,
       body: inputs.pull.body,
       headSha: inputs.pull.headSha,
       base: inputs.pull.base,
       files,
+      context: localContextFingerprint(context),
     });
-    return { fingerprint, headSha: inputs.pull.headSha, filesKnown: files !== null, model, files };
+    return { fingerprint, headSha: inputs.pull.headSha, filesKnown: files !== null, model, files, context };
   }
 
   private toState(
@@ -141,6 +161,7 @@ export class IntentService {
       stale_reasons,
       current_model: cur.model,
       model_error: modelError,
+      context_sources: row ? toContextSources(row.contextSources) : null,
     };
   }
 
@@ -183,7 +204,13 @@ export class IntentService {
       throw new IntentInputsIncompleteError();
     }
 
-    const key = intentFlightKey(prId, cur.fingerprint, model);
+    // Linked issues are the only context read from GitHub, and only here (POST), never in GET.
+    // Their current text decides the cache too: changed issue content means a new computation.
+    const context: IntentContext = { ...cur.context, issues: await this.fetchIssues(inputs, cur.context.refs.issues) };
+    const contextKey = issuesKey(context.issues);
+    const key = intentFlightKey(prId, cur.fingerprint, model, contextKey);
+    const cacheHit = (row: IntentRow | undefined) =>
+      isCacheHit(row, cur) && storedIssuesKey(row?.contextSources) === contextKey;
     if (!opts.force) {
       // A running identical flight is joined (below) instead of reading the cache. If a flight
       // SETTLES while we read, its save may have missed our read, so the miss is not trusted:
@@ -192,7 +219,7 @@ export class IntentService {
         if (inflight.has(key)) break;
         const settledBefore = settledFlights;
         const row = await this.store.getIntentRow(prId);
-        if (isCacheHit(row, cur)) return { ...this.toState(prId, row, cur, null), computed: false };
+        if (cacheHit(row)) return { ...this.toState(prId, row, cur, null), computed: false };
         if (settledFlights === settledBefore) break;
       }
     }
@@ -201,7 +228,7 @@ export class IntentService {
     let flight = inflight.get(key);
     let computed = false;
     if (!flight) {
-      const own: Promise<void> = this.generate(inputs, cur, model, opts.logger).finally(() => {
+      const own: Promise<void> = this.generate(inputs, { ...cur, context }, model, opts.logger).finally(() => {
         if (inflight.get(key) === own) inflight.delete(key);
         settledFlights += 1;
       });
@@ -215,6 +242,41 @@ export class IntentService {
     // Report against the CURRENT state: a PR edited during the call is stale (pr_changed).
     const fresh = await this.getState(workspaceId, prId);
     return { ...fresh, computed };
+  }
+
+  /**
+   * Fetch the referenced same-repo issues (already capped) through the configured
+   * GitHub client. Never throws and never forwards error text: a missing client /
+   * token marks all of them `github_unavailable`, a 401/403/404/410 marks one
+   * `not_found_or_no_access`, anything else (incl. the per-issue timeout) `fetch_failed`.
+   */
+  private async fetchIssues(inputs: IntentInputs, numbers: number[]): Promise<IssueResult[]> {
+    if (numbers.length === 0) return [];
+    const unavailable = (): IssueResult[] =>
+      numbers.map((number) => ({ number, status: 'unavailable', note: 'github_unavailable' }));
+    const repo = inputs.repo;
+    if (!repo) return unavailable();
+    let github: Pick<GitHubClient, 'getIssue'>;
+    try {
+      github = await (this.opts.github ? this.opts.github() : this.container.github());
+    } catch {
+      return unavailable();
+    }
+    return Promise.all(
+      numbers.map(async (number): Promise<IssueResult> => {
+        try {
+          const issue = await withTimeout(
+            github.getIssue({ owner: repo.owner, name: repo.name }, number),
+            INTENT_ISSUE_FETCH_TIMEOUT_MS,
+          );
+          return { number, status: 'confirmed', title: issue.title ?? '', state: issue.state ?? 'unknown', body: issue.body ?? '' };
+        } catch (err) {
+          const status = (err as { status?: unknown } | null)?.status;
+          const denied = status === 401 || status === 403 || status === 404 || status === 410;
+          return { number, status: 'unavailable', note: denied ? 'not_found_or_no_access' : 'fetch_failed' };
+        }
+      }),
+    );
   }
 
   /** One caller's bounded wait for a flight. Timing out abandons the wait, never the flight. */
@@ -235,7 +297,7 @@ export class IntentService {
    */
   private async generate(
     inputs: IntentInputs,
-    cur: CurrentIntentInput & { files: IntentFileInput[] | null },
+    cur: CurrentInput,
     model: IntentModelInfo,
     logger?: Logger,
   ): Promise<void> {
@@ -254,7 +316,7 @@ export class IntentService {
   /** One model call + one conditional save. The input snapshot is what was SENT. */
   private async compute(
     inputs: IntentInputs,
-    cur: CurrentIntentInput & { files: IntentFileInput[] | null },
+    cur: CurrentInput,
     model: IntentModelInfo,
   ): Promise<void> {
     const { pull } = inputs;
@@ -278,7 +340,7 @@ export class IntentService {
       model: model.model,
       schema: IntentGeneration,
       schemaName: SCHEMA_NAME,
-      messages: buildIntentMessages({ title: pull.title, body: pull.body, files: cur.files }),
+      messages: buildIntentMessages({ title: pull.title, body: pull.body, files: cur.files, context: cur.context }),
       temperature: 0,
       maxRetries: 1,
       timeoutMs: INTENT_PROVIDER_TIMEOUT_MS, // 0: no adapter-level race (see constants.ts)
@@ -306,6 +368,7 @@ export class IntentService {
         tokensIn: result.tokensIn,
         tokensOut: result.tokensOut,
         costUsd: costUsd ?? null,
+        contextSources: contextSources(pull.title, pull.body, cur.context),
       });
     } catch {
       throw new IntentSaveFailedError(); // never forward the DB error text

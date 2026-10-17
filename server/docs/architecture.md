@@ -231,7 +231,7 @@ is local: `container.llm(provider)` builds the client from the stored key and a
   an unknown file list.
 - **Model and prompt version are not in the fingerprint.** They are stored in their own
   columns so staleness can name the reason. Bump `INTENT_PROMPT_VERSION`
-  (`intent/constants.ts:9`, currently `intent-v1`) whenever the prompt or output schema
+  (`intent/constants.ts:9`, currently `intent-v2`) whenever the prompt or output schema
   changes.
 - **Freshness** (`intent/freshness.ts:41-54`):
   - `unknown`: no stored row, or no stale reason but the file data is not synced.
@@ -327,3 +327,54 @@ records it as `PromptAssembly.intent`. Intent is context only: nothing filters f
   `stats.cost_usd` and token counts come only from the review calls. The Live Log says `billed separately`.
 - **No resolver** (3-arg construction, e.g. in tests) → the step is skipped entirely.
 - Only explicit Run Review reaches this path (`executeRuns`); opening a PR page never starts a model call.
+
+### Context sources (L03 context, migration `0013`)
+
+Besides the title, description and file list, the intent prompt (`INTENT_PROMPT_VERSION`
+`intent-v2`) gets an untrusted `pr_context` block built by `intent/context.ts`:
+
+| Source | Where it comes from | Status |
+|---|---|---|
+| Linked issues | `#N`, `owner/repo#N` and `github.com/owner/repo/(issues\|pull)/N` of the PR's **own** repo in the description; at most `INTENT_MAX_ISSUES` (3), the PR's own number excluded | `confirmed` (fetched via `container.github().getIssue`), `unavailable` (`not_found_or_no_access` / `github_unavailable` / `fetch_failed`), `unverified` (`over_limit`) |
+| Ticket / plan links | Any other `http(s)` URL in the description, classified by host (Jira, Linear, Notion, Google Docs, …) and reduced to scheme + host + path (credentials, query, fragment dropped) | always `unverified` / `not_fetched` — **no URL from a PR is ever requested** |
+| Planning docs | Changed files that look like plans (`plans/`, `specs/`, `rfcs/`, `adr/`, `design`, `*plan*.md`, …): their **added lines** from the stored patch; paths mentioned in the description but not in the diff | `confirmed` (`truncated` when clipped), `unavailable` (`no_patch`), `unverified` (`not_in_diff`) |
+| Title / description | `pull_requests` | `confirmed`, or `missing` (`empty`) |
+
+- **GET stays local.** Issues are fetched only by `POST` (and `resolveForRun`), in
+  parallel, each bounded by `INTENT_ISSUE_FETCH_TIMEOUT_MS`. Errors are mapped to fixed
+  codes; GitHub error text and tokens never reach the prompt, the DB or the response.
+- **Stored** in `pr_intent.context_sources` (jsonb, nullable; `null` = intent generated
+  before context existed): one record per source with status/note, the issue title and a
+  `content_hash` of each confirmed issue — never issue bodies or document text.
+  `PrIntentState.context_sources` returns them (without the hash); the Intent block
+  lists them and the gaps ("no linked issue", "N references not verified", …).
+- **Freshness.** Local context (refs parsed from the description, plan-doc text hashes)
+  is part of the fingerprint, added only when a PR has any context so older fingerprints
+  of context-free PRs stay valid. Issue text cannot be checked by `GET`; a `POST`
+  re-fetches the issues and treats the stored intent as a cache hit only when the issue
+  statuses and content hashes match (the hash is also part of the single-flight key).
+- **Budget.** Issue bodies ≤ 1 500 chars, plan docs ≤ 2 000, links ≤ 10, whole block ≤
+  `INTENT_CONTEXT_MAX_CHARS` (6 000); dropped entries are counted in the prompt.
+
+## 9. Smart Diff (L03, `GET /pulls/:id/smart-diff`)
+
+A local read (stored `pr_files` + findings; no GitHub, no LLM), workspace-scoped through
+`getPull` (404 for an unknown or foreign PR, 422 for a malformed id). Built by the pure
+`buildSmartDiff` (`src/modules/reviews/smart-diff.ts`) and returned as `SmartDiff`:
+
+- **Groups.** All five roles in `SMART_GROUP_ORDER` (`core, tests, wiring, docs,
+  boilerplate`), files sorted by path, one entry per path. Classification uses the shared
+  rules module `vendor/shared/smart-diff-rules.ts` — the same file the client's Smart
+  order uses (`client/src/lib/smart-diff.ts`). Priority: boilerplate → tests → wiring →
+  docs → core. The client copy must be byte-identical; `test/smart-diff-rules-sync.test.ts`
+  fails otherwise.
+- **Findings.** Those of the latest completed review of each agent (the PR-list summary
+  selection, `ReviewRepository.inlineFindings`). Each is anchored like the diff viewer
+  does: `end_line` when it is a rendered new-side line, else the largest rendered line in
+  the range. `finding_lines` lists the anchors (ascending, unique); `findings_count` and
+  `unanchored_findings` count per file (line 0 / negative / off the changed side / no
+  patch); `findings_outside_diff` counts findings on files not in the diff.
+- **split_suggestion.** `total_lines` = additions + deletions of non-boilerplate files;
+  `too_big` above `SMART_DIFF_SPLIT_THRESHOLD_LINES` (400). Proposed splits: one per
+  non-empty non-boilerplate role; with a single role, by the first two directory segments;
+  none when everything sits in one role and one directory.

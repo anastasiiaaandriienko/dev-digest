@@ -14,6 +14,7 @@ import { IntentService } from './intent/service.js';
  *   GET    /runs/:id/events                            → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                             → the single-document RunTrace
  *   GET    /pulls/:id/reviews                          → persisted reviews + findings for a PR
+ *   GET    /pulls/:id/smart-diff                       → files grouped by role + finding lines + split hint
  *   GET    /pulls/:id/intent                           → stored PR intent + freshness (no LLM)
  *   POST   /pulls/:id/intent  {force?}                 → (re)generate the intent when stale/missing
  *   POST   /findings/:id/(accept|dismiss)              → finding actions
@@ -127,6 +128,12 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     const trace = await service.getRunTrace(req.params.id);
     if (!trace) throw new NotFoundError('Run trace not found');
     return trace;
+  });
+
+  // ---- L03 Smart Diff (local read: stored files + findings, no GitHub/LLM) --
+  app.get('/pulls/:id/smart-diff', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.smartDiff(workspaceId, req.params.id);
   });
 
   // ---- L03 Intent block ---------------------------------------------------

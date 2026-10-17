@@ -6,7 +6,7 @@
  * Bump when the intent prompt or its output schema changes in a way that makes
  * stored intents out of date. Stored per row; a mismatch reports `prompt_changed`.
  */
-export const INTENT_PROMPT_VERSION = 'intent-v1';
+export const INTENT_PROMPT_VERSION = 'intent-v2'; // v2: linked issues / links / planning docs context
 
 /** Version of the canonical fingerprint payload (inside the hashed JSON). */
 export const FINGERPRINT_VERSION = 1;
@@ -61,6 +61,22 @@ export const INTENT_MAX_FILES = 300;
 export const INTENT_MAX_HUNKS_PER_FILE = 20;
 /** Budget for the whole file/hunk section of the prompt. */
 export const INTENT_FILES_MAX_CHARS = 12_000;
+
+// ---- context limits (linked issues, links, planning docs; all untrusted) ----
+/** Same-repo issues fetched per intent run; further references are listed as `over_limit`, never fetched. */
+export const INTENT_MAX_ISSUES = 3;
+/** Links (never fetched) listed per intent. */
+export const INTENT_MAX_LINKS = 10;
+/** Planning docs from the PR diff included per intent. */
+export const INTENT_MAX_PLAN_DOCS = 3;
+export const INTENT_ISSUE_TITLE_MAX_CHARS = 200;
+export const INTENT_ISSUE_BODY_MAX_CHARS = 1_500;
+export const INTENT_PLAN_DOC_MAX_CHARS = 2_000;
+export const INTENT_CONTEXT_LINK_MAX_CHARS = 200;
+/** Budget for the whole context section of the prompt. */
+export const INTENT_CONTEXT_MAX_CHARS = 6_000;
+/** Bound on ONE issue fetch (the adapter retries inside it); a timeout marks the issue `fetch_failed`. */
+export const INTENT_ISSUE_FETCH_TIMEOUT_MS = 10_000;
 
 // ---- output limits (model output is data too) ----
 export const INTENT_MAX_LIST_ITEMS = 10;

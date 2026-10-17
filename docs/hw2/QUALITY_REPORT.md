@@ -69,6 +69,7 @@ what was **not** done or **not** demonstrated is listed explicitly at the end.
 | Create skill | `repo-conventions` (convention, extracted, v1, enabled) from the 7 accepted rules, attached to **General Reviewer** |
 | API Contract Reviewer | 4 imported skills attached in order, all enabled; switched to `openrouter/deepseek/deepseek-v4-flash` for the A/B experiment |
 | A/B experiment (skills off vs on) | draft test PR [#3](https://github.com/anastasiiaaandriienko/dev-digest/pull/3) (3 breaking changes + 1 non-breaking decoy, ground truth fixed beforehand), same SHA `109471f`, same model and prompt: **A (skills off) 0 / 3 found, 1 false positive, $0.00120**; **B (skills on) 3 / 3 found, 0 false positives, $0.00206**. Full report: [`AB_EXPERIMENT.md`](AB_EXPERIMENT.md) |
+| Test Quality Reviewer A/B (skill off vs on) | **not run yet** (paid LLM calls + DB writes need approval). Prepared: idempotent agent+skill setup (`server/src/db/seed-test-quality.ts`), happy-path-only control PR fixture with ground truth, per-arm run script. Report: [`TEST_QUALITY_AB_EXPERIMENT.md`](TEST_QUALITY_AB_EXPERIMENT.md) |
 | Real review with skills | run B's trace contains `prompt_assembly.skill_blocks` with the 4 skills in order (breaking-change → response-schema → semver-discipline → deprecation-policy) and `skills_tokens = 5090`; run A's trace has none |
 
 Skills CRUD, versioning (v1→v5, Restore → v6), import, agent creation with

@@ -151,6 +151,26 @@ describe("IntentBlock", () => {
     expect(mutate.mock.calls[0]![0]).toEqual({ force: true });
   });
 
+  it("with an intent shows its context sources and gaps; an intent without a record says so", () => {
+    query.data = withIntent({
+      context_sources: [
+        { kind: "pr_title", status: "confirmed", ref: "title" },
+        { kind: "pr_description", status: "confirmed", ref: "description" },
+        { kind: "linked_issue", status: "unavailable", ref: "#13", note: "github_unavailable" },
+      ],
+    });
+    renderBlock();
+    expect(screen.getByText(messages.context.title)).toBeInTheDocument();
+    expect(screen.getByText("#13")).toBeInTheDocument();
+    expect(screen.getByText(messages.context.note.github_unavailable)).toBeInTheDocument();
+    expect(screen.getByText(messages.context.gaps.noPlanDocs)).toBeInTheDocument();
+    cleanup();
+
+    query.data = withIntent();
+    renderBlock();
+    expect(screen.getByText(messages.context.notRecorded)).toBeInTheDocument();
+  });
+
   it("with an intent shows the stored model and the (different) Recalculate model separately", () => {
     query.data = withIntent({
       current_model: { provider: "anthropic", model: "claude-x", source: "fallback_onboarding" },

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SMART_GROUP_ORDER } from '../smart-diff-rules.js';
 
 /**
  * PR Brief building blocks: Intent, Blast radius, Risks, PR History,
@@ -83,7 +84,8 @@ export const PrHistory = z.object({
 export type PrHistory = z.infer<typeof PrHistory>;
 
 // ---- Smart Diff ----
-export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
+// Same keys, same order as the classification rules (../smart-diff-rules.ts).
+export const SmartDiffRole = z.enum(SMART_GROUP_ORDER);
 export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 
 export const SmartDiffFile = z.object({
@@ -91,7 +93,12 @@ export const SmartDiffFile = z.object({
   pseudocode_summary: z.string().nullish(),
   additions: z.number().int(),
   deletions: z.number().int(),
+  /** New-side lines (ascending, unique) where at least one finding anchors on a changed/context line. */
   finding_lines: z.array(z.number().int()),
+  /** All findings reported on this file (anchored or not). Optional: added with GET /pulls/:id/smart-diff. */
+  findings_count: z.number().int().optional(),
+  /** Findings on this file with no anchor on its changed side (not in finding_lines). */
+  unanchored_findings: z.number().int().optional(),
 });
 export type SmartDiffFile = z.infer<typeof SmartDiffFile>;
 
@@ -114,6 +121,8 @@ export const SmartDiff = z.object({
     total_lines: z.number().int(),
     proposed_splits: z.array(ProposedSplit),
   }),
+  /** Findings on files that are not part of this diff (shown in no group). */
+  findings_outside_diff: z.number().int().optional(),
 });
 export type SmartDiff = z.infer<typeof SmartDiff>;
 

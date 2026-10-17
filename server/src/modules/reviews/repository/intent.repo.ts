@@ -2,7 +2,8 @@ import { eq, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { PullRow } from '../../../db/rows.js';
-import { getPrFiles, getPull } from './pull.repo.js';
+import type { IntentContextSourceRecord } from '../../../db/schema.js';
+import { getPrFiles, getPull, getRepo } from './pull.repo.js';
 
 /**
  * L03 Intent block — `pr_intent` data access. Plain functions of `(db, …)`;
@@ -23,6 +24,8 @@ export interface IntentInputs {
   pull: PullRow;
   files: PrFileRow[];
   snapshotAt: Date;
+  /** The PR's repository (owner/name scope linked-issue lookups); absent/null = unknown, issues are not fetched. */
+  repo?: { owner: string; name: string } | null;
 }
 
 /**
@@ -37,8 +40,9 @@ export async function getIntentInputs(
   const snapshotAt = new Date();
   const pull = await getPull(db, workspaceId, prId);
   if (!pull) return undefined;
-  const files = await getPrFiles(db, prId);
-  return { pull, files, snapshotAt };
+  const [files, repoRow] = await Promise.all([getPrFiles(db, prId), getRepo(db, pull.repoId)]);
+  const repo = repoRow ? { owner: repoRow.owner, name: repoRow.name } : null;
+  return { pull, files, snapshotAt, repo };
 }
 
 export interface SaveIntentValues {
@@ -57,6 +61,8 @@ export interface SaveIntentValues {
   tokensIn: number | null;
   tokensOut: number | null;
   costUsd: number | null;
+  /** Context sources the intent was generated from (no fetched bodies). */
+  contextSources: IntentContextSourceRecord[];
 }
 
 /**
@@ -84,6 +90,7 @@ export function buildSaveIntentQuery(db: Db, v: SaveIntentValues) {
     tokensIn: v.tokensIn,
     tokensOut: v.tokensOut,
     costUsd: v.costUsd,
+    contextSources: v.contextSources,
   };
   return db
     .insert(t.prIntent)

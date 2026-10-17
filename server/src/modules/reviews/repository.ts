@@ -23,6 +23,7 @@ import * as runRepo from './repository/run.repo.js';
 import * as pullRepo from './repository/pull.repo.js';
 import * as intentRepo from './repository/intent.repo.js';
 import { RECONCILE_DB_TIMEOUT_MS } from './constants.js';
+import { findingsSummaryByPullRequest } from '../pulls/findings-summary.js';
 export type { FinalizeDoneRunInput, FinalizeDoneRunResult } from './repository/run.repo.js';
 
 export class ReviewRepository {
@@ -65,6 +66,17 @@ export class ReviewRepository {
   /** Reviews for a PR (newest first), each with its findings. */
   reviewsForPull(prId: string): Promise<{ review: ReviewRow; findings: FindingRow[] }[]> {
     return reviewRepo.reviewsForPull(this.db, prId);
+  }
+
+  /**
+   * Findings shown inline in Files changed: those of the latest completed review
+   * of each agent — the same selection as the PR-list findings summary, so the
+   * smart diff and the diff viewer agree. Workspace-scoped.
+   */
+  async inlineFindings(workspaceId: string, prId: string): Promise<FindingRow[]> {
+    const summary = (await findingsSummaryByPullRequest(this.db, workspaceId, [prId])).get(prId);
+    if (!summary) return [];
+    return reviewRepo.findingsForReviews(this.db, summary.agents.map((a) => a.review_id));
   }
 
   getReview(reviewId: string): Promise<ReviewRow | undefined> {

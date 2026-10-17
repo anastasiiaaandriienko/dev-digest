@@ -7,6 +7,7 @@ themselves live in the agent files — read those, not this page, for details.
 | Agent | File | Model | Writes files | Role |
 |---|---|---|---|---|
 | researcher | [researcher.md](researcher.md) | `sonnet` | no | Facts from the repo and external docs, with evidence |
+| brainstorm | [brainstorm.md](brainstorm.md) | `opus` | no | Solution options before planning: approaches, trade-offs, risks, open questions |
 | planner | [planner.md](planner.md) | `opus` | no | Requirement → Development Plan (or clarification questions) |
 | implementer | [implementer.md](implementer.md) | `sonnet` | yes (plan files) | Executes an approved plan, runs checks, reports |
 | test-writer | [test-writer.md](test-writer.md) | `sonnet` | yes (test files only) | Adds/updates unit tests; never changes production code |
@@ -15,11 +16,6 @@ themselves live in the agent files — read those, not this page, for details.
 | plan-verifier | [plan-verifier.md](plan-verifier.md) | `sonnet` | no | Plan criteria → PASS / PARTIAL / MISSING matrix with evidence |
 | doc-writer | [doc-writer.md](doc-writer.md) | `sonnet` | yes (docs only) | Updates docs/ and package docs, Mermaid diagrams |
 
-**Not created (decided):** `brainstorm` — ideation needs a dialogue with the user,
-and subagents cannot ask questions; options with trade-offs already come from the
-main agent, researcher and planner's `NEEDS_CLARIFICATION`. Add it only if the lesson
-requires it.
-
 ## Workflow
 
 ```
@@ -27,6 +23,12 @@ user request
    │
    ▼
 researcher ──► report (findings, file:line, URLs, Unknowns)
+   │
+   ▼
+brainstorm ──► options + trade-offs + recommendation + open questions
+   │           (optional: when there is more than one reasonable approach)
+   ▼
+main agent asks the user to choose a direction
    │
    ▼
 planner ──► NEEDS_CLARIFICATION ──► main agent asks the user ──► planner again
@@ -74,6 +76,23 @@ user (reviews git diff, decides on commit)
   Unknowns, Limitations, search patterns.
 - **Limits:** no git/tests/typecheck; no `localhost`, private addresses or paid APIs;
   "absent" needs a documented search; `WebFetch` returns a summary, not raw text.
+
+## brainstorm
+
+- **Purpose:** explore solution options before planning: 2–4 distinct approaches
+  grounded in the current code, compared on trade-offs, risks, effort and project
+  rules, with a recommendation and the open questions the user must decide.
+- **Tools:** `Read, Grep, Glob, WebSearch, WebFetch`; denied `Write, Edit,
+  NotebookEdit, Bash, PowerShell, Agent, Skill`.
+- **Run when:** after research, before the planner, when there is more than one
+  reasonable way to build something. Skip it for an obvious, single-path change.
+- **Input → output:** problem + research report + constraints → `STATUS: DONE |
+  PARTIAL | NEEDS_CLARIFICATION` report: constraints, existing building blocks,
+  options (where, pros/cons, risks, effort, approvals), comparison table,
+  recommendation, open questions for the user, Unknowns, Limitations.
+- **Limits:** read-only; no task-level plans, no patches, no implementation; no
+  `localhost` or paid APIs; protected areas are listed as `APPROVAL REQUIRED`; it
+  cannot ask the user — the main agent relays its open questions.
 
 ## planner
 
@@ -183,7 +202,7 @@ user (reviews git diff, decides on commit)
 
 - **Skills** live in [../skills/](../skills/README.md). Agents name them; they never
   copy skill text, and no agent preloads skills via the `skills` frontmatter field.
-  - researcher, plan-verifier: no skills.
+  - researcher, brainstorm, plan-verifier: no skills.
   - planner: names the skills per task (skill map in [planner.md](planner.md)).
   - implementer, test-writer, architecture-reviewer, security-reviewer: load skills on
     demand with the `Skill` tool. Package mapping: client → `frontend-architecture`
@@ -208,7 +227,7 @@ user (reviews git diff, decides on commit)
 
 | Layer | Enforced by | What it covers |
 |---|---|---|
-| `tools` / `disallowedTools` | Claude Code | Which tools an agent has at all (researcher, planner, reviewers, plan-verifier: no write tools; doc-writer: no Bash) |
+| `tools` / `disallowedTools` | Claude Code | Which tools an agent has at all (researcher, brainstorm, planner, reviewers, plan-verifier: no write tools; doc-writer: no Bash) |
 | `permissions.deny` in [../settings.json](../settings.json) | Claude Code | `WebFetch` to `localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]` — for main session and subagents |
 | Agent prompt rules | the model only | Everything else: write scopes of implementer / test-writer / doc-writer, read-only git for reviewers, no commit / install / migrations / lockfiles / app start |
 
@@ -236,7 +255,7 @@ an optional, approval-gated step and is not in place. Review `git status` /
 
 | Agent | Based on |
 |---|---|
-| planner | sub-agents, best-practices, model-config, skills |
+| planner, brainstorm | sub-agents, best-practices, model-config, skills |
 | implementer, test-writer | sub-agents, skills, best-practices, model-config, permissions |
 | architecture-reviewer, security-reviewer, plan-verifier | sub-agents, best-practices (verifier ≠ author, fresh context, no noise), model-config |
 | doc-writer | sub-agents, skills |

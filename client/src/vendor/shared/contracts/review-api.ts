@@ -99,6 +99,52 @@ export const PrIntentMeta = z.object({
 });
 export type PrIntentMeta = z.infer<typeof PrIntentMeta>;
 
+/**
+ * Where intent context came from. Only `confirmed` sources had their content
+ * read (PR fields, issues fetched from the PR's own repo, planning docs in the
+ * PR diff). `unverified` = referenced but never fetched (external links, docs
+ * outside the diff); `unavailable` = a fetch was attempted and failed;
+ * `missing` = the field exists but is empty.
+ */
+export const IntentContextKind = z.enum([
+  'pr_title',
+  'pr_description',
+  'linked_issue',
+  'ticket_link',
+  'plan_link',
+  'link',
+  'plan_doc',
+]);
+export type IntentContextKind = z.infer<typeof IntentContextKind>;
+
+export const IntentContextStatus = z.enum(['confirmed', 'unverified', 'unavailable', 'missing']);
+export type IntentContextStatus = z.infer<typeof IntentContextStatus>;
+
+/** Why a source is not (fully) confirmed. Fixed codes — never provider/GitHub error text. */
+export const IntentContextNote = z.enum([
+  'empty',
+  'truncated',
+  'not_fetched',
+  'not_in_diff',
+  'no_patch',
+  'not_found_or_no_access',
+  'github_unavailable',
+  'fetch_failed',
+  'over_limit',
+]);
+export type IntentContextNote = z.infer<typeof IntentContextNote>;
+
+export const IntentContextSource = z.object({
+  kind: IntentContextKind,
+  status: IntentContextStatus,
+  /** '#12', a sanitized URL (no credentials/query/fragment), a repo path, or 'title' / 'description'. */
+  ref: z.string(),
+  /** Issue title (confirmed linked issues only). */
+  title: z.string().nullish(),
+  note: IntentContextNote.nullish(),
+});
+export type IntentContextSource = z.infer<typeof IntentContextSource>;
+
 export const PrIntentState = z.object({
   pr_id: z.string(),
   intent: Intent.nullable(),
@@ -108,6 +154,8 @@ export const PrIntentState = z.object({
   current_model: IntentModelInfo.nullable(),
   /** Why no model could be resolved (current_model is null). */
   model_error: z.string().nullish(),
+  /** Context the stored intent was generated from; null when not recorded (no intent, or generated before L03 context). */
+  context_sources: z.array(IntentContextSource).nullish(),
   /** POST only: true when this call ran the LLM, false on a cache hit. */
   computed: z.boolean().optional(),
 });

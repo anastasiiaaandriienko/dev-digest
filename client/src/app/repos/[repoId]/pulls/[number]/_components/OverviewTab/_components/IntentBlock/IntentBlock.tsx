@@ -16,6 +16,7 @@ import { formatCost } from "@/lib/format";
 import { FRESHNESS_COLORS } from "./constants";
 import { generatedTime, modelAvailable, modelLabel, shortSha, sourceKey } from "./helpers";
 import { s } from "./styles";
+import { ContextSources } from "./_components/ContextSources";
 
 interface IntentBlockProps {
   prId: string | null;
@@ -225,6 +226,7 @@ function IntentResult({ state, t }: { state: PrIntentState; t: T }) {
           </div>
         </div>
       )}
+      <ContextSources sources={state.context_sources} />
       {meta && (
         <div style={s.meta}>
           {model && <span>{t("metaModel", { model })}</span>}

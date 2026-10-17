@@ -24,3 +24,13 @@ export const RECONCILE_DB_TIMEOUT_MS = 5_000;
  * acquisition and a dead socket, which the server-side timeouts cannot).
  */
 export const RECONCILE_DEADLINE_MS = 15_000;
+
+/**
+ * GET /pulls/:id/smart-diff: a PR is "too big" above this many changed lines
+ * (additions + deletions), boilerplate (lockfiles, generated output, assets)
+ * excluded. ~400 lines is the commonly cited limit for an effective review.
+ */
+export const SMART_DIFF_SPLIT_THRESHOLD_LINES = 400;
+
+/** Leading directory segments used to propose splits when all files share one role. */
+export const SMART_DIFF_SPLIT_DIR_DEPTH = 2;

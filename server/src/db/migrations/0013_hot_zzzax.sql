@@ -1,0 +1,1 @@
+ALTER TABLE "pr_intent" ADD COLUMN "context_sources" jsonb;

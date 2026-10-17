@@ -1,85 +1,14 @@
 /* lib/smart-diff.ts — deterministic, client-side grouping of changed files by
    role for the "Smart order" view of Files changed. Pure: no React, no data
-   fetching, no runtime imports. */
+   fetching. The classification rules live in the shared module
+   (vendor/shared/smart-diff-rules.ts), which the server's
+   GET /pulls/:id/smart-diff uses too; this file only groups and re-exports. */
+import { SMART_GROUP_ORDER, classifySmartFile, type SmartGroupKey } from "@devdigest/shared";
 
-/** Display order of the groups (all five are always shown, even when empty). */
-export const SMART_GROUP_ORDER = ["core", "tests", "wiring", "docs", "boilerplate"] as const;
-export type SmartGroupKey = (typeof SMART_GROUP_ORDER)[number];
+export { SMART_GROUP_ORDER, type SmartGroupKey };
 
-const LOCKFILES = new Set([
-  "pnpm-lock.yaml",
-  "package-lock.json",
-  "yarn.lock",
-  "npm-shrinkwrap.json",
-  "bun.lockb",
-  "bun.lock",
-  "composer.lock",
-  "gemfile.lock",
-  "poetry.lock",
-  "cargo.lock",
-  "go.sum",
-  "pipfile.lock",
-]);
-
-const BOILERPLATE_DIRS = new Set(["dist", "build", "vendor"]);
-
-const ASSET_EXT = new Set([
-  "png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "icns", "svg",
-  "woff", "woff2", "ttf", "otf", "eot",
-  "pdf", "zip", "gz", "tar", "tgz", "mp3", "mp4", "mov", "webm", "wasm",
-]);
-
-const TEST_DIRS = new Set(["test", "tests", "__tests__", "e2e"]);
-const DOC_EXT = new Set(["md", "mdx", "rst", "txt"]);
-const DOC_STEMS = new Set(["readme", "changelog", "license"]);
-const WIRING_EXT = new Set(["yml", "yaml"]);
-
-function extOf(base: string): string {
-  const i = base.lastIndexOf(".");
-  return i > 0 ? base.slice(i + 1) : "";
-}
-
-/** Classify a changed file path into one smart group (boilerplate > tests > docs > wiring > core). */
-export function classifyFile(path: string): SmartGroupKey {
-  const segs = path.toLowerCase().replace(/\\/g, "/").split("/").filter(Boolean);
-  const base = segs[segs.length - 1] ?? "";
-  const dirs = segs.slice(0, -1);
-  const ext = extOf(base);
-  const stem = base.split(".")[0] ?? "";
-
-  // boilerplate
-  if (LOCKFILES.has(base)) return "boilerplate";
-  for (let i = 0; i < dirs.length - 1; i++) {
-    if (dirs[i] === "migrations" && dirs[i + 1] === "meta") return "boilerplate";
-  }
-  if (ext === "snap") return "boilerplate";
-  if (dirs.length > 0 && BOILERPLATE_DIRS.has(dirs[0]!)) return "boilerplate";
-  if (/\.min\.[^./]+$/.test(base)) return "boilerplate";
-  if (ASSET_EXT.has(ext)) return "boilerplate";
-
-  // tests
-  if (dirs.some((d) => TEST_DIRS.has(d))) return "tests";
-  if (/\.(test|spec)\./.test(base) || base.endsWith(".flow.json")) return "tests";
-  if (/^test_.*\.py$/.test(base) || base.endsWith("_test.go")) return "tests";
-
-  // wiring that would otherwise look like docs (.txt)
-  if (/^requirements.*\.txt$/.test(base)) return "wiring";
-
-  // docs
-  if (DOC_EXT.has(ext) || dirs.includes("docs") || (DOC_STEMS.has(stem) && (ext === "" || DOC_EXT.has(ext)))) {
-    return "docs";
-  }
-
-  // wiring
-  if (base === "package.json" || base.startsWith("tsconfig")) return "wiring";
-  if (/\.config\./.test(base) || WIRING_EXT.has(ext)) return "wiring";
-  if (base === "dockerfile" || base.startsWith("dockerfile.")) return "wiring";
-  if (dirs.includes(".github") || base === ".env.example") return "wiring";
-  if (/^index\.(ts|tsx|js)$/.test(base)) return "wiring";
-  if (ext === "json" && dirs.includes("messages")) return "wiring";
-
-  return "core";
-}
+/** Classify a changed file path into one smart group (boilerplate > tests > wiring > docs > core). */
+export const classifyFile = classifySmartFile;
 
 export interface SmartGroup<F> {
   key: SmartGroupKey;
