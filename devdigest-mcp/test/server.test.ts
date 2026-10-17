@@ -9,6 +9,29 @@ const handler: Handler = (c) => {
   if (c.path === '/agents') return { body: [{ id: AGENT, name: 'A', enabled: true, system_prompt: 'SECRET' }] };
   if (c.path.endsWith('/runs')) return { body: [{ run_id: RUN, agent_id: AGENT, status: 'done', duration_ms: 5 }] };
   if (c.path.endsWith('/reviews')) return { body: [review({ findings: [finding()] })] };
+  if (c.path.endsWith('/blast')) {
+    return {
+      body: {
+        changed_symbols: [{ name: 'f', file: 'a.ts', kind: 'function', line: 1, url: null }],
+        downstream: [
+          {
+            symbol: 'f',
+            file: 'a.ts',
+            callers: [{ name: 'g', file: 'b.ts', line: 2, url: null }],
+            caller_count: 1,
+            truncated: false,
+            endpoints_affected: ['GET /x'],
+            crons_affected: [],
+          },
+        ],
+        summary: '1 changed symbol, 1 caller; potentially affected: 1 endpoint.',
+        totals: { symbols: 1, callers: 1, endpoints: 1, crons: 0 },
+        degraded: false,
+        reason: null,
+        source: { repo_full_name: 'o/r', ref: 'abc1234' },
+      },
+    };
+  }
   if (c.path.startsWith('/repos/')) {
     return {
       body: {
@@ -120,6 +143,7 @@ describe('MCP protocol surface', () => {
       ['run_agent_on_pr', { pr_id: PR, agent_id: AGENT }],
       ['get_findings', { pr_id: PR }],
       ['get_conventions', { repo_id: REPO }],
+      ['get_blast_radius', { pr_id: PR }],
     ] as const) {
       const res = await c.callTool({ name, arguments: args });
       expect(res.isError, name).toBe(true);

@@ -430,14 +430,139 @@ describe('get_conventions', () => {
 });
 
 describe('get_blast_radius', () => {
-  it('returns not_implemented with null blast_radius and makes no API call', async () => {
-    const { deps, calls } = makeDeps(() => {
-      throw new Error('must not be called');
-    });
+  const SHA = '45ce6b9adc1dbc433275cb6d79b8bc6000f127dd';
+  const blob = (file: string, line: number) => `https://github.com/o/r/blob/${SHA}/${file}#L${line}`;
+  const blast = (over: Record<string, unknown> = {}) => ({
+    changed_symbols: [{ name: 'toDto', file: 'src/helpers.ts', kind: 'function', line: 3, url: blob('src/helpers.ts', 3) }],
+    downstream: [
+      {
+        symbol: 'toDto',
+        file: 'src/helpers.ts',
+        callers: [
+          { name: 'list', file: 'src/service.ts', line: 12, url: blob('src/service.ts', 12) },
+          { name: 'runSync', file: 'src/jobs/worker.ts', line: 4, url: blob('src/jobs/worker.ts', 4) },
+        ],
+        caller_count: 2,
+        truncated: false,
+        endpoints_affected: ['GET /items', 'POST /items'],
+        crons_affected: ['job:sync'],
+      },
+    ],
+    summary: '1 changed symbol, 2 callers; potentially affected: 2 endpoints, 1 cron/job.',
+    totals: { symbols: 1, callers: 2, endpoints: 2, crons: 1 },
+    degraded: false,
+    reason: null,
+    source: { repo_full_name: 'o/r', ref: SHA },
+    ...over,
+  });
+  type Blast = { [k: string]: unknown; downstream: Item[]; changed_symbols: Item[]; totals: Record<string, number> };
+  const b = (r: { structuredContent?: Record<string, unknown> }) => r.structuredContent as Blast;
+  const notFound: Handler = () => ({ status: 404, body: { error: { code: 'NOT_FOUND', message: 'Pull request not found' } } });
+
+  it('GETs /pulls/:id/blast once and returns the BlastRadius contract with callers, endpoints and crons', async () => {
+    const { deps, calls } = makeDeps(() => ({ body: blast() }));
     const r = await getBlastRadius(deps, { pr_id: PR });
-    expect(calls).toHaveLength(0);
+
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([`GET /pulls/${PR}/blast`]);
     expect(r.isError).toBeUndefined();
-    expect(sc(r)).toMatchObject({ pr_id: PR, status: 'not_implemented', blast_radius: null });
-    expect(textOf(r)).toBe(sc(r).message);
+    expect(b(r)).toMatchObject({
+      pr_id: PR,
+      degraded: false,
+      reason: null,
+      source: { repo_full_name: 'o/r', ref: SHA },
+      totals: { symbols: 1, callers: 2, endpoints: 2, crons: 1 },
+      symbols_truncated: false,
+    });
+    expect(b(r).downstream[0]).toMatchObject({
+      symbol: 'toDto',
+      caller_count: 2,
+      truncated: false,
+      endpoints_affected: ['GET /items', 'POST /items'],
+      crons_affected: ['job:sync'],
+    });
+    expect(b(r).downstream[0]!.callers).toContainEqual({ name: 'list', file: 'src/service.ts', line: 12, url: blob('src/service.ts', 12) });
+    const text = textOf(r);
+    expect(text).toContain('src/service.ts:12 (list)');
+    expect(text).toContain('potentially affected endpoints: GET /items, POST /items');
+    expect(text).toContain(`o/r@${SHA.slice(0, 7)}`);
+    expect(text).toContain('may differ from the PR head');
+  });
+
+  it('empty result: no changed symbols, not degraded', async () => {
+    const empty = blast({
+      changed_symbols: [],
+      downstream: [],
+      summary: 'No changed symbols found in the indexed code.',
+      totals: { symbols: 0, callers: 0, endpoints: 0, crons: 0 },
+    });
+    const { deps } = makeDeps(() => ({ body: empty }));
+    const r = await getBlastRadius(deps, { pr_id: PR });
+    expect(r.isError).toBeUndefined();
+    expect(b(r)).toMatchObject({ changed_symbols: [], downstream: [], degraded: false, totals: { symbols: 0, callers: 0 } });
+    expect(textOf(r)).toContain('No changed symbols found');
+  });
+
+  it('degraded state: keeps the reason and says the analysis is partial', async () => {
+    const degraded = blast({
+      degraded: true,
+      reason: 'no_files',
+      changed_symbols: [],
+      downstream: [],
+      source: { repo_full_name: 'o/r', ref: '' },
+    });
+    const { deps } = makeDeps(() => ({ body: degraded }));
+    const r = await getBlastRadius(deps, { pr_id: PR });
+    expect(b(r)).toMatchObject({ degraded: true, reason: 'no_files' });
+    expect(textOf(r)).toContain('Partial analysis (reason: no_files)');
+    expect(textOf(r)).not.toContain('Source:');
+  });
+
+  it('fills fields an older API omits (no totals / degraded / source / caller_count)', async () => {
+    const legacy = {
+      changed_symbols: [{ name: 'a', file: 'a.ts', kind: 'function' }],
+      downstream: [{ symbol: 'a', callers: [{ name: 'x', file: 'x.ts', line: 1 }], endpoints_affected: ['GET /x'], crons_affected: [] }],
+      summary: 's',
+    };
+    const { deps } = makeDeps(() => ({ body: legacy }));
+    const r = await getBlastRadius(deps, { pr_id: PR });
+    expect(b(r)).toMatchObject({
+      degraded: false,
+      reason: null,
+      source: null,
+      totals: { symbols: 1, callers: 1, endpoints: 1, crons: 0 },
+      changed_symbols: [{ name: 'a', line: null, url: null }],
+      downstream: [{ symbol: 'a', file: null, caller_count: 1, truncated: false, callers: [{ url: null }] }],
+    });
+  });
+
+  it('bounds the number of changed symbols', async () => {
+    const many = Array.from({ length: 51 }, (_, i) => ({ symbol: `s${i}`, callers: [], endpoints_affected: [], crons_affected: [] }));
+    const syms = many.map((d) => ({ name: d.symbol, file: 'a.ts', kind: 'function' }));
+    const { deps } = makeDeps(() => ({ body: blast({ changed_symbols: syms, downstream: many }) }));
+    const r = await getBlastRadius(deps, { pr_id: PR });
+    expect(b(r).downstream).toHaveLength(50);
+    expect(b(r).changed_symbols).toHaveLength(50);
+    expect(b(r).symbols_truncated).toBe(true);
+    expect(textOf(r)).toContain('Only the first 50 changed symbols');
+  });
+
+  it('API errors: 404 / 500 / network / invalid shape → isError, no structured content, no stack', async () => {
+    const network: Handler = () => {
+      throw new TypeError('fetch failed');
+    };
+    for (const handler of [
+      notFound,
+      () => ({ status: 500, body: { error: { code: 'BOOM', message: 'x' } } }),
+      network,
+      () => ({ body: { nope: true } }),
+    ] as Handler[]) {
+      const { deps } = makeDeps(handler);
+      const r = await getBlastRadius(deps, { pr_id: PR });
+      expect(r.isError).toBe(true);
+      expect(r.structuredContent).toBeUndefined();
+      expect(textOf(r)).not.toMatch(/\n\s+at /);
+    }
+    const { deps } = makeDeps(notFound);
+    expect(textOf(await getBlastRadius(deps, { pr_id: PR }))).toContain('Pull request not found');
   });
 });

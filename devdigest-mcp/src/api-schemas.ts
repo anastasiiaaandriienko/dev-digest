@@ -104,3 +104,44 @@ export const ApiConventionsState = z.object({
   source: z.object({ repo_full_name: z.string(), ref: z.string() }),
 });
 export type ApiConventionsState = z.infer<typeof ApiConventionsState>;
+
+const ApiBlastCaller = z.object({
+  name: z.string(),
+  file: z.string(),
+  line: z.number(),
+  url: z.string().nullish(),
+});
+
+/**
+ * GET /pulls/:id/blast → `BlastRadius` (HW-04). Fields added in HW-04 are optional
+ * in the contract, so they are nullish here; `reason` stays a plain string so a
+ * new server-side reason does not break the client.
+ */
+export const ApiBlastRadius = z.object({
+  changed_symbols: z.array(
+    z.object({
+      name: z.string(),
+      file: z.string(),
+      kind: z.string(),
+      line: z.number().nullish(),
+      url: z.string().nullish(),
+    }),
+  ),
+  downstream: z.array(
+    z.object({
+      symbol: z.string(),
+      file: z.string().nullish(),
+      callers: z.array(ApiBlastCaller),
+      caller_count: z.number().nullish(),
+      truncated: z.boolean().nullish(),
+      endpoints_affected: z.array(z.string()),
+      crons_affected: z.array(z.string()),
+    }),
+  ),
+  summary: z.string(),
+  totals: z.object({ symbols: z.number(), callers: z.number(), endpoints: z.number(), crons: z.number() }).nullish(),
+  degraded: z.boolean().nullish(),
+  reason: z.string().nullish(),
+  source: z.object({ repo_full_name: z.string(), ref: z.string() }).nullish(),
+});
+export type ApiBlastRadius = z.infer<typeof ApiBlastRadius>;

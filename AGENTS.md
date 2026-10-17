@@ -90,7 +90,7 @@ Independent stdio MCP server; every tool calls an existing Fastify endpoint (API
 2. `run_agent_on_pr` — runs ONE chosen agent on a PR, waits for the run and returns the result and findings.
 3. `get_findings` — returns the findings and short verdict of a review that already ran; never starts one.
 4. `get_conventions` — returns the repository conventions/rules from L02.
-5. `get_blast_radius` — PR impact map; **currently a stub** (`status: not_implemented`), implemented in HW-04.
+5. `get_blast_radius` — PR impact map (HW-04) from `GET /pulls/:id/blast`: changed symbols, direct callers (file:line), potentially affected endpoints/crons, `degraded`/`reason`. Read-only.
 
 ```sh
 cd devdigest-mcp && npm ci                          # install (ask first, like any install)

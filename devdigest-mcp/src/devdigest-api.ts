@@ -1,11 +1,13 @@
 import type { ApiClient } from './api-client.js';
 import {
   ApiAgentList,
+  ApiBlastRadius,
   ApiConventionsState,
   ApiReviewList,
   ApiReviewStarted,
   ApiRunList,
   type ApiAgent,
+  type ApiBlastRadius as BlastRadius,
   type ApiConventionsState as ConventionsState,
   type ApiReview,
   type ApiReviewStarted as ReviewStarted,
@@ -43,5 +45,10 @@ export class DevDigestApi {
   /** GET /repos/:id/conventions — latest scan + candidates (rejected only on request). */
   getConventions(repoId: string, includeRejected: boolean): Promise<ConventionsState> {
     return this.client.get(`/repos/${repoId}/conventions?include_rejected=${includeRejected}`, ApiConventionsState);
+  }
+
+  /** GET /pulls/:id/blast — read-only blast radius from stored pr_files + the repo-intel index. */
+  getBlastRadius(prId: string): Promise<BlastRadius> {
+    return this.client.get(`/pulls/${prId}/blast`, ApiBlastRadius);
   }
 }

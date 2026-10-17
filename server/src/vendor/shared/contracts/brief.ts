@@ -20,32 +20,77 @@ export const Intent = z.object({
 export type Intent = z.infer<typeof Intent>;
 
 // ---- Blast radius ----
+// HW-04 fields are optional so blast payloads stored before them (pr_brief) still parse.
+// `line` and `url` refer to `source.ref` (the indexed commit), not to the PR head.
 export const ChangedSymbol = z.object({
   name: z.string(),
   file: z.string(),
   kind: z.string(),
+  line: z.number().int().optional(),
+  url: z.string().nullable().optional(),
 });
 export type ChangedSymbol = z.infer<typeof ChangedSymbol>;
 
 export const BlastCaller = z.object({
+  /** Enclosing symbol of the call site (file name when it is at module scope). */
   name: z.string(),
   file: z.string(),
   line: z.number().int(),
+  url: z.string().nullable().optional(),
 });
 export type BlastCaller = z.infer<typeof BlastCaller>;
 
 export const DownstreamImpact = z.object({
   symbol: z.string(),
+  /** File that declares `symbol`. */
+  file: z.string().optional(),
+  /** Direct callers, capped per symbol (see `truncated`). */
   callers: z.array(BlastCaller),
+  /** Distinct direct callers before the cap. */
+  caller_count: z.number().int().optional(),
+  truncated: z.boolean().optional(),
   endpoints_affected: z.array(z.string()),
   crons_affected: z.array(z.string()),
 });
 export type DownstreamImpact = z.infer<typeof DownstreamImpact>;
 
+/**
+ * Why a blast radius is incomplete: repo-intel off, no usable index (fallback
+ * scan), a partial or failed index, or no stored files for the PR.
+ */
+export const BlastDegradedReason = z.enum([
+  'flag_off',
+  'no_data',
+  'index_partial',
+  'index_failed',
+  'repo_too_large',
+  'no_files',
+]);
+export type BlastDegradedReason = z.infer<typeof BlastDegradedReason>;
+
+export const BlastTotals = z.object({
+  symbols: z.number().int(),
+  callers: z.number().int(),
+  endpoints: z.number().int(),
+  crons: z.number().int(),
+});
+export type BlastTotals = z.infer<typeof BlastTotals>;
+
+/** Repository and commit the lines / links refer to. */
+export const BlastSource = z.object({
+  repo_full_name: z.string(),
+  ref: z.string(),
+});
+export type BlastSource = z.infer<typeof BlastSource>;
+
 export const BlastRadius = z.object({
   changed_symbols: z.array(ChangedSymbol),
   downstream: z.array(DownstreamImpact),
   summary: z.string(),
+  totals: BlastTotals.optional(),
+  degraded: z.boolean().optional(),
+  reason: BlastDegradedReason.nullable().optional(),
+  source: BlastSource.nullable().optional(),
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
 

@@ -122,11 +122,13 @@ export interface FullSymbolRow {
   signature: string | null;
 }
 
-/** A resolved cross-file caller (reference whose decl_file is a changed file). */
+/** A resolved caller (reference whose decl_file is a changed file). */
 export interface ResolvedCallerRow {
   fromPath: string;
   toSymbol: string;
+  declFile: string;
   line: number;
+  /** file_rank.rank of `fromPath`; 0 when the file has no rank row. */
   rank: number;
 }
 
@@ -499,22 +501,26 @@ export class RepoIntelRepository {
       .where(and(eq(t.symbols.repoId, repoId), inArray(t.symbols.path, paths)));
   }
 
-  /** Resolved cross-file callers of symbols declared in `declFiles`. */
+  /**
+   * Resolved callers of symbols declared in `declFiles`. LEFT JOIN on
+   * file_rank: a caller file without a rank row still counts (rank 0).
+   */
   async getResolvedCallers(
     repoId: string,
     declFiles: string[],
     names: string[],
   ): Promise<ResolvedCallerRow[]> {
     if (declFiles.length === 0 || names.length === 0) return [];
-    return this.db
+    const rows = await this.db
       .select({
         fromPath: t.references.fromPath,
         toSymbol: t.references.toSymbol,
+        declFile: t.references.declFile,
         line: t.references.line,
-        rank: t.fileRank.rank,
+        rank: sql<number>`coalesce(${t.fileRank.rank}, 0)`.mapWith(Number),
       })
       .from(t.references)
-      .innerJoin(
+      .leftJoin(
         t.fileRank,
         and(
           eq(t.fileRank.repoId, t.references.repoId),
@@ -528,6 +534,16 @@ export class RepoIntelRepository {
           inArray(t.references.toSymbol, names),
         ),
       );
+    return rows.map((r) => ({ ...r, declFile: r.declFile ?? '' }));
+  }
+
+  /** Import edges INTO `files` (who imports them) — blast's reverse BFS hop. */
+  async getImporters(repoId: string, files: string[]): Promise<IndexerEdgeRow[]> {
+    if (files.length === 0) return [];
+    return this.db
+      .select({ fromFile: t.fileEdges.fromFile, toFile: t.fileEdges.toFile })
+      .from(t.fileEdges)
+      .where(and(eq(t.fileEdges.repoId, repoId), inArray(t.fileEdges.toFile, files)));
   }
 
   /** Per-file facts (endpoints/crons) for the given files. */

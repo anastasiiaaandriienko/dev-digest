@@ -1,18 +1,32 @@
 {
+  "title": "Blast radius",
+  "loading": "Loading blast radius…",
+  "loadError": "Could not load the blast radius.",
+  "retry": "Retry",
   "stat": {
-    "symbols": "symbols",
-    "callers": "callers",
-    "endpoints": "endpoints",
-    "crons": "cron/jobs"
+    "symbols": "{count, plural, one {changed symbol} other {changed symbols}}",
+    "callers": "{count, plural, one {caller} other {callers}}",
+    "endpoints": "{count, plural, one {potentially affected endpoint} other {potentially affected endpoints}}",
+    "crons": "{count, plural, one {cron/job} other {cron/jobs}}"
   },
-  "view": {
-    "tree": "tree",
-    "graph": "graph"
-  },
-  "callerCount": "{count} callers",
-  "noDownstream": "{count} changed symbol(s), no downstream callers found.",
-  "graph": {
-    "empty": "No downstream callers to graph.",
-    "ariaLabel": "Blast radius graph"
+  "callerCount": "{count, plural, one {# caller} other {# callers}}",
+  "truncated": "Showing {shown} of {total} callers",
+  "noCallers": "No direct callers found.",
+  "noCallersAll": "No direct callers found for the changed symbols.",
+  "noSymbols": "No changed symbols were found in the indexed code for this PR's files.",
+  "potentialEndpoints": "Potentially affected endpoints",
+  "crons": "Crons / jobs",
+  "endpointsHint": "Endpoints and crons are found through the file-level import graph (up to 2 hops from the callers), not an exact function call graph.",
+  "sourceNote": "Source links point to the indexed commit <sha>{ref}</sha>, which may differ from the PR head.",
+  "sourceUnknown": "The indexed commit is unknown, so source links are not available.",
+  "toggle": "Show callers of {name}",
+  "degradedTitle": "Partial analysis",
+  "reasons": {
+    "flag_off": "Repo intelligence is turned off on the server (REPO_INTEL_ENABLED=false).",
+    "no_data": "This repository is not indexed yet. Callers come from a name-based scan of the clone and may be incomplete.",
+    "index_partial": "The repository index is partial. Some callers or endpoints may be missing.",
+    "index_failed": "The last index run failed. Callers come from a name-based scan of the clone and may be incomplete.",
+    "repo_too_large": "The repository is too large to index fully. Results may be incomplete.",
+    "no_files": "The changed files of this PR are not stored yet, so there is nothing to analyse. They are stored when the PR is imported or refreshed."
   }
 }

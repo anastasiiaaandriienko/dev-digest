@@ -17,7 +17,7 @@ stays in `server/`.
 | `run_agent_on_pr` | `POST /pulls/:id/review`, then polls `GET /pulls/:id/runs`, then `GET /pulls/:id/reviews` | **starts a review run: writes runs/reviews/findings and makes a PAID LLM call** |
 | `get_findings` | `GET /pulls/:id/reviews` (+ `GET /pulls/:id/runs` when a run has no review) | read-only — verdict + findings of a run, of an agent's latest review, or the latest review of every agent |
 | `get_conventions` | `GET /repos/:id/conventions` | read-only — accepted (default), pending, rejected or all rules from L02; never starts a scan |
-| `get_blast_radius` | — | read-only stub: returns `status: "not_implemented"` (implemented in HW-04 from repo-intel) |
+| `get_blast_radius` | `GET /pulls/:id/blast` | read-only — HW-04 impact map from the repo-intel index: changed symbols, direct callers (file:line, GitHub links pinned to the **indexed** commit), potentially affected endpoints / crons (file-level import graph), totals, `degraded` + `reason`, `source`. No GitHub sync, no LLM |
 
 Ids are DevDigest's internal uuids, not GitHub numbers:
 
