@@ -105,6 +105,23 @@ export const ApiConventionsState = z.object({
 });
 export type ApiConventionsState = z.infer<typeof ApiConventionsState>;
 
+/** GET /pulls?number=&title=&repo= → `PullLookup` (stored PRs only; never syncs GitHub). */
+export const ApiPullLookup = z.object({
+  matches: z.array(
+    z.object({
+      id: z.string(),
+      number: z.number(),
+      title: z.string(),
+      status: z.string(),
+      repo_id: z.string(),
+      repo_full_name: z.string(),
+    }),
+  ),
+  truncated: z.boolean(),
+  repo_matches: z.array(z.object({ id: z.string(), full_name: z.string() })).nullable(),
+});
+export type ApiPullLookup = z.infer<typeof ApiPullLookup>;
+
 const ApiBlastCaller = z.object({
   name: z.string(),
   file: z.string(),

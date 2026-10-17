@@ -1,11 +1,25 @@
 import type { BlastDegradedReason, BlastRadius, BlastTotals } from '@devdigest/shared';
 import type { BlastResult } from '../repo-intel/types.js';
+import { changedBaseLines } from '../repo-intel/blast.js';
 import { DEGRADED_NOTES, GITHUB_HOST } from './constants.js';
 
 /**
  * Pure mapping from the repo-intel facade result (camelCase, internal) to the
  * shared `BlastRadius` contract (snake_case). No I/O.
  */
+
+/**
+ * Base-side lines each stored patch changes, keyed by path. Files whose patch is
+ * missing (GitHub omits very large diffs) get no entry, so all of their symbols
+ * stay "changed".
+ */
+export function changedLinesByFile(files: { path: string; patch: string | null }[]): Record<string, number[]> {
+  const out: Record<string, number[]> = {};
+  for (const f of files) {
+    if (f.patch) out[f.path] = changedBaseLines(f.patch);
+  }
+  return out;
+}
 
 /** GitHub blob link pinned to `ref`; null when the commit is unknown. */
 export function githubBlobUrl(repoFullName: string, ref: string, file: string, line?: number): string | null {

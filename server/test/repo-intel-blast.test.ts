@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { buildDownstream, enclosingSymbol, type BlastRef, type SymbolSpan } from '../src/modules/repo-intel/blast.js';
+import {
+  buildDownstream,
+  changedBaseLines,
+  enclosingSymbol,
+  spanTouches,
+  type BlastRef,
+  type SymbolSpan,
+} from '../src/modules/repo-intel/blast.js';
 import { RepoIntelService } from '../src/modules/repo-intel/service.js';
 import { BFS_DEPTH, MAX_CALLERS_PER_SYMBOL } from '../src/modules/repo-intel/constants.js';
 import type { BlastChangedSymbol, IndexState } from '../src/modules/repo-intel/types.js';
@@ -27,6 +34,68 @@ const base = {
   limit: MAX_CALLERS_PER_SYMBOL,
   maxDepth: BFS_DEPTH,
 };
+
+describe('changedBaseLines / spanTouches', () => {
+  // The stored patches of DevDigest PR #3 (helpers.ts and routes.ts), verbatim hunks.
+  const HELPERS_PATCH = [
+    '@@ -16,13 +16,14 @@ export function toAgentDto(row: AgentRow): Agent {',
+    '     description: row.description,',
+    '     provider: row.provider as Provider,',
+    '     model: row.model,',
+    '-    system_prompt: row.systemPrompt,',
+    '+    instructions: row.systemPrompt,',
+    '     output_schema: row.outputSchema ?? null,',
+    '     enabled: row.enabled,',
+    '     version: row.version,',
+    '     strategy: row.strategy as ReviewStrategy,',
+    '     ci_fail_on: row.ciFailOn as CiFailOn,',
+    '     repo_intel: row.repoIntel,',
+    '+    created_at: row.createdAt.toISOString(),',
+    '   };',
+    ' }',
+    ' ',
+  ].join('\n');
+  const ROUTES_PATCH = [
+    '@@ -21,7 +21,7 @@ const VersionParams = z.object({',
+    ' *   GET    /agents',
+    ' *   GET    /agents/:id',
+    ' *   POST   /agents',
+    '- *   PUT    /agents/:id',
+    '+ *   PATCH  /agents/:id',
+    ' *   GET    /agents/:id/versions',
+    ' *   GET    /agents/:id/versions/:version',
+    ' *   GET    /agents/:id/skills',
+    '@@ -106,7 +106,7 @@ export default async function agentsRoutes(appBase: FastifyInstance) {',
+    '     return agent;',
+    '   });',
+    ' ',
+    '-  app.put(',
+    '+  app.patch(',
+    "     '/agents/:id',",
+  ].join('\n');
+
+  it('returns the base lines a patch changes: deletions and the line an insertion follows', () => {
+    // 16 description … 19 (deleted system_prompt) … 25 repo_intel, then the created_at insertion.
+    expect(changedBaseLines(HELPERS_PATCH)).toEqual([19, 25]);
+    expect(changedBaseLines(ROUTES_PATCH)).toEqual([24, 109]);
+  });
+
+  it('ignores context, the no-newline marker, and anchors a top-of-file insertion at line 1', () => {
+    expect(changedBaseLines('@@ -1,2 +1,3 @@\n+import x;\n a\n b\n\\ No newline at end of file')).toEqual([1]);
+    expect(changedBaseLines('@@ -0,0 +1,2 @@\n+a\n+b')).toEqual([1]);
+    expect(changedBaseLines('not a patch')).toEqual([]);
+  });
+
+  it('a span touches a changed line only when it contains it', () => {
+    // helpers.ts spans of PR #3: only toAgentDto (12–27) overlaps [19, 25].
+    const lines = changedBaseLines(HELPERS_PATCH);
+    expect(spanTouches({ line: 12, endLine: 27 }, lines)).toBe(true);
+    expect(spanTouches({ line: 35, endLine: 42 }, lines)).toBe(false);
+    expect(spanTouches({ line: 61, endLine: 86 }, lines)).toBe(false);
+    expect(spanTouches({ line: 19, endLine: null }, lines)).toBe(true); // unknown end → first line only
+    expect(spanTouches({ line: null, endLine: null }, lines)).toBe(false);
+  });
+});
 
 describe('enclosingSymbol', () => {
   const spans: SymbolSpan[] = [
@@ -230,6 +299,24 @@ describe('RepoIntelService.getBlastRadius', () => {
     expect(r.impactedEndpoints).toEqual(['GET /items']);
     // One reverse hop (BFS_DEPTH = 2): importers of the depth-1 caller file only.
     expect(calls.filter((c) => c.startsWith('importers:'))).toEqual(['importers:src/service.ts']);
+  });
+
+  it('changedLines keeps only symbols whose span overlaps a changed line; a file without an entry keeps all', async () => {
+    const touched = await service({ indexState: state('full') }).svc.getBlastRadius('r1', ['src/helpers.ts'], {
+      'src/helpers.ts': [5],
+    });
+    expect(touched.changedSymbols.map((s) => s.name)).toEqual(['toDto']);
+    expect(touched.downstream[0]!.callers).toHaveLength(1);
+
+    const untouched = await service({ indexState: state('full') }).svc.getBlastRadius('r1', ['src/helpers.ts'], {
+      'src/helpers.ts': [40],
+    });
+    expect(untouched).toMatchObject({ changedSymbols: [], downstream: [], callers: [], degraded: false });
+
+    const noEntry = await service({ indexState: state('full') }).svc.getBlastRadius('r1', ['src/helpers.ts'], {
+      'src/other.ts': [1],
+    });
+    expect(noEntry.changedSymbols.map((s) => s.name)).toEqual(['toDto']);
   });
 
   it('partial index → same walk, degraded index_partial', async () => {

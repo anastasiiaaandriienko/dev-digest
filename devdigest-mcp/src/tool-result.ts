@@ -1,4 +1,4 @@
-import { ApiError, sanitizeMessage } from './errors.js';
+import { ApiError, ToolInputError, sanitizeMessage } from './errors.js';
 
 /**
  * Helpers that build MCP tool results: a compact text block for the model plus
@@ -20,7 +20,11 @@ export function ok(text: string, structured: Record<string, unknown>): ToolResul
 /** A safe, short error result. Unknown errors are not echoed back verbatim. */
 export function fail(err: unknown): ToolResult {
   const message =
-    err instanceof ApiError ? err.message : err instanceof Error ? `Unexpected error: ${sanitizeMessage(err.message)}` : 'Unexpected error';
+    err instanceof ApiError || err instanceof ToolInputError
+      ? err.message
+      : err instanceof Error
+        ? `Unexpected error: ${sanitizeMessage(err.message)}`
+        : 'Unexpected error';
   return { content: [{ type: 'text', text: message }], isError: true };
 }
 

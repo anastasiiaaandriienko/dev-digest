@@ -31,6 +31,7 @@ import { RepoIntelRepository, type FullSymbolRow } from './repository.js';
 import {
   buildDownstream,
   sortChangedSymbols,
+  spanTouches,
   type BlastRef,
   type SymbolSpan,
 } from './blast.js';
@@ -227,14 +228,22 @@ export class RepoIntelService implements RepoIntel {
    *
    * Callers are capped at MAX_CALLERS_PER_SYMBOL per changed symbol; the
    * defining file is never a caller. Line numbers refer to `result.ref`.
+   *
+   * `changedLines` narrows the changed symbols to those whose indexed span
+   * overlaps a changed base line (persistent path only: ripgrep symbols have no
+   * end line, so the degraded fallback keeps every symbol of a changed file).
    */
-  async getBlastRadius(repoId: string, changedFiles: string[]): Promise<BlastResult> {
+  async getBlastRadius(
+    repoId: string,
+    changedFiles: string[],
+    changedLines?: Readonly<Record<string, readonly number[]>>,
+  ): Promise<BlastResult> {
     if (!this.container.config.repoIntelEnabled) return emptyBlast('flag_off');
     if (changedFiles.length === 0) return { ...emptyBlast(), degraded: false, reason: undefined };
 
     const state = await this.repo.tryGetIndexState(repoId);
     if (state && (state.status === 'full' || state.status === 'partial')) {
-      return this.persistentBlast(repoId, changedFiles, state);
+      return this.persistentBlast(repoId, changedFiles, state, changedLines);
     }
     return this.fallbackBlast(repoId, changedFiles, state?.status === 'failed' ? 'index_failed' : 'no_data');
   }
@@ -251,6 +260,7 @@ export class RepoIntelService implements RepoIntel {
     repoId: string,
     changedFiles: string[],
     state: IndexState,
+    changedLines?: Readonly<Record<string, readonly number[]>>,
   ): Promise<BlastResult> {
     const degraded = state.status === 'partial';
     const base = {
@@ -259,7 +269,7 @@ export class RepoIntelService implements RepoIntel {
       ...(degraded ? { reason: 'index_partial' as const } : {}),
     };
 
-    const changedSymbols = changedSymbolsFrom(await this.repo.getSymbolRows(repoId, changedFiles));
+    const changedSymbols = changedSymbolsFrom(await this.repo.getSymbolRows(repoId, changedFiles), changedLines);
     if (changedSymbols.length === 0) {
       return { changedSymbols, downstream: [], callers: [], impactedEndpoints: [], factsByFile: {}, ...base };
     }
@@ -720,12 +730,23 @@ function emptyBlast(reason: DegradedReason = 'no_data'): BlastResult {
   return { changedSymbols: [], downstream: [], callers: [], impactedEndpoints: [], ref: '', degraded: true, reason };
 }
 
-/** Changed symbols from persistent rows: bare names only, deduped, sorted. */
-function changedSymbolsFrom(rows: FullSymbolRow[]): BlastChangedSymbol[] {
+/**
+ * Changed symbols from persistent rows: bare names only, deduped, sorted. With
+ * `changedLines`, a file that has an entry keeps only the symbols whose span
+ * overlaps one of its changed lines; a file without an entry keeps them all.
+ */
+function changedSymbolsFrom(
+  rows: FullSymbolRow[],
+  changedLines?: Readonly<Record<string, readonly number[]>>,
+): BlastChangedSymbol[] {
   return sortChangedSymbols(
     dedupeSymbols(
       rows
         .filter((s) => !s.name.includes('.'))
+        .filter((s) => {
+          const lines = changedLines?.[s.path];
+          return lines === undefined || spanTouches(s, lines);
+        })
         .map((s) => ({ file: s.path, name: s.name, kind: s.kind, line: s.line ?? 0 })),
     ),
   );

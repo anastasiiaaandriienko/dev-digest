@@ -171,7 +171,16 @@ export interface RepoIntel {
   getIndexState(repoId: string): Promise<IndexState>;
 
   // --- Reads --------------------------------------------------------------
-  getBlastRadius(repoId: string, changedFiles: string[]): Promise<BlastResult>;
+  /**
+   * `changedLines` (optional): per changed file, the base-side lines its patch
+   * changes. Only symbols overlapping them count as changed; a file missing from
+   * the map keeps all of its symbols.
+   */
+  getBlastRadius(
+    repoId: string,
+    changedFiles: string[],
+    changedLines?: Readonly<Record<string, readonly number[]>>,
+  ): Promise<BlastResult>;
   getRepoMap(repoId: string, tokenBudget?: number): Promise<RepoMapResult>;
   getFileRank(repoId: string, paths: string[]): Promise<FileRankRow[]>;
   getSymbolsInFiles(repoId: string, paths: string[]): Promise<SymbolRow[]>;

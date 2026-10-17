@@ -9,6 +9,15 @@ const handler: Handler = (c) => {
   if (c.path === '/agents') return { body: [{ id: AGENT, name: 'A', enabled: true, system_prompt: 'SECRET' }] };
   if (c.path.endsWith('/runs')) return { body: [{ run_id: RUN, agent_id: AGENT, status: 'done', duration_ms: 5 }] };
   if (c.path.endsWith('/reviews')) return { body: [review({ findings: [finding()] })] };
+  if (c.path.startsWith('/pulls?')) {
+    return {
+      body: {
+        matches: [{ id: PR, number: 3, title: 'T', status: 'open', repo_id: REPO, repo_full_name: 'o/r' }],
+        truncated: false,
+        repo_matches: c.path.includes('repo=') ? [{ id: REPO, full_name: 'o/r' }] : null,
+      },
+    };
+  }
   if (c.path.endsWith('/blast')) {
     return {
       body: {
@@ -95,16 +104,17 @@ describe('MCP protocol surface', () => {
     expect([...TOOL_NAMES]).toEqual(['list_agents', 'run_agent_on_pr', 'get_findings', 'get_conventions', 'get_blast_radius']);
   });
 
-  it('annotates read-only tools and flags run_agent_on_pr as paid and open-world', async () => {
+  it('lists tools by name (no title) with only the read-only badge; run_agent_on_pr is not read-only', async () => {
     const c = await connect();
     const { tools } = await c.listTools();
     for (const t of tools) {
       expect(t.outputSchema, t.name).toBeDefined();
+      expect(t.title, t.name).toBeUndefined();
       if (t.name === 'run_agent_on_pr') {
-        expect(t.annotations).toMatchObject({ readOnlyHint: false, openWorldHint: true });
-        expect(t.description).toContain('PAID');
+        // Explicit false hints render no badge; openWorldHint stays at its MCP default (true).
+        expect(t.annotations).toEqual({ readOnlyHint: false, destructiveHint: false });
       } else {
-        expect(t.annotations?.readOnlyHint, t.name).toBe(true);
+        expect(t.annotations, t.name).toEqual({ readOnlyHint: true });
       }
     }
   });
@@ -154,9 +164,77 @@ describe('MCP protocol surface', () => {
     }
   });
 
-  it('invalid input (non-uuid) is an isError result, not a crash', async () => {
+  /** Input schema of a tool: property names in order, required list, additionalProperties. */
+  async function inputOf(name: string) {
     const c = await connect();
-    const res = await c.callTool({ name: 'get_findings', arguments: { pr_id: 'not-a-uuid' } }).catch((e) => e);
+    const { tools } = await c.listTools();
+    return tools.find((t) => t.name === name)!.inputSchema as {
+      properties: Record<string, { type?: string; default?: unknown; description?: string }>;
+      required?: string[];
+      additionalProperties?: boolean;
+    };
+  }
+
+  it('get_findings has exactly pr_id*, repo, all_runs (boolean, default false) in this order', async () => {
+    const s = await inputOf('get_findings');
+    expect(Object.keys(s.properties)).toEqual(['pr_id', 'repo', 'all_runs']);
+    expect(s.required).toEqual(['pr_id']);
+    expect(s.properties.pr_id!.type).toBe('string');
+    expect(s.properties.repo!.type).toBe('string');
+    expect(s.properties.all_runs).toMatchObject({ type: 'boolean', default: false });
+    expect(s.additionalProperties).toBe(false);
+  });
+
+  it('get_blast_radius has exactly pr_id*, repo; run_agent_on_pr has exactly pr_id*, repo, agent_id*', async () => {
+    const blast = await inputOf('get_blast_radius');
+    expect(Object.keys(blast.properties)).toEqual(['pr_id', 'repo']);
+    expect(blast.required).toEqual(['pr_id']);
+    const run = await inputOf('run_agent_on_pr');
+    expect(Object.keys(run.properties)).toEqual(['pr_id', 'repo', 'agent_id']);
+    expect(run.required).toEqual(['pr_id', 'agent_id']);
+  });
+
+  it('legacy fields (pr_number, run_id, agent_id, timeout_seconds) are rejected, not silently ignored', async () => {
+    const c = await connect();
+    for (const [name, args] of [
+      ['get_findings', { pr_id: PR, run_id: RUN }],
+      ['get_findings', { pr_id: PR, agent_id: AGENT }],
+      ['get_blast_radius', { pr_id: PR, pr_number: 3 }],
+      ['run_agent_on_pr', { pr_id: PR, agent_id: AGENT, timeout_seconds: 60 }],
+    ] as const) {
+      const res = await c.callTool({ name, arguments: args }).catch((e: Error) => e);
+      if (res instanceof Error) expect(res.message, name).toMatch(/unrecognized|Invalid/i);
+      else expect(res.isError, `${name} ${JSON.stringify(args)}`).toBe(true);
+    }
+  });
+
+  it('pr_id sent as a JSON number (18 instead of "18") is accepted as a PR number', async () => {
+    const c = await connect();
+    const res = await c.callTool({ name: 'get_blast_radius', arguments: { pr_id: 3, repo: 'o/r' } });
+    expect(res.isError).toBeFalsy();
+    expect((res.structuredContent as { pr_id: string }).pr_id).toBe(PR);
+  });
+
+  it('get_blast_radius and get_findings by "#3" + repo return schema-valid structuredContent', async () => {
+    const c = await connect();
+    for (const name of ['get_blast_radius', 'get_findings']) {
+      // callTool validates structuredContent against outputSchema and throws on mismatch.
+      const res = await c.callTool({ name, arguments: { pr_id: '#3', repo: 'o/r' } });
+      expect(res.isError, name).toBeFalsy();
+      expect((res.structuredContent as { pr_id: string }).pr_id).toBe(PR);
+      expect((res.content as { text: string }[])[0]!.text).toContain('Resolved PR #3 in o/r');
+    }
+  });
+
+  it('no nullable output field uses a type array (schema portability)', async () => {
+    const c = await connect();
+    const { tools } = await c.listTools();
+    expect(JSON.stringify(tools)).not.toMatch(/"type":\[/);
+  });
+
+  it('invalid input (missing / 1-character pr_id) is an isError result, not a crash', async () => {
+    const c = await connect();
+    const res = await c.callTool({ name: 'get_findings', arguments: { pr_id: 'x' } }).catch((e) => e);
     if (res instanceof Error) {
       expect(res.message).not.toMatch(/\n\s+at /);
     } else {

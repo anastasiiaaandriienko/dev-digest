@@ -4,6 +4,9 @@
  * RepoIntelService loads the rows (persistent index or ripgrep fallback) and
  * hands them here, so both paths share one deterministic algorithm:
  *
+ *   changed  symbols declared in a changed file whose span overlaps a line the
+ *            patch changes (`changedBaseLines` + `spanTouches`); a file without
+ *            a known patch keeps all of its symbols;
  *   depth 1  direct callers = references whose `declFile` is the changed
  *            symbol's file (the defining file itself is never a caller);
  *   depth 2+ files that import a caller file (reverse `file_edges`), up to
@@ -69,6 +72,44 @@ export function enclosingSymbol(spans: readonly SymbolSpan[], line: number): str
     if (!best || s.line > best.line! || (s.line === best.line && s.name < best.name)) best = s;
   }
   return best?.name ?? null;
+}
+
+/**
+ * Old-side (base) line numbers a unified-diff patch actually changes: every
+ * deleted line, and for an insertion the base line it follows. Context lines
+ * are ignored. The index describes the base side, so these are the lines to
+ * intersect with indexed symbol spans. (`parseUnifiedDiff` tracks only new-side
+ * lines including context, so it cannot answer this.)
+ */
+export function changedBaseLines(patch: string): number[] {
+  const out = new Set<number>();
+  let oldLine = 0;
+  let inHunk = false;
+  for (const line of patch.split('\n')) {
+    const header = line.match(/^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@/);
+    if (header) {
+      oldLine = Number(header[1]);
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk || line.startsWith('\\')) continue;
+    if (line.startsWith('-')) {
+      out.add(oldLine);
+      oldLine += 1;
+    } else if (line.startsWith('+')) {
+      out.add(Math.max(oldLine - 1, 1)); // insertion: the base line it follows (or line 1)
+    } else {
+      oldLine += 1;
+    }
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/** True when a symbol's span (end unknown → its first line only) contains a changed line. */
+export function spanTouches(span: { line: number | null; endLine: number | null }, lines: readonly number[]): boolean {
+  if (span.line == null) return false;
+  const end = span.endLine ?? span.line;
+  return lines.some((l) => l >= span.line! && l <= end);
 }
 
 /** Changed symbols in a stable order: file, line, name. */

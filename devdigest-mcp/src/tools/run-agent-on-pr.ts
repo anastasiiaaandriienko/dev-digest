@@ -1,10 +1,10 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { ApiRunSummary } from '../api-schemas.js';
 import { ReviewOut, reviewText, toReviewOut } from '../findings.js';
-import { MAX_RUN_TIMEOUT_MS } from '../config.js';
 import { ApiError, sanitizeMessage } from '../errors.js';
 import { fail, ok, type ToolResult } from '../tool-result.js';
 import type { ToolDeps } from './deps.js';
+import { prIdField, repoField, resolvePr, type PrRefArgs } from './pr-ref.js';
 
 export const RUN_AGENT_ON_PR = 'run_agent_on_pr';
 
@@ -12,22 +12,24 @@ export const RUN_AGENT_ON_PR = 'run_agent_on_pr';
  * done / failed / cancelled — the run's terminal state on the server.
  * timeout    — still running when the wait ended; it keeps going on the server.
  * poll_error — the run was started but its status could not be read (network, timeout, 429…).
- * In the last two cases the run_id is returned so get_findings can fetch the result later.
+ * In the last two cases the run_id is returned; get_findings with all_runs lists that run's review once it exists.
  */
 const RUN_STATUSES = ['done', 'failed', 'cancelled', 'timeout', 'poll_error'] as const;
 type RunStatus = (typeof RUN_STATUSES)[number];
 
-export const runAgentInput = {
-  pr_id: z.string().uuid().describe('Internal DevDigest pull-request id (uuid), not the GitHub PR number.'),
-  agent_id: z.string().uuid().describe('Id of ONE agent from list_agents.'),
-  timeout_seconds: z
-    .number()
-    .int()
-    .min(10)
-    .max(MAX_RUN_TIMEOUT_MS / 1000)
-    .optional()
-    .describe('How long to wait for the run to finish (default from DEVDIGEST_RUN_TIMEOUT_MS, 50 s).'),
-};
+/**
+ * Exactly three fields, in this order; unknown keys are rejected (strict). The PR is resolved
+ * BEFORE anything paid starts. The wait comes from DEVDIGEST_RUN_TIMEOUT_MS (default 50 s).
+ */
+export const runAgentInput = z.strictObject({
+  pr_id: prIdField,
+  repo: repoField,
+  agent_id: z
+    .string()
+    .describe(
+      "Agent ID from list_agents, e.g. 'agent-458'. Always a specific agent — to run all agents call this tool once per agent.",
+    ),
+});
 export const runAgentOutput = {
   pr_id: z.string(),
   run_id: z.string(),
@@ -42,15 +44,13 @@ export const runAgentOutput = {
   review: ReviewOut.nullable(),
 };
 
+// Starts a PAID LLM review and writes a run / review / findings. openWorldHint is left at its MCP
+// default (true); only explicit hints are rendered as badges by the Inspector.
 export const runAgentConfig = {
-  title: 'Run one review agent on a PR (paid LLM call)',
-  description:
-    'Starts a review of a PR by ONE agent (POST /pulls/:id/review), waits for that run to finish and returns its verdict and findings. ' +
-    'WARNING: changes state (creates a run, review and findings) and makes a PAID LLM call — only use it when the user asked for a review. ' +
-    'If the wait ends first (status timeout or poll_error) the run keeps going on the server; fetch its result later with get_findings and the returned run_id.',
+  description: 'Run a review agent on a pull request and return findings.',
   inputSchema: runAgentInput,
   outputSchema: runAgentOutput,
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: { readOnlyHint: false, destructiveHint: false },
 };
 
 /** Called on every status poll; the MCP layer turns it into notifications/progress. */
@@ -61,17 +61,25 @@ const errorText = (err: unknown): string =>
 
 export async function runAgentOnPr(
   deps: ToolDeps,
-  input: { pr_id: string; agent_id: string; timeout_seconds?: number },
+  input: PrRefArgs & { agent_id: string },
   onProgress?: ProgressFn,
 ): Promise<ToolResult> {
   const { api, config } = deps;
+
+  // 0. Resolve the PR first: an unknown or ambiguous PR must never start a paid run.
+  let prId: string;
+  try {
+    prId = (await resolvePr(deps, input)).prId;
+  } catch (err) {
+    return fail(err);
+  }
 
   // 1. Start the run. An HTTP error means the server refused it (nothing started). A timeout or an
   //    unexpected response means the request may have reached the server, which creates and starts
   //    the run before replying — warn before a retry starts a second paid review.
   let run: { run_id: string; agent_id: string; agent_name?: string | null };
   try {
-    const started = await api.startReview(input.pr_id, input.agent_id);
+    const started = await api.startReview(prId, input.agent_id);
     const own = started.runs.find((r) => r.agent_id === input.agent_id);
     if (!own || started.runs.length !== 1) {
       return fail(new Error('DevDigest API did not return exactly one run for the requested agent'));
@@ -80,14 +88,14 @@ export async function runAgentOnPr(
   } catch (err) {
     const result = fail(err);
     if (err instanceof ApiError && (err.kind === 'timeout' || err.kind === 'invalid_response')) {
-      result.content[0]!.text += ` A review run may already have started — check get_findings with pr_id ${input.pr_id} before retrying.`;
+      result.content[0]!.text += ` A review run may already have started — check get_findings with pr_id ${prId} before retrying.`;
     }
     return result;
   }
-  deps.logger.info(`run ${run.run_id} started for agent ${input.agent_id} on PR ${input.pr_id}`);
+  deps.logger.info(`run ${run.run_id} started for agent ${input.agent_id} on PR ${prId}`);
 
   // 2. From here on a paid run exists: every outcome must carry its run_id.
-  const waitMs = input.timeout_seconds !== undefined ? input.timeout_seconds * 1000 : config.runTimeoutMs;
+  const waitMs = config.runTimeoutMs;
   const startedAt = deps.now();
   const deadline = startedAt + waitMs;
   let summary: ApiRunSummary | undefined;
@@ -96,7 +104,7 @@ export async function runAgentOnPr(
   let review: ReviewOut | null = null;
   try {
     for (;;) {
-      const runs = await api.listRuns(input.pr_id);
+      const runs = await api.listRuns(prId);
       summary = runs.find((r) => r.run_id === run.run_id);
       const s = summary?.status;
       if (!summary) {
@@ -121,7 +129,7 @@ export async function runAgentOnPr(
       await deps.sleep(config.pollIntervalMs);
     }
     if (status === 'done') {
-      const reviews = await api.listReviews(input.pr_id);
+      const reviews = await api.listReviews(prId);
       const own = reviews.find((r) => r.run_id === run.run_id);
       review = own ? toReviewOut(own) : null;
     }
@@ -132,7 +140,7 @@ export async function runAgentOnPr(
   }
 
   const structured = {
-    pr_id: input.pr_id,
+    pr_id: prId,
     run_id: run.run_id,
     agent_id: input.agent_id,
     agent_name: run.agent_name ?? summary?.agent_name ?? null,
@@ -143,7 +151,7 @@ export async function runAgentOnPr(
     review,
   };
 
-  const later = `call get_findings with pr_id ${input.pr_id} and run_id ${run.run_id} later`;
+  const later = `call get_findings with pr_id ${prId} and all_runs=true later (run ${run.run_id})`;
   let text: string;
   if (status === 'done') {
     text = review

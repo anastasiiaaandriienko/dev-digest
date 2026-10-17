@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { ApiFinding, ApiReview } from './api-schemas.js';
 import { clip } from './tool-result.js';
 
@@ -37,7 +37,7 @@ export const ReviewOut = z.object({
   summary: z.string().nullable(),
   model: z.string().nullable(),
   created_at: z.string(),
-  severity_counts: z.record(z.number()),
+  severity_counts: z.record(z.string(), z.number()),
   findings_total: z.number(),
   findings_truncated: z.boolean(),
   findings: z.array(FindingOut),

@@ -213,6 +213,27 @@ export const PrMeta = z.object({
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 
+// ---- PR lookup (GET /pulls?number=&title=&repo=) — read-only, stored PRs only ----
+export const PullRef = z.object({
+  id: z.string(),
+  number: z.number().int(),
+  title: z.string(),
+  status: z.string(),
+  repo_id: z.string(),
+  repo_full_name: z.string(),
+});
+export type PullRef = z.infer<typeof PullRef>;
+
+export const PullLookup = z.object({
+  /** Stored PRs matching every given filter, sorted by repo then number (newest first). */
+  matches: z.array(PullRef),
+  /** More PRs matched than were returned. */
+  truncated: z.boolean(),
+  /** Repositories the `repo` filter resolved to; null when no `repo` was given. */
+  repo_matches: z.array(z.object({ id: z.string(), full_name: z.string() })).nullable(),
+});
+export type PullLookup = z.infer<typeof PullLookup>;
+
 export const PrFile = z.object({
   path: z.string(),
   additions: z.number().int(),

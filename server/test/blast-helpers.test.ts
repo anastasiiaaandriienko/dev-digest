@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { BlastRadius } from '@devdigest/shared';
-import { blastSummary, emptyBlastRadius, githubBlobUrl, toBlastRadius } from '../src/modules/blast/helpers.js';
+import {
+  blastSummary,
+  changedLinesByFile,
+  emptyBlastRadius,
+  githubBlobUrl,
+  toBlastRadius,
+} from '../src/modules/blast/helpers.js';
 import type { BlastResult } from '../src/modules/repo-intel/types.js';
 
 /** HW-04 Blast Radius — pure mapping from the repo-intel result to the shared contract. */
@@ -25,6 +31,17 @@ const RESULT: BlastResult = {
   ref: '45ce6b9adc1dbc433275cb6d79b8bc6000f127dd',
   degraded: false,
 };
+
+describe('changedLinesByFile', () => {
+  it('maps each stored patch to its changed base lines; a file without a patch gets no entry', () => {
+    expect(
+      changedLinesByFile([
+        { path: 'a.ts', patch: '@@ -10,3 +10,3 @@\n x\n-y\n+z\n w' },
+        { path: 'big.ts', patch: null },
+      ]),
+    ).toEqual({ 'a.ts': [11] });
+  });
+});
 
 describe('githubBlobUrl', () => {
   it('pins the link to the given commit and encodes each path segment', () => {

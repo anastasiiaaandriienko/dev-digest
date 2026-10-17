@@ -32,13 +32,12 @@ export class BlastRepository {
     return row ?? null;
   }
 
-  /** Paths of the PR's stored files (pr_files), sorted. */
-  async listChangedFiles(prId: string): Promise<string[]> {
-    const rows = await this.db
-      .select({ path: t.prFiles.path })
+  /** The PR's stored files (pr_files) with their unified-diff patch (null when GitHub omitted it), sorted by path. */
+  async listChangedFiles(prId: string): Promise<{ path: string; patch: string | null }[]> {
+    return this.db
+      .select({ path: t.prFiles.path, patch: t.prFiles.patch })
       .from(t.prFiles)
       .where(eq(t.prFiles.prId, prId))
       .orderBy(asc(t.prFiles.path));
-    return [...new Set(rows.map((r) => r.path))];
   }
 }

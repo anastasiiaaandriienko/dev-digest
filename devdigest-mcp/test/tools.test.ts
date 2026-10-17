@@ -54,6 +54,7 @@ describe('run_agent_on_pr', () => {
     runStatuses: Array<Record<string, unknown>>;
     reviews?: unknown[];
     started?: unknown;
+    config?: Parameters<typeof makeDeps>[1];
   }) {
     let polls = 0;
     const handler: Handler = (c) => {
@@ -68,7 +69,7 @@ describe('run_agent_on_pr', () => {
       if (c.path === `/pulls/${PR}/reviews`) return { body: opts.reviews ?? [] };
       return { status: 404 };
     };
-    return makeDeps(handler);
+    return makeDeps(handler, opts.config);
   }
 
   it('POSTs exactly {agentId}, polls until done, returns the matching review', async () => {
@@ -120,9 +121,9 @@ describe('run_agent_on_pr', () => {
     expect(sc(r).review).toBeNull();
   });
 
-  it('times out with run_id and stops polling', async () => {
-    const { deps, calls, sleeps } = scenario({ runStatuses: [{ status: 'running' }] });
-    const r = await runAgentOnPr(deps, { pr_id: PR, agent_id: AGENT, timeout_seconds: 10 });
+  it('times out (DEVDIGEST_RUN_TIMEOUT_MS) with run_id and stops polling', async () => {
+    const { deps, calls, sleeps } = scenario({ runStatuses: [{ status: 'running' }], config: { runTimeoutMs: 10_000 } });
+    const r = await runAgentOnPr(deps, { pr_id: PR, agent_id: AGENT });
     expect(r.isError).toBeUndefined();
     expect(sc(r)).toMatchObject({ status: 'timeout', run_id: RUN, review: null });
     expect(sleeps).toEqual([3000, 3000, 3000]);
@@ -269,37 +270,16 @@ describe('get_findings', () => {
     const { deps, calls } = makeDeps(withRuns());
     const r = await getFindings(deps, { pr_id: PR });
     expect(sc(r).selection).toBe('latest_per_agent');
-    expect(sc(r).run_status).toBeNull();
+    expect(sc(r).truncated).toBe(false);
     expect(sc(r).reviews.map((x) => x.review_id).sort()).toEqual(['r2', 'r3']);
     expect(calls.map((c) => c.path)).toEqual([`/pulls/${PR}/reviews`]);
   });
 
-  it('agent_id: latest review of that agent', async () => {
+  it('all_runs: every completed review, newest first (summaries excluded)', async () => {
     const { deps } = makeDeps(withRuns());
-    const r = await getFindings(deps, { pr_id: PR, agent_id: AGENT });
-    expect(sc(r).selection).toBe('agent');
-    expect(sc(r).reviews.map((x) => x.review_id)).toEqual(['r2']);
-  });
-
-  it('run_id: returns the review of that run', async () => {
-    const { deps } = makeDeps(withRuns());
-    const r = await getFindings(deps, { pr_id: PR, run_id: RUN });
-    expect(sc(r).selection).toBe('run');
-    expect(sc(r).reviews.map((x) => x.review_id)).toEqual(['r1']);
-    expect(sc(r).run_status).toBeNull();
-  });
-
-  it('run_id without a review: run_status from /runs', async () => {
-    const { deps } = makeDeps(withRuns([{ run_id: 'run-x', status: 'running' }]));
-    const r = await getFindings(deps, { pr_id: PR, run_id: 'run-x' });
-    expect(sc(r)).toMatchObject({ selection: 'run', run_status: 'running', reviews: [] });
-    expect(textOf(r)).toContain('running');
-  });
-
-  it('run_id unknown everywhere: run_status not_found', async () => {
-    const { deps } = makeDeps(withRuns([]));
-    const r = await getFindings(deps, { pr_id: PR, run_id: 'nope' });
-    expect(sc(r).run_status).toBe('not_found');
+    const r = await getFindings(deps, { pr_id: PR, all_runs: true });
+    expect(sc(r).selection).toBe('all_runs');
+    expect(sc(r).reviews.map((x) => x.review_id)).toEqual(['r2', 'r3', 'r1']);
   });
 
   it('no reviews at all gives a friendly text', async () => {

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { clip, fail, ok, type ToolResult } from '../tool-result.js';
 import type { ToolDeps } from './deps.js';
 
@@ -24,13 +24,12 @@ export const listAgentsOutput = {
 };
 
 export const listAgentsConfig = {
-  title: 'List DevDigest review agents',
   description:
     'Lists the AI review agents configured in DevDigest (GET /agents) with their ids, model and enabled state. ' +
-    'Use an id from here as agent_id for run_agent_on_pr or get_findings. Read-only; no system prompts are returned.',
+    'Use an id from here as agent_id for run_agent_on_pr. Read-only; no system prompts are returned.',
   inputSchema: listAgentsInput,
   outputSchema: listAgentsOutput,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: true },
 };
 
 export async function listAgents(deps: ToolDeps, input: { enabled_only?: boolean }): Promise<ToolResult> {

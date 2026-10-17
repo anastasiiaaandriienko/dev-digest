@@ -51,7 +51,7 @@ currently calls each method.
 | `getFileRank(repoId, paths)` | `{ path, percentile }[]` | `run-executor.ts:392` (≥ 95 → rank note) | L03 Smart Diff |
 | `getCallerSignatures(repoId, files, limit)` | `{ file, symbol, signature, rank }[]` | `run-executor.ts:336` | — |
 | `getSymbolsInFiles(repoId, paths)` | symbol rows | — | L03 |
-| `getBlastRadius(repoId, files)` | `BlastResult`: per changed symbol (`downstream`) the direct resolved callers (≤ `MAX_CALLERS_PER_SYMBOL` each, defining file excluded) and the endpoints/crons of the files reached by a reverse-import BFS up to `BFS_DEPTH`; `ref` = indexed SHA; `degraded`/`reason`. Walk in `repo-intel/blast.ts` | `blast/service.ts` (`GET /pulls/:id/blast`) | HW-04 |
+| `getBlastRadius(repoId, files, changedLines?)` | `BlastResult`: changed symbols = symbols of the changed files whose indexed span overlaps a base line the stored patch changes (`changedLines`; a file without a patch keeps all its symbols; the ripgrep fallback ignores it). Per changed symbol (`downstream`) the direct resolved callers (≤ `MAX_CALLERS_PER_SYMBOL` each, defining file excluded) and the endpoints/crons of the files reached by a reverse-import BFS up to `BFS_DEPTH`; `ref` = indexed SHA; `degraded`/`reason`. Walk in `repo-intel/blast.ts` | `blast/service.ts` (`GET /pulls/:id/blast`) | HW-04 |
 | `getUnresolvedReferences(repoId, files)` | unresolved call sites in the given files | — | L06 Phantom gate |
 | `getConventionSamples(repoId, n)` | top-ranked file paths | — | L02 |
 | `getTopFilesByRank(repoId, n, opts)`, `getCriticalPaths(repoId)` | paths / chains | — | L05 onboarding |

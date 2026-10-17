@@ -79,7 +79,15 @@ d('HW-04 Blast Radius endpoint (Testcontainers pg)', () => {
     return repo!.id;
   }
 
-  async function newPr(ws: string, repoId: string, files: string[]): Promise<string> {
+  /** Changes base line 5 of the file — inside toDto (3–9), outside unusedHelper (20–25). */
+  const PATCH_IN_TO_DTO = '@@ -4,3 +4,3 @@\n a\n-b\n+c\n d';
+
+  async function newPr(
+    ws: string,
+    repoId: string,
+    files: string[],
+    patch: string | null = PATCH_IN_TO_DTO,
+  ): Promise<string> {
     const db = pg.handle.db;
     const [pr] = await db
       .insert(t.pullRequests)
@@ -96,7 +104,7 @@ d('HW-04 Blast Radius endpoint (Testcontainers pg)', () => {
       })
       .returning();
     for (const path of files) {
-      await db.insert(t.prFiles).values({ prId: pr!.id, path, additions: 3, deletions: 1, patch: '@@ -1 +1 @@\n-a\n+b' });
+      await db.insert(t.prFiles).values({ prId: pr!.id, path, additions: 3, deletions: 1, patch });
     }
     return pr!.id;
   }
@@ -105,6 +113,7 @@ d('HW-04 Blast Radius endpoint (Testcontainers pg)', () => {
    * src/helpers.ts declares toDto (changed). Direct callers: src/service.ts
    * (ranked) and src/jobs/worker.ts (no rank row). src/routes.ts imports
    * service.ts (depth 2); src/index.ts imports routes.ts (depth 3, too far).
+   * unusedHelper (20–25) lives in the same file but outside the changed lines.
    */
   async function seedIndex(repoId: string) {
     const db = pg.handle.db;
@@ -118,6 +127,7 @@ d('HW-04 Blast Radius endpoint (Testcontainers pg)', () => {
     });
     await db.insert(t.symbols).values([
       { repoId, path: 'src/helpers.ts', name: 'toDto', kind: 'function', line: 3, endLine: 9, exported: true },
+      { repoId, path: 'src/helpers.ts', name: 'unusedHelper', kind: 'function', line: 20, endLine: 25, exported: true },
       { repoId, path: 'src/service.ts', name: 'list', kind: 'method', line: 10, endLine: 20 },
       { repoId, path: 'src/jobs/worker.ts', name: 'runSync', kind: 'function', line: 1, endLine: 12, exported: true },
     ]);
@@ -127,6 +137,7 @@ d('HW-04 Blast Radius endpoint (Testcontainers pg)', () => {
       { repoId, fromPath: 'src/jobs/worker.ts', toSymbol: 'toDto', line: 4, declFile: 'src/helpers.ts' },
       { repoId, fromPath: 'src/helpers.ts', toSymbol: 'toDto', line: 8, declFile: 'src/helpers.ts' },
       { repoId, fromPath: 'src/other.ts', toSymbol: 'toDto', line: 2, declFile: null },
+      { repoId, fromPath: 'src/jobs/worker.ts', toSymbol: 'unusedHelper', line: 9, declFile: 'src/helpers.ts' },
     ]);
     await db.insert(t.fileEdges).values([
       { repoId, fromFile: 'src/routes.ts', toFile: 'src/service.ts' },
@@ -205,6 +216,22 @@ d('HW-04 Blast Radius endpoint (Testcontainers pg)', () => {
   it('404 for an unknown PR, 422 for an invalid id', async () => {
     expect((await get('00000000-0000-4000-8000-000000000000')).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: '/pulls/not-a-uuid/blast' })).statusCode).toBe(422);
+  });
+
+  it('counts only symbols the patch touches; a file without a patch keeps all of its symbols', async () => {
+    const touched = BlastRadius.parse((await get(await newPr(workspaceId, indexedRepo, ['src/helpers.ts']))).json());
+    expect(touched.changed_symbols.map((s) => s.name)).toEqual(['toDto']);
+    expect(touched.totals).toMatchObject({ symbols: 1, callers: 2 });
+
+    const noPatch = BlastRadius.parse(
+      (await get(await newPr(workspaceId, indexedRepo, ['src/helpers.ts'], null))).json(),
+    );
+    expect(noPatch.changed_symbols.map((s) => s.name)).toEqual(['toDto', 'unusedHelper']);
+
+    const elsewhere = BlastRadius.parse(
+      (await get(await newPr(workspaceId, indexedRepo, ['src/helpers.ts'], '@@ -40,2 +40,2 @@\n-x\n+y\n z'))).json(),
+    );
+    expect(elsewhere).toMatchObject({ changed_symbols: [], downstream: [], degraded: false });
   });
 
   it('a PR without stored files is degraded no_files', async () => {

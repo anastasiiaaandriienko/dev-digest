@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { clip, fail, ok, type ToolResult } from '../tool-result.js';
 import type { ToolDeps } from './deps.js';
 
@@ -34,13 +34,12 @@ export const getConventionsOutput = {
 };
 
 export const getConventionsConfig = {
-  title: 'Get repository conventions',
   description:
     'Returns the coding conventions extracted for a repository (GET /repos/:id/conventions), by default only the accepted rules. ' +
     'Read-only: never starts a new (paid) extraction scan.',
   inputSchema: getConventionsInput,
   outputSchema: getConventionsOutput,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: true },
 };
 
 export async function getConventions(

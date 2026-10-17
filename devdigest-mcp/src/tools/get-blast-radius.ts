@@ -1,7 +1,8 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { ApiBlastRadius } from '../api-schemas.js';
 import { fail, ok, type ToolResult } from '../tool-result.js';
 import type { ToolDeps } from './deps.js';
+import { prIdField, repoField, resolvePr, resolvedLine, type PrRefArgs } from './pr-ref.js';
 
 export const GET_BLAST_RADIUS = 'get_blast_radius';
 
@@ -15,9 +16,8 @@ const CallerOut = z.object({
   url: z.string().nullable(),
 });
 
-export const getBlastRadiusInput = {
-  pr_id: z.string().uuid().describe('Internal DevDigest pull-request id (uuid), not the GitHub PR number.'),
-};
+/** Exactly two fields, in this order; unknown keys are rejected (strict). */
+export const getBlastRadiusInput = z.strictObject({ pr_id: prIdField, repo: repoField });
 export const getBlastRadiusOutput = {
   pr_id: z.string(),
   summary: z.string(),
@@ -42,23 +42,22 @@ export const getBlastRadiusOutput = {
   symbols_truncated: z.boolean(),
 };
 
+// The reference description also lists "prior PRs touching the same files"; that is P3 and not
+// implemented, so it is left out rather than promising data the tool does not return.
 export const getBlastRadiusConfig = {
-  title: 'Get PR blast radius',
-  description:
-    'Returns the impact map of a PR (GET /pulls/:id/blast): its changed symbols, their direct callers (file:line, GitHub links ' +
-    'pinned to the indexed commit, not necessarily the PR head) and the potentially affected endpoints / crons found through the ' +
-    'file-level import graph of the repo-intel index. `degraded` + `reason` say when the analysis is partial. ' +
-    'Read-only: no GitHub sync, no LLM call, no writes.',
+  description: 'Get the blast radius (impact map) of a pull request — changed symbols, callers, impacted endpoints.',
   inputSchema: getBlastRadiusInput,
   outputSchema: getBlastRadiusOutput,
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: true },
 };
 
-export async function getBlastRadius(deps: ToolDeps, input: { pr_id: string }): Promise<ToolResult> {
+export async function getBlastRadius(deps: ToolDeps, input: PrRefArgs): Promise<ToolResult> {
   try {
-    const blast = await deps.api.getBlastRadius(input.pr_id);
-    const structured = toStructured(input.pr_id, blast);
-    return ok(toText(structured), structured);
+    const pr = await resolvePr(deps, input);
+    const blast = await deps.api.getBlastRadius(pr.prId);
+    const structured = toStructured(pr.prId, blast);
+    const resolved = resolvedLine(pr);
+    return ok(resolved ? `${resolved}\n${toText(structured)}` : toText(structured), structured);
   } catch (err) {
     return fail(err);
   }

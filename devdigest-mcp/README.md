@@ -15,7 +15,7 @@ stays in `server/`.
 |---|---|---|
 | `list_agents` | `GET /agents` | read-only — ids, names, model, enabled state (no system prompts) |
 | `run_agent_on_pr` | `POST /pulls/:id/review`, then polls `GET /pulls/:id/runs`, then `GET /pulls/:id/reviews` | **starts a review run: writes runs/reviews/findings and makes a PAID LLM call** |
-| `get_findings` | `GET /pulls/:id/reviews` (+ `GET /pulls/:id/runs` when a run has no review) | read-only — verdict + findings of a run, of an agent's latest review, or the latest review of every agent |
+| `get_findings` | `GET /pulls/:id/reviews` | read-only — verdict + findings: the latest review of each agent, or with `all_runs` every completed review (newest first, ≤ 50) |
 | `get_conventions` | `GET /repos/:id/conventions` | read-only — accepted (default), pending, rejected or all rules from L02; never starts a scan |
 | `get_blast_radius` | `GET /pulls/:id/blast` | read-only — HW-04 impact map from the repo-intel index: changed symbols, direct callers (file:line, GitHub links pinned to the **indexed** commit), potentially affected endpoints / crons (file-level import graph), totals, `degraded` + `reason`, `source`. No GitHub sync, no LLM |
 
@@ -24,7 +24,40 @@ Ids are DevDigest's internal uuids, not GitHub numbers:
 - `agent_id` comes from `list_agents`.
 - `repo_id` is in the web app URL `/repos/<repo_id>/…`.
 - `pr_id` is the PR's `id` in the DevDigest API (for example the `id` field of `GET /repos/:id/pulls`).
-  The MCP server does not look PRs up on GitHub.
+
+### Inputs (as shown in the MCP Inspector)
+
+| Tool | Fields (`*` = required, in this order) |
+|---|---|
+| `get_findings` | `pr_id*` (string), `repo` (string), `all_runs` (boolean, default `false`) |
+| `get_blast_radius` | `pr_id*` (string), `repo` (string) |
+| `run_agent_on_pr` | `pr_id*` (string), `repo` (string), `agent_id*` (string) |
+| `list_agents` | `enabled_only` (boolean, default `false`) |
+| `get_conventions` | `repo_id*` (uuid), `status` (`accepted` / `pending` / `rejected` / `all`, default `accepted`) |
+
+`pr_id` is one string: the internal uuid, the PR number (`15` or `#15`; a JSON number is accepted too)
+or part of the PR title. `repo` (`owner/name`, a short name that is unique, or the repo uuid) narrows a
+number or title; it does not apply to a uuid. Unknown fields are rejected (`Unrecognized key`), so the
+removed `pr_number`, `pr_title`, `run_id`, `agent_id` (get_findings) and `timeout_seconds` fail loudly.
+
+- A number or title is looked up with `GET /pulls?number=&title=&repo=`: stored PRs only — no GitHub
+  sync, no writes. A PR that is not imported into DevDigest is not found.
+- Exactly one match is used. Zero matches, several matches (listed with their `pr_id`), an unknown
+  repo or an ambiguous short repo name are `isError` results — the first match is never picked.
+- `run_agent_on_pr` resolves the PR **before** starting anything: an unresolved PR never starts a paid run.
+- Text output starts with `Resolved PR #N in owner/name (pr_id …)` when a number / title was used.
+
+| Inspector field | Example (DevDigest PR #3) |
+|---|---|
+| `pr_id` | `3`, `#3`, `API contract` or `8750ebba-c970-43f6-9cdb-82a30f5c62a0` |
+| `repo` | `anastasiiaaandriienko/dev-digest` (needed for `API contract`, which matches two repos) |
+
+Tools are listed by name (no `title`); read-only tools carry only `readOnlyHint: true`. The
+`get_blast_radius` description leaves out "prior PRs touching the same files" — that is P3 and not
+implemented.
+
+Tool input/output schemas are written with `zod/v4`, so nullable fields are emitted as
+`anyOf: [{…}, {type: null}]` and `inspector --cli --strict` reports no schema-portability findings.
 
 Every tool returns a short text block plus `structuredContent` that matches its output schema.
 API failures come back as `isError: true` with a short message (status, error code, sanitized
@@ -34,15 +67,15 @@ text), never a stack trace or a credential.
 
 `run_agent_on_pr` runs exactly **one** agent on one PR (there is no "run all agents").
 
-- It waits until that run is `done`, `failed` or `cancelled`, or until the timeout passes
-  (`timeout_seconds`, default 50 s, max 600 s). A review usually takes 30–60 s.
+- It waits until that run is `done`, `failed` or `cancelled`, or until `DEVDIGEST_RUN_TIMEOUT_MS`
+  passes (default 50 s). A review usually takes 30–60 s.
 - `timeout`: the run is still going on the server. `poll_error`: the run was started but its status
   could not be read (network error, request timeout, HTTP 429). In both cases the result carries the
-  `run_id`; fetch the review later with `get_findings` and that `run_id`.
+  `run_id`; fetch the review later with `get_findings` and `all_runs: true` (each review carries its `run_id`).
 - While waiting it sends `notifications/progress` on every poll when the client passed a progress token.
   SDK-based clients (including the Inspector) give up after 60 s by default unless they reset their
   timeout on progress, so the default wait stays below that. For longer waits raise the client timeout
-  (Inspector request-timeout setting, `MCP_TOOL_TIMEOUT` for Claude Code) and pass `timeout_seconds`.
+  (Inspector request-timeout setting, `MCP_TOOL_TIMEOUT` for Claude Code) and `DEVDIGEST_RUN_TIMEOUT_MS`.
 - Each call costs money (one LLM review) and creates rows in the DevDigest database.
 - Keep this tool behind a permission prompt in your MCP client; don't allow it by default.
 

@@ -1,7 +1,7 @@
 import type { BlastRadius } from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
 import { NotFoundError } from '../../platform/errors.js';
-import { emptyBlastRadius, toBlastRadius } from './helpers.js';
+import { changedLinesByFile, emptyBlastRadius, toBlastRadius } from './helpers.js';
 import { BlastRepository } from './repository.js';
 
 /**
@@ -23,7 +23,11 @@ export class BlastService {
     const files = await this.repo.listChangedFiles(pull.prId);
     if (files.length === 0) return emptyBlastRadius(pull.repoFullName, 'no_files');
 
-    const result = await this.container.repoIntel.getBlastRadius(pull.repoId, files);
+    const result = await this.container.repoIntel.getBlastRadius(
+      pull.repoId,
+      [...new Set(files.map((f) => f.path))],
+      changedLinesByFile(files),
+    );
     return toBlastRadius(result, pull.repoFullName);
   }
 }
