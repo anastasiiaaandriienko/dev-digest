@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
+import { z } from 'zod';
+import type { PrMeta, PrDetail, GitHubClient, PrReviewComment, PullLookup } from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
 import { getContext } from '../_shared/context.js';
@@ -10,6 +11,14 @@ import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
 import { NO_COST, costByPullRequest } from './cost.js';
 import { findingsSummaryByPullRequest } from './findings-summary.js';
+import { PullsService } from './service.js';
+
+/** GET /pulls query: at least one of number / title (checked in PullsService). */
+const PullLookupQuery = z.object({
+  number: z.coerce.number().int().positive().optional(),
+  title: z.string().trim().min(2).max(200).optional(),
+  repo: z.string().trim().min(1).max(200).optional(),
+});
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -17,6 +26,8 @@ import { findingsSummaryByPullRequest } from './findings-summary.js';
  *                          synced from GitHub, persisted). `status` is GitHub's
  *                          merge state (open/merged/closed).
  *   GET /pulls/:id       → full PR detail (diff/files, commits, body, linked issue)
+ *   GET /pulls?number=&title=&repo= → read-only lookup of STORED PRs (no GitHub
+ *                          sync); returns every match, never picks one.
  *
  * Import is idempotent (unique repo_id+number). Review trigger is MANUAL
  * and owned by A2 — this module only imports/reads.
@@ -24,6 +35,12 @@ import { findingsSummaryByPullRequest } from './findings-summary.js';
 export default async function pullsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
   const { container } = app;
+  const pullsService = new PullsService(container);
+
+  app.get('/pulls', { schema: { querystring: PullLookupQuery } }, async (req): Promise<PullLookup> => {
+    const { workspaceId } = await getContext(container, req);
+    return pullsService.lookup(workspaceId, req.query);
+  });
 
   app.get('/repos/:id/pulls', { schema: { params: IdParams } }, async (req): Promise<PrMeta[]> => {
     const { workspaceId } = await getContext(container, req);

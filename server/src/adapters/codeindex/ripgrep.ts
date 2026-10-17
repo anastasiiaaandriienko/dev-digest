@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { join, relative, extname } from 'node:path';
+import { join, relative, extname, sep } from 'node:path';
 import type {
   CodeIndex,
   RepoRef,
@@ -23,6 +23,14 @@ import { extractSymbols, extractReferences } from './extract.js';
  */
 
 const CODE_EXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
+
+/**
+ * Repo-relative POSIX path — the form every index table and changed-file list
+ * uses (see walkClone). `relative()` alone yields backslashes on Windows.
+ */
+function repoRelative(root: string, file: string): string {
+  return relative(root, file).split(sep).join('/');
+}
 const IGNORE_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'coverage']);
 
 let rgPathCache: string | null | undefined;
@@ -88,7 +96,7 @@ export class RipgrepCodeIndex implements CodeIndex {
       const lines = content.split('\n');
       for (let i = 0; i < lines.length; i++) {
         if (re.test(lines[i]!)) {
-          matches.push({ path: relative(root, file), line: i + 1, text: lines[i]! });
+          matches.push({ path: repoRelative(root, file), line: i + 1, text: lines[i]! });
         }
       }
     }
@@ -102,7 +110,7 @@ export class RipgrepCodeIndex implements CodeIndex {
     for (const file of await this.walk(root)) {
       if (!CODE_EXT.has(extname(file))) continue;
       const content = await readFile(file, 'utf8').catch(() => '');
-      const rel = relative(root, file);
+      const rel = repoRelative(root, file);
       for (const s of extractSymbols(content)) {
         out.push({ path: rel, name: s.name, kind: s.kind, line: s.line });
       }
@@ -117,7 +125,7 @@ export class RipgrepCodeIndex implements CodeIndex {
     for (const file of await this.walk(root)) {
       if (!CODE_EXT.has(extname(file))) continue;
       const content = await readFile(file, 'utf8').catch(() => '');
-      const rel = relative(root, file);
+      const rel = repoRelative(root, file);
       for (const r of extractReferences(content, symbol)) {
         out.push({ fromPath: rel, toSymbol: symbol, line: r.line });
       }

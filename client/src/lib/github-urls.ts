@@ -17,6 +17,11 @@ export function githubPrUrl(repoFullName: string, number: number): string {
   return `${HOST}/${repoFullName}/pull/${number}`;
 }
 
+/** https://github.com/{owner}/{repo}/commit/{sha} */
+export function githubCommitUrl(repoFullName: string, sha: string): string {
+  return `${HOST}/${repoFullName}/commit/${encodeURIComponent(sha)}`;
+}
+
 /**
  * https://github.com/{owner}/{repo}/blob/{sha}/{file}#L{start}[-L{end}]
  * `sha` pins the link to the PR's head so line numbers stay accurate.

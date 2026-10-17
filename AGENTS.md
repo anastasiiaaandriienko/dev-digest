@@ -13,6 +13,7 @@ Multi-package repo with NO npm/pnpm workspace: each package has its own `package
 | `client/` | `@devdigest/web` | Next.js app on :3000 (the studio UI). Talks to the API via `src/lib/api.ts` (`NEXT_PUBLIC_API_BASE`) + React Query hooks in `src/lib/hooks/`. |
 | `reviewer-core/` | `@devdigest/reviewer-core` | Pure review engine: prompt assembly → LLM structured output → reduce → grounding gate. No DB/GitHub/FS. Imported by the server as raw TS source (`../reviewer-core/src`). |
 | `e2e/` | `@devdigest/e2e` | Deterministic browser e2e (agent-browser, no LLM); flows in `e2e/specs/*.flow.json`. |
+| `devdigest-mcp/` | `@devdigest/mcp` | Standalone TypeScript MCP server over stdio — a thin client of the existing Fastify API (no business logic of its own). See [MCP server](#mcp-server-devdigest-mcp). |
 | `server/src/vendor/shared` | `@devdigest/shared` | Zod contracts used by server + reviewer-core. `client/src/vendor/shared` is a separate manual copy — no sync script or CI check, and the copies already differ. When changing a contract, update both copies (or ask). |
 
 Other: `scripts/` (`dev.sh`, `e2e.sh` — bash), `docs/agent-prompts/` (reviewer prompts), `.github/workflows/` (CI per suite), `.claude/skills/` (agent skills), `docker-compose.yml` (Postgres only). repo-intel (codebase indexer) lives in `server/src/modules/repo-intel/`.
@@ -24,7 +25,8 @@ Other: `scripts/` (`dev.sh`, `e2e.sh` — bash), `docs/agent-prompts/` (reviewer
 - **client:** Next.js 15 (App Router), React 19, TanStack React Query 5, `next-intl`, Tailwind 4, `react-markdown`, `mermaid`, `recharts`. Tests: React Testing Library + jsdom.
 - **reviewer-core:** `openai` (OpenRouter-compatible provider), Zod.
 - **e2e:** `tsx` + external `agent-browser` CLI.
-- **Package managers:** `pnpm` for `server/` and `client/`; `npm` for `reviewer-core/` and `e2e/`.
+- **devdigest-mcp:** `@modelcontextprotocol/sdk` v1 (stdio), Zod 3, Vitest 2, run via `tsx` (no build).
+- **Package managers:** `pnpm` for `server/` and `client/`; `npm` for `reviewer-core/`, `e2e/` and `devdigest-mcp/`.
 
 ## Development commands
 
@@ -51,6 +53,7 @@ cd server        && pnpm exec vitest run .it.test                      # integra
 cd server        && pnpm test                                          # both
 cd reviewer-core && npm run typecheck && npm test
 cd e2e           && npm run typecheck && npm test                      # needs running stack + agent-browser
+cd devdigest-mcp && npm run typecheck && npm test                      # unit, fake fetch, no API/LLM
 ```
 
 - **No lint script and no ESLint/Prettier config exist** — do not invent a lint step; typecheck + tests are the gate.
@@ -77,6 +80,29 @@ Before working in a package, read its `AGENTS.md` (`e2e/` still uses `CLAUDE.md`
 - **UI pages, components, React Query hooks, i18n, L01 review UI** → [client/AGENTS.md](client/AGENTS.md)
 - **Prompt assembly, LLM structured output, grounding, scoring** → [reviewer-core/AGENTS.md](reviewer-core/AGENTS.md)
 - **Browser flows, hermetic e2e stack, seeded review-flow coverage** → [e2e/CLAUDE.md](e2e/CLAUDE.md)
+- **MCP server tools, Inspector, Claude Code setup** → [devdigest-mcp/README.md](devdigest-mcp/README.md)
+
+## MCP server (`devdigest-mcp/`)
+
+Independent stdio MCP server; every tool calls an existing Fastify endpoint (API at `DEVDIGEST_API_BASE`, default `http://localhost:3001`). Exactly five tools:
+
+1. `list_agents` — lists the configured AI review agents (ids, model, enabled).
+2. `run_agent_on_pr` — runs ONE chosen agent on a PR, waits for the run and returns the result and findings.
+3. `get_findings` — returns the findings and short verdict of a review that already ran; never starts one.
+4. `get_conventions` — returns the repository conventions/rules from L02.
+5. `get_blast_radius` — PR impact map (HW-04) from `GET /pulls/:id/blast`: changed symbols, direct callers (file:line), potentially affected endpoints/crons, `degraded`/`reason`. Read-only.
+
+Tools 2, 3 and 5 take `pr_id` (uuid, PR number `15` / `#15`, or part of the title) + optional `repo`; numbers and titles resolve through the read-only `GET /pulls` lookup (stored PRs only; ambiguous or missing → error, never the first match). Inputs are strict (unknown keys rejected); schemas use `zod/v4`. Field-by-field contract: `devdigest-mcp/README.md`.
+
+```sh
+cd devdigest-mcp && npm ci                          # install (ask first, like any install)
+cd devdigest-mcp && npm run typecheck && npm test   # validate
+cd devdigest-mcp && npm start                       # tsx src/index.ts — MCP on stdin/stdout
+```
+
+- stdout is reserved for the MCP protocol; all logs go to stderr — never `console.log` in this package.
+- `run_agent_on_pr` starts a real review: it writes runs/reviews/findings and makes a potentially **paid** LLM call. Never call it (or run it from tests/Inspector) without the user's explicit approval.
+- Don't add a sixth tool or business logic here; new behaviour belongs in `server/`, exposed through an endpoint.
 
 ## Engineering insights — Read When
 
@@ -89,7 +115,7 @@ Before working in a package, read its `AGENTS.md` (`e2e/` still uses `CLAUDE.md`
 ## Do not touch (without explicit approval)
 
 - **Database migrations:** never create, edit, delete, or regenerate files in `server/src/db/migrations/` (incl. `meta/`); don't run `pnpm db:generate` or `pnpm db:migrate`. Changing `server/src/db/schema/*.ts` requires a new migration → ask first.
-- **Lockfiles:** never modify or regenerate `pnpm-lock.yaml` / `package-lock.json`; don't install, add, or upgrade dependencies. Use each package's own manager (`pnpm` in `server/`, `client/`; `npm` in `reviewer-core/`, `e2e/`) — `pnpm install` in an npm package creates a stray `pnpm-lock.yaml`.
+- **Lockfiles:** never modify or regenerate `pnpm-lock.yaml` / `package-lock.json`; don't install, add, or upgrade dependencies. Use each package's own manager (`pnpm` in `server/`, `client/`; `npm` in `reviewer-core/`, `e2e/`, `devdigest-mcp/`) — `pnpm install` in an npm package creates a stray `pnpm-lock.yaml`.
 - Leave the untracked `pnpm-workspace.yaml` files and `reviewer-core/pnpm-lock.yaml` as they are.
 - `server/package.json` is `skip-worktree` locally (see `TESTING.md`); don't rely on its uncommitted scripts.
 - `server/clones/**` is runtime data (git-ignored).

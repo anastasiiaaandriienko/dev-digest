@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { runFullIndex } from '../src/modules/repo-intel/pipeline/full.js';
 import { runIncremental } from '../src/modules/repo-intel/pipeline/incremental.js';
 import type { RepoIntelRepository } from '../src/modules/repo-intel/repository.js';
@@ -128,19 +128,19 @@ interface MiniGit {
     head: string,
   ) => Promise<string[]>;
 }
-function makeContainer(git: MiniGit): Container {
+function makeContainer(git: MiniGit, depgraph?: Container['depgraph']): Container {
   return {
     git,
     // T3 adapters — stubbed: empty graph (rank degrades to flat) + char/4 tokens.
-    depgraph: { buildEdges: async () => [] },
+    depgraph: depgraph ?? { buildEdges: async () => [] },
     tokenizer: { count: (text: string) => Math.ceil(text.length / 4) },
   } as unknown as Container;
 }
 
 async function writeFileAt(root: string, rel: string, contents: string): Promise<void> {
   const full = join(root, rel);
-  const slash = full.lastIndexOf('/');
-  if (slash > 0) await mkdir(full.slice(0, slash), { recursive: true });
+  // dirname, not lastIndexOf('/'): join() yields backslashes on Windows.
+  await mkdir(dirname(full), { recursive: true });
   await writeFile(full, contents);
 }
 
@@ -235,6 +235,28 @@ describe('runFullIndex', () => {
     expect(result.status).toBe('degraded');
     expect(result.reason).toBe('repo_not_found');
     expect(stub.getState()).toBeNull();
+  });
+
+  it('stamps "partial" with reason graph_failed when the import graph cannot be built', async () => {
+    await writeFileAt(root, 'src/util.ts', `export function alpha() { return 1; }\n`);
+
+    const stub = makeRepoStub({
+      basics: { id: 'r1', owner: 'acme', name: 'app', clonePath: root },
+    });
+    const container = makeContainer(
+      { currentHead: async () => 'sha-head', diffNameOnly: async () => [] },
+      {
+        buildEdges: async () => {
+          throw new Error('cruise exploded');
+        },
+      },
+    );
+
+    const result = await runFullIndex(container, stub.repo, { repoId: 'r1' });
+
+    expect(result.status).toBe('partial');
+    expect(result.reason).toBe('graph_failed');
+    expect(stub.getState()!.status).toBe('partial');
   });
 
   it('returns partial with filesIndexed=0 when the clone has no supported files', async () => {
@@ -380,6 +402,28 @@ describe('runIncremental', () => {
     // counter is prior (5) + this slice's filesIndexed (1).
     expect(stub.getState()!.filesIndexed).toBe(6);
     expect(stub.getState()!.lastIndexedSha).toBe('sha-new');
+  });
+
+  it('downgrades a full index to "partial" when the graph rebuild fails', async () => {
+    await writeFileAt(root, 'src/changed.ts', `export function fresh(x: number) { return x; }\n`);
+
+    const stub = makeRepoStub({
+      basics: { id: 'r1', owner: 'acme', name: 'app', clonePath: root },
+      initialState: makeInitialState({ status: 'full' }),
+    });
+    const container = makeContainer(
+      { currentHead: async () => 'sha-new', diffNameOnly: async () => ['src/changed.ts'] },
+      {
+        buildEdges: async () => {
+          throw new Error('cruise exploded');
+        },
+      },
+    );
+
+    const result = await runIncremental(container, stub.repo, { repoId: 'r1' });
+
+    expect(result.status).toBe('partial');
+    expect(stub.getState()!.status).toBe('partial');
   });
 
   it('large diff (> threshold) → delegates to runFullIndex', async () => {
