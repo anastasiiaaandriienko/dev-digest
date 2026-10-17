@@ -1,11 +1,15 @@
 import type { ApiClient } from './api-client.js';
 import {
   ApiAgentList,
+  ApiBlastRadius,
+  ApiPullLookup,
   ApiConventionsState,
   ApiReviewList,
   ApiReviewStarted,
   ApiRunList,
   type ApiAgent,
+  type ApiBlastRadius as BlastRadius,
+  type ApiPullLookup as PullLookup,
   type ApiConventionsState as ConventionsState,
   type ApiReview,
   type ApiReviewStarted as ReviewStarted,
@@ -43,5 +47,19 @@ export class DevDigestApi {
   /** GET /repos/:id/conventions — latest scan + candidates (rejected only on request). */
   getConventions(repoId: string, includeRejected: boolean): Promise<ConventionsState> {
     return this.client.get(`/repos/${repoId}/conventions?include_rejected=${includeRejected}`, ApiConventionsState);
+  }
+
+  /** GET /pulls?number=&title=&repo= — read-only lookup of stored PRs (every match; the caller decides). */
+  findPulls(query: { number?: number; title?: string; repo?: string }): Promise<PullLookup> {
+    const params = new URLSearchParams();
+    if (query.number !== undefined) params.set('number', String(query.number));
+    if (query.title !== undefined) params.set('title', query.title);
+    if (query.repo !== undefined) params.set('repo', query.repo);
+    return this.client.get(`/pulls?${params.toString()}`, ApiPullLookup);
+  }
+
+  /** GET /pulls/:id/blast — read-only blast radius from stored pr_files + the repo-intel index. */
+  getBlastRadius(prId: string): Promise<BlastRadius> {
+    return this.client.get(`/pulls/${prId}/blast`, ApiBlastRadius);
   }
 }

@@ -17,6 +17,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * A tool argument problem the caller can fix (missing / conflicting identifiers,
+ * an ambiguous or unknown PR). Its message is shown to the model as is.
+ */
+export class ToolInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ToolInputError';
+  }
+}
+
 const MAX_MESSAGE_CHARS = 300;
 
 /** Redact anything that looks like a credential and bound the length. */

@@ -3,9 +3,8 @@
  *
  * Every method returns a DEGRADED-but-valid result (see types.ts header). The
  * only methods that do real work in T1 are:
- *   - `getBlastRadius`: best-effort port of blast/service.ts logic, mapped
- *     into the `BlastResult` shape (and always tagged `degraded: true,
- *     reason: 'no_data'`, because T1 has no persistent index yet).
+ *   - `getBlastRadius`: persistent-index walk (pure algorithm in ./blast.ts),
+ *     ripgrep fallback when no usable index exists (tagged degraded).
  *   - `getIndexState`: queries `repo_index_state` if the table exists (T2+),
  *     otherwise synthesises a degraded row so callers never throw.
  *
@@ -19,7 +18,7 @@
  */
 import type { CodeSymbol, RepoRef } from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
-import { extractEndpoints } from '../../adapters/codeindex/extract.js';
+import { extractCrons, extractEndpoints } from '../../adapters/codeindex/extract.js';
 import {
   parseImports,
   parseInvocationHeads,
@@ -29,10 +28,18 @@ import {
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { RepoIntelRepository, type FullSymbolRow } from './repository.js';
+import {
+  buildDownstream,
+  sortChangedSymbols,
+  spanTouches,
+  type BlastRef,
+  type SymbolSpan,
+} from './blast.js';
 import type {
-  BlastCallerRow,
   BlastChangedSymbol,
   BlastResult,
+  BlastSymbolImpact,
+  DegradedReason,
   FileRankRow,
   IndexResult,
   IndexState,
@@ -209,35 +216,113 @@ export class RepoIntelService implements RepoIntel {
   // -------------------------------------------------------------------------
 
   /**
-   * Best-effort blast over `container.codeIndex` — a faithful port of
-   * blast/service.ts mapped into the facade's `BlastResult` shape, then
-   * tagged `degraded: true` so consumers can branch.
+   * Blast radius of a set of changed files. Never throws.
    *
-   * Why "always degraded" in T1: there's no persistent rank/decl_file yet, so
-   * every caller gets `rank: 0` and HTTP impact is detected by re-reading the
-   * clone (not the index). T2 promotes this path to the persistent layer.
+   *   - flag off                    → empty, degraded `flag_off`;
+   *   - persistent index full       → precise result (resolved callers, rank,
+   *                                   reverse-import BFS to BFS_DEPTH), not degraded;
+   *   - persistent index partial    → same walk, degraded `index_partial`;
+   *   - no usable index             → ripgrep fallback over the clone: name-matched
+   *                                   callers, rank 0, depth 1 only, degraded
+   *                                   `no_data` / `index_failed`.
+   *
+   * Callers are capped at MAX_CALLERS_PER_SYMBOL per changed symbol; the
+   * defining file is never a caller. Line numbers refer to `result.ref`.
+   *
+   * `changedLines` narrows the changed symbols to those whose indexed span
+   * overlaps a changed base line (persistent path only: ripgrep symbols have no
+   * end line, so the degraded fallback keeps every symbol of a changed file).
    */
-  async getBlastRadius(repoId: string, changedFiles: string[]): Promise<BlastResult> {
-    // T3: serve from the persistent index when it's built. Falls through to the
-    // ripgrep best-effort below when the flag is off / index is absent.
-    if (this.container.config.repoIntelEnabled && changedFiles.length > 0) {
-      const persistent = await this.tryPersistentBlast(repoId, changedFiles);
-      if (persistent) return persistent;
-    }
+  async getBlastRadius(
+    repoId: string,
+    changedFiles: string[],
+    changedLines?: Readonly<Record<string, readonly number[]>>,
+  ): Promise<BlastResult> {
+    if (!this.container.config.repoIntelEnabled) return emptyBlast('flag_off');
+    if (changedFiles.length === 0) return { ...emptyBlast(), degraded: false, reason: undefined };
 
-    const empty: BlastResult = {
-      changedSymbols: [],
-      callers: [],
-      impactedEndpoints: [],
-      degraded: true,
-      reason: 'no_data',
+    const state = await this.repo.tryGetIndexState(repoId);
+    if (state && (state.status === 'full' || state.status === 'partial')) {
+      return this.persistentBlast(repoId, changedFiles, state, changedLines);
+    }
+    return this.fallbackBlast(repoId, changedFiles, state?.status === 'failed' ? 'index_failed' : 'no_data');
+  }
+
+  /**
+   * Persistent-index blast: reads symbols / resolved references / file_rank /
+   * file_edges / file_facts straight from Postgres — NO clone parsing.
+   *
+   * Callers are PRECISE: only references whose `decl_file` resolved to a changed
+   * file count. That favours precision over recall — an ambiguous
+   * (NULL decl_file) reference is not asserted as a caller.
+   */
+  private async persistentBlast(
+    repoId: string,
+    changedFiles: string[],
+    state: IndexState,
+    changedLines?: Readonly<Record<string, readonly number[]>>,
+  ): Promise<BlastResult> {
+    const degraded = state.status === 'partial';
+    const base = {
+      ref: state.lastIndexedSha,
+      degraded,
+      ...(degraded ? { reason: 'index_partial' as const } : {}),
     };
 
-    const repo = await this.repo.getRepoBasics(repoId);
-    if (!repo || !repo.clonePath || changedFiles.length === 0) return empty;
+    const changedSymbols = changedSymbolsFrom(await this.repo.getSymbolRows(repoId, changedFiles), changedLines);
+    if (changedSymbols.length === 0) {
+      return { changedSymbols, downstream: [], callers: [], impactedEndpoints: [], factsByFile: {}, ...base };
+    }
 
+    // A reference inside the defining file is not a caller (and must not seed the BFS).
+    const refs = (
+      await this.repo.getResolvedCallers(repoId, changedFiles, [...new Set(changedSymbols.map((s) => s.name))])
+    ).filter((r) => r.fromPath !== r.declFile);
+    const callerFiles = [...new Set(refs.map((r) => r.fromPath))];
+    const spansByFile = groupSpans(await this.repo.getSymbolRows(repoId, callerFiles));
+
+    // Reverse import BFS: depth 1 = caller files, each further hop = their importers.
+    const importEdges: { fromFile: string; toFile: string }[] = [];
+    const reached = new Set(callerFiles);
+    let frontier = callerFiles;
+    for (let depth = 2; depth <= BFS_DEPTH && frontier.length > 0; depth += 1) {
+      const edges = await this.repo.getImporters(repoId, frontier);
+      importEdges.push(...edges);
+      frontier = [...new Set(edges.map((e) => e.fromFile))].filter((f) => !reached.has(f));
+      for (const f of frontier) reached.add(f);
+    }
+
+    const factsByFile: Record<string, { endpoints: string[]; crons: string[] }> = {};
+    for (const f of await this.repo.getFileFacts(repoId, [...reached])) {
+      factsByFile[f.filePath] = { endpoints: f.endpoints, crons: f.crons };
+    }
+
+    const downstream = buildDownstream({
+      changedSymbols,
+      refs,
+      spansByFile,
+      importEdges,
+      factsByFile,
+      limit: MAX_CALLERS_PER_SYMBOL,
+      maxDepth: BFS_DEPTH,
+    });
+    return { changedSymbols, ...flatten(downstream), factsByFile, ...base };
+  }
+
+  /**
+   * Ripgrep fallback over the clone (no usable index): name-matched references,
+   * rank 0, no import graph (depth 1 only), endpoints/crons re-extracted from
+   * the caller files. Always degraded — never presented as a full analysis.
+   */
+  private async fallbackBlast(
+    repoId: string,
+    changedFiles: string[],
+    reason: DegradedReason,
+  ): Promise<BlastResult> {
+    const empty = emptyBlast(reason);
+    const repo = await this.repo.getRepoBasics(repoId);
+    if (!repo || !repo.clonePath) return empty;
     const ref: RepoRef = { owner: repo.owner, name: repo.name };
-    const changedSet = new Set(changedFiles);
 
     let allSymbols: CodeSymbol[];
     try {
@@ -245,149 +330,53 @@ export class RepoIntelService implements RepoIntel {
     } catch {
       return empty;
     }
+    const changedSet = new Set(changedFiles);
+    const changedSymbols = sortChangedSymbols(
+      dedupeSymbols(
+        allSymbols
+          .filter((s) => changedSet.has(s.path) && !s.name.includes('.'))
+          .map((s) => ({ file: s.path, name: s.name, kind: s.kind, line: s.line })),
+      ),
+    );
 
-    // changed symbols = declared in any changed file (dedup by name+file).
-    const changedSymbols: BlastChangedSymbol[] = [];
-    const seen = new Set<string>();
-    for (const s of allSymbols) {
-      if (!changedSet.has(s.path)) continue;
-      const key = `${s.name}:${s.path}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      changedSymbols.push({ file: s.path, name: s.name, kind: s.kind });
-    }
-
-    const callerRows: BlastCallerRow[] = [];
-    const endpoints = new Set<string>();
-    const callerSeen = new Set<string>();
-
+    const refs: BlastRef[] = [];
     for (const sym of changedSymbols) {
-      let refs;
+      let found;
       try {
-        refs = await this.container.codeIndex.references(ref, sym.name);
+        found = await this.container.codeIndex.references(ref, sym.name);
       } catch {
         continue;
       }
-      const callerFiles = new Set<string>();
-      for (const r of refs) {
-        if (r.fromPath === sym.file) continue; // skip the decl's own file
-        const callerName = enclosingSymbolName(allSymbols, r.fromPath, r.line);
-        const key = `${r.fromPath}|${callerName}|${sym.name}`;
-        if (callerSeen.has(key)) continue;
-        callerSeen.add(key);
-        callerRows.push({
-          file: r.fromPath,
-          symbol: callerName,
-          viaSymbol: sym.name,
-          line: r.line,
-          rank: 0, // ripgrep/degraded path has no persistent rank
-        });
-        callerFiles.add(r.fromPath);
-      }
-
-      // Detect HTTP routes reachable from any caller file (best-effort, just
-      // like the legacy blast service).
-      for (const file of callerFiles) {
-        const content = await readClone(repo.clonePath, file);
-        if (!content) continue;
-        for (const e of extractEndpoints(content)) endpoints.add(e);
+      for (const r of found) {
+        refs.push({ fromPath: r.fromPath, toSymbol: sym.name, declFile: sym.file, line: r.line, rank: 0 });
       }
     }
 
-    return {
-      changedSymbols,
-      callers: callerRows,
-      impactedEndpoints: [...endpoints],
-      degraded: true,
-      reason: 'no_data',
-    };
-  }
-
-  /**
-   * Persistent-index blast (T3): reads symbols / resolved references / file_rank
-   * / file_facts straight from Postgres — NO clone parsing on the hot path.
-   * Returns `null` when the index isn't usable (caller falls back to ripgrep).
-   *
-   * Callers are PRECISE: only references whose `decl_file` resolved to a changed
-   * file count. That favours precision over recall — an ambiguous
-   * (NULL decl_file) reference is not asserted as a caller.
-   */
-  private async tryPersistentBlast(
-    repoId: string,
-    changedFiles: string[],
-  ): Promise<BlastResult | null> {
-    const state = await this.repo.tryGetIndexState(repoId);
-    if (!state || (state.status !== 'full' && state.status !== 'partial')) return null;
-
-    // Changed symbols = declared in a changed file. Skip the qualified
-    // `Class.method` dual-emit (the bare form already covers the name).
-    const declRows = await this.repo.getSymbolRows(repoId, changedFiles);
-    const changedSymbols: BlastChangedSymbol[] = [];
-    const nameSet = new Set<string>();
-    const seenSym = new Set<string>();
-    for (const s of declRows) {
-      if (s.name.includes('.')) continue;
-      const key = `${s.name}:${s.path}`;
-      if (!seenSym.has(key)) {
-        seenSym.add(key);
-        changedSymbols.push({ file: s.path, name: s.name, kind: s.kind });
-      }
-      nameSet.add(s.name);
-    }
-    if (nameSet.size === 0) {
-      return { changedSymbols, callers: [], impactedEndpoints: [], degraded: false };
+    const spansByFile = new Map<string, SymbolSpan[]>();
+    for (const s of allSymbols) {
+      const span = { name: s.name, line: s.line, endLine: null };
+      const arr = spansByFile.get(s.path);
+      if (arr) arr.push(span);
+      else spansByFile.set(s.path, [span]);
     }
 
-    // Resolved cross-file callers.
-    const callerRows = await this.repo.getResolvedCallers(repoId, changedFiles, [...nameSet]);
-    const callerFiles = [...new Set(callerRows.map((c) => c.fromPath))];
-
-    // Enclosing caller symbol from the callers' persistent symbol rows.
-    const callerSymRows = await this.repo.getSymbolRows(repoId, callerFiles);
-    const symsByFile = new Map<string, FullSymbolRow[]>();
-    for (const s of callerSymRows) {
-      const arr = symsByFile.get(s.path);
-      if (arr) arr.push(s);
-      else symsByFile.set(s.path, [s]);
-    }
-
-    const callers: BlastCallerRow[] = [];
-    const seenCaller = new Set<string>();
-    for (const c of callerRows) {
-      const enclosing =
-        enclosingFromRows(symsByFile.get(c.fromPath) ?? [], c.line) ??
-        c.fromPath.split('/').pop() ??
-        c.fromPath;
-      const key = `${c.fromPath}|${enclosing}|${c.toSymbol}`;
-      if (seenCaller.has(key)) continue;
-      seenCaller.add(key);
-      callers.push({
-        file: c.fromPath,
-        symbol: enclosing,
-        viaSymbol: c.toSymbol,
-        line: c.line,
-        rank: c.rank,
-      });
-    }
-    callers.sort((a, b) => b.rank - a.rank);
-
-    // Precomputed facts per caller file (endpoints + crons), so consumers can
-    // attribute them to the changed symbol whose callers live in that file.
-    const facts = await this.repo.getFileFacts(repoId, callerFiles);
-    const endpoints = new Set<string>();
     const factsByFile: Record<string, { endpoints: string[]; crons: string[] }> = {};
-    for (const f of facts) {
-      factsByFile[f.filePath] = { endpoints: f.endpoints, crons: f.crons };
-      for (const e of f.endpoints) endpoints.add(e);
+    for (const file of new Set(refs.map((r) => r.fromPath))) {
+      const content = await readClone(repo.clonePath, file);
+      if (content) factsByFile[file] = { endpoints: extractEndpoints(content), crons: extractCrons(content) };
     }
 
-    return {
+    const downstream = buildDownstream({
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
-      impactedEndpoints: [...endpoints],
+      refs,
+      spansByFile,
+      importEdges: [],
       factsByFile,
-      degraded: false,
-    };
+      limit: MAX_CALLERS_PER_SYMBOL,
+      maxDepth: BFS_DEPTH,
+    });
+    const head = await this.container.git.currentHead(ref).catch(() => '');
+    return { changedSymbols, ...flatten(downstream), ref: head, degraded: true, reason };
   }
 
   /**
@@ -732,31 +721,70 @@ function isJunkPath(path: string): boolean {
   return JUNK_PATH_PATTERNS.some((p) => lower.includes(p));
 }
 
-/** Enclosing top-level (bare-name) symbol for a line, from persistent rows. */
-function enclosingFromRows(rows: FullSymbolRow[], line: number): string | null {
-  const hit = rows
-    .filter((s) => !s.name.includes('.') && (s.line ?? 0) <= line)
-    .sort((a, b) => (b.line ?? 0) - (a.line ?? 0))[0];
-  return hit?.name ?? null;
+// ---------------------------------------------------------------------------
+// Blast helpers (row shaping only; the walk itself lives in ./blast.ts).
+// ---------------------------------------------------------------------------
+
+/** Empty blast result; degraded with `reason` unless the caller overrides it. */
+function emptyBlast(reason: DegradedReason = 'no_data'): BlastResult {
+  return { changedSymbols: [], downstream: [], callers: [], impactedEndpoints: [], ref: '', degraded: true, reason };
 }
 
-// ---------------------------------------------------------------------------
-// helpers — local to T1, replaced when blast/onboarding migrate to the facade.
-// ---------------------------------------------------------------------------
-
 /**
- * Best-effort: name the enclosing top-level symbol of a reference line. Mirrors
- * blast/helpers.ts callerName so we get the same caller labels.
+ * Changed symbols from persistent rows: bare names only, deduped, sorted. With
+ * `changedLines`, a file that has an entry keeps only the symbols whose span
+ * overlaps one of its changed lines; a file without an entry keeps them all.
  */
-function enclosingSymbolName(
-  allSymbols: CodeSymbol[],
-  fromPath: string,
-  line: number,
-): string {
-  const inFile = allSymbols
-    .filter((s) => s.path === fromPath && s.line <= line && !s.name.includes('.'))
-    .sort((a, b) => b.line - a.line);
-  return inFile[0]?.name ?? fromPath.split('/').pop() ?? fromPath;
+function changedSymbolsFrom(
+  rows: FullSymbolRow[],
+  changedLines?: Readonly<Record<string, readonly number[]>>,
+): BlastChangedSymbol[] {
+  return sortChangedSymbols(
+    dedupeSymbols(
+      rows
+        .filter((s) => !s.name.includes('.'))
+        .filter((s) => {
+          const lines = changedLines?.[s.path];
+          return lines === undefined || spanTouches(s, lines);
+        })
+        .map((s) => ({ file: s.path, name: s.name, kind: s.kind, line: s.line ?? 0 })),
+    ),
+  );
+}
+
+/** One entry per (file, name): the earliest declaration wins. */
+function dedupeSymbols(symbols: BlastChangedSymbol[]): BlastChangedSymbol[] {
+  const byKey = new Map<string, BlastChangedSymbol>();
+  for (const s of symbols) {
+    const key = `${s.file}\u0000${s.name}`;
+    const prev = byKey.get(key);
+    if (!prev || s.line < prev.line) byKey.set(key, s);
+  }
+  return [...byKey.values()];
+}
+
+function groupSpans(rows: FullSymbolRow[]): Map<string, SymbolSpan[]> {
+  const byFile = new Map<string, SymbolSpan[]>();
+  for (const r of rows) {
+    const span = { name: r.name, line: r.line, endLine: r.endLine };
+    const arr = byFile.get(r.path);
+    if (arr) arr.push(span);
+    else byFile.set(r.path, [span]);
+  }
+  return byFile;
+}
+
+/** Flat `callers` / `impactedEndpoints` views of the per-symbol impact. */
+function flatten(
+  downstream: BlastSymbolImpact[],
+): Pick<BlastResult, 'downstream' | 'callers' | 'impactedEndpoints'> {
+  const endpoints = new Set<string>();
+  for (const d of downstream) for (const e of d.endpoints) endpoints.add(e);
+  return {
+    downstream,
+    callers: downstream.flatMap((d) => d.callers),
+    impactedEndpoints: [...endpoints].sort(),
+  };
 }
 
 async function readClone(clonePath: string, file: string): Promise<string | null> {

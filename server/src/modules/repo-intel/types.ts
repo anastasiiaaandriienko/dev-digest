@@ -58,6 +58,8 @@ export interface BlastChangedSymbol {
   file: string;
   name: string;
   kind: string;
+  /** 1-based declaration line (0 when unknown). */
+  line: number;
 }
 
 export interface BlastCallerRow {
@@ -71,17 +73,42 @@ export interface BlastCallerRow {
   rank: number;
 }
 
+/** The downstream impact of ONE changed symbol. */
+export interface BlastSymbolImpact {
+  name: string;
+  /** File that declares the symbol (excluded from its callers). */
+  file: string;
+  /** Direct callers, ordered (rank desc, file, line) and capped at MAX_CALLERS_PER_SYMBOL. */
+  callers: BlastCallerRow[];
+  /** Distinct direct callers before the cap. */
+  callerCount: number;
+  /**
+   * Endpoints / crons registered in the caller files and in the files that
+   * import them, up to BFS_DEPTH hops from the changed symbol. Sorted, unique.
+   */
+  endpoints: string[];
+  crons: string[];
+}
+
 export interface BlastResult {
   changedSymbols: BlastChangedSymbol[];
+  /** Per changed symbol, in `changedSymbols` order. */
+  downstream: BlastSymbolImpact[];
+  /** Flat union of every `downstream[].callers` row (already capped per symbol). */
   callers: BlastCallerRow[];
-  /** "METHOD /path" (via extractEndpoints / file_facts) — flat union. */
+  /** "METHOD /path" (via extractEndpoints / file_facts) — flat union, sorted. */
   impactedEndpoints: string[];
   /**
-   * Per-caller-file precomputed facts, so consumers (blast) can attribute
-   * endpoints/crons to the changed symbol whose callers live in that file.
-   * Present on the persistent (non-degraded) path; absent otherwise.
+   * Per-file precomputed facts of every file the walk reached, so consumers
+   * can attribute endpoints/crons. Present on the persistent path only.
    */
   factsByFile?: Record<string, { endpoints: string[]; crons: string[] }>;
+  /**
+   * Commit the result describes: the indexed SHA (persistent path) or the
+   * clone HEAD (ripgrep fallback); '' when unknown. Line numbers refer to it,
+   * not to the PR head.
+   */
+  ref: string;
   degraded?: boolean;
   reason?: DegradedReason;
 }
@@ -144,7 +171,16 @@ export interface RepoIntel {
   getIndexState(repoId: string): Promise<IndexState>;
 
   // --- Reads --------------------------------------------------------------
-  getBlastRadius(repoId: string, changedFiles: string[]): Promise<BlastResult>;
+  /**
+   * `changedLines` (optional): per changed file, the base-side lines its patch
+   * changes. Only symbols overlapping them count as changed; a file missing from
+   * the map keeps all of its symbols.
+   */
+  getBlastRadius(
+    repoId: string,
+    changedFiles: string[],
+    changedLines?: Readonly<Record<string, readonly number[]>>,
+  ): Promise<BlastResult>;
   getRepoMap(repoId: string, tokenBudget?: number): Promise<RepoMapResult>;
   getFileRank(repoId: string, paths: string[]): Promise<FileRankRow[]>;
   getSymbolsInFiles(repoId: string, paths: string[]): Promise<SymbolRow[]>;

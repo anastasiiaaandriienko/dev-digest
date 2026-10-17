@@ -66,8 +66,14 @@ function useQueryStateReadOnly<T = unknown>(key: readonly unknown[]): QueryState
  *   the intent query is invalidated (GET only) so a read made during the resync
  *   (or a fresh-looking cached one) is corrected.
  * Read-only cache subscription (no observer): it never fetches itself.
+ *
+ * `dependentKey` picks the pr_files-derived query to re-read (default: the intent);
+ * the Blast Radius block passes its own key. Derive it from `prId` only.
  */
-export function usePullSettled(prId: string | null | undefined): boolean {
+export function usePullSettled(
+  prId: string | null | undefined,
+  dependentKey: (id: string | null | undefined) => readonly unknown[] = intentKey,
+): boolean {
   const qc = useQueryClient();
   const detail = useQueryStateReadOnly(["pull", prId]);
   const [mounted, setMounted] = useState(false);
@@ -77,14 +83,16 @@ export function usePullSettled(prId: string | null | undefined): boolean {
   const updatedAt = detail?.dataUpdatedAt ?? 0;
   useEffect(() => {
     if (!settled) return;
-    // Intent data older than the detail that just settled may have been read during
+    // Data older than the detail that just settled may have been read during
     // the pr_files resync → re-read once (GET). No loop: this effect only re-runs when
-    // `settled`/`updatedAt` change, and after the re-read intent is newer than detail.
+    // `settled`/`updatedAt` change, and after the re-read the data is newer than detail.
     // No data yet (0) → skip: the `enabled` flip already fetches it (no double GET).
-    const intentAt = qc.getQueryState(intentKey(prId))?.dataUpdatedAt ?? 0;
-    if (intentAt > 0 && updatedAt > intentAt) {
-      void qc.invalidateQueries({ queryKey: intentKey(prId) });
+    const key = dependentKey(prId);
+    const dataAt = qc.getQueryState(key)?.dataUpdatedAt ?? 0;
+    if (dataAt > 0 && updatedAt > dataAt) {
+      void qc.invalidateQueries({ queryKey: key });
     }
+    // dependentKey is a stable key factory (derived from prId), so it is not a dependency.
   }, [settled, updatedAt, prId, qc]);
 
   return settled;

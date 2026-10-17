@@ -51,7 +51,7 @@ currently calls each method.
 | `getFileRank(repoId, paths)` | `{ path, percentile }[]` | `run-executor.ts:392` (≥ 95 → rank note) | L03 Smart Diff |
 | `getCallerSignatures(repoId, files, limit)` | `{ file, symbol, signature, rank }[]` | `run-executor.ts:336` | — |
 | `getSymbolsInFiles(repoId, paths)` | symbol rows | — | L03 |
-| `getBlastRadius(repoId, files)` | `BlastResult` (changed symbols, callers, impacted endpoints, `degraded`) | — | L04 |
+| `getBlastRadius(repoId, files, changedLines?)` | `BlastResult`: changed symbols = symbols of the changed files whose indexed span overlaps a base line the stored patch changes (`changedLines`; a file without a patch keeps all its symbols; the ripgrep fallback ignores it). Per changed symbol (`downstream`) the direct resolved callers (≤ `MAX_CALLERS_PER_SYMBOL` each, defining file excluded) and the endpoints/crons of the files reached by a reverse-import BFS up to `BFS_DEPTH`; `ref` = indexed SHA; `degraded`/`reason`. Walk in `repo-intel/blast.ts` | `blast/service.ts` (`GET /pulls/:id/blast`) | HW-04 |
 | `getUnresolvedReferences(repoId, files)` | unresolved call sites in the given files | — | L06 Phantom gate |
 | `getConventionSamples(repoId, n)` | top-ranked file paths | — | L02 |
 | `getTopFilesByRank(repoId, n, opts)`, `getCriticalPaths(repoId)` | paths / chains | — | L05 onboarding |
@@ -68,7 +68,10 @@ currently calls each method.
   - `getRepoMap` returns `degraded` with `reason: 'no_data'`.
   - `getIndexState` returns a synthetic degraded row.
   - Array reads return `[]`.
-  - `getBlastRadius` falls back to a ripgrep scan of the clone, marked `degraded: true` with `rank: 0`.
+  - `getBlastRadius` falls back to a ripgrep scan of the clone (name-matched callers,
+    `rank: 0`, depth 1 only), marked `degraded: true` with `reason: 'no_data'`
+    (`'index_failed'` after a failed index). A `partial` index is still walked but
+    reported as `index_partial`; with the flag off the result is empty, `flag_off`.
 - **Cache misses.** The repo-map cache is keyed by (last indexed SHA, budget). Any
   other budget, or a stale SHA, returns `degraded`; nothing is computed on demand.
 - **The review keeps working.** `run-executor.ts` wraps each enrichment in
@@ -79,13 +82,19 @@ currently calls each method.
 
 ## Potential bugs and caveats (code reading, not reproduced)
 
-- **Windows path separators.** `src/adapters/codeindex/ripgrep.ts:105,120` return
-  `relative(root, file)` without converting to `/`, whereas the walker normalizes
-  (`pipeline/walk.ts:119`). On Windows, `getCallerSignatures` can therefore fail to
-  skip self-references (`service.ts:505`), and path-keyed lookups can miss.
+- **Windows path separators.** `RipgrepCodeIndex.symbols/references` now return POSIX
+  paths like the walker (`test/codeindex-ripgrep.test.ts`). `grepWithRg` still parses
+  `<path>:<line>:` output with a lazy regex that breaks on `D:\…` paths (not used by blast).
+- **Endpoint facts are heuristic.** `extractEndpoints` also matches `api.get(…)` calls
+  and test `inject` URLs, and misses route registrations split over several lines.
+  Blast ignores the facts of test/spec files; the extractor itself is unchanged.
 - **Hotness.** It is always 0 on shallow clones, so ranking is PageRank only.
-- **dependency-cruiser.** If it fails, the import graph is empty: ranking goes flat
-  and the status becomes `partial`.
+- **dependency-cruiser.** If it fails, the adapter throws, the import graph is
+  empty, ranking goes flat and the status becomes `partial` with `graphFailed` in
+  the stats (`test/indexer-pipeline.test.ts`). The adapter runs cruise from the clone
+  root and returns POSIX paths, so edges match `walkClone` paths on Windows too
+  (`test/depgraph.test.ts`); before that fix every edge was dropped on Windows,
+  `file_edges` stayed empty and no `references.decl_file` was resolved.
 - **`getUnresolvedReferences`.** It works per file, from what is declared or
   imported in that file plus a globals allowlist. Expect false positives.
 
