@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, RunEventKind, RunTrace, SmartDiff } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
@@ -8,6 +8,7 @@ import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { IntentService } from './intent/service.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
+import { buildSmartDiff } from './smart-diff.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -171,6 +172,25 @@ export class ReviewService {
     }
     return rows.map(({ review, findings }) =>
       reviewToDto(review, findings, review.agentId ? names.get(review.agentId) : null),
+    );
+  }
+
+  /**
+   * GET /pulls/:id/smart-diff — the PR's stored files grouped by role (shared
+   * classification rules) with inline findings anchored to changed lines and a
+   * split suggestion. Local reads only (no GitHub, no LLM); 404 for an unknown
+   * or foreign PR.
+   */
+  async smartDiff(workspaceId: string, prId: string): Promise<SmartDiff> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const [files, findings] = await Promise.all([
+      this.repo.getPrFiles(prId),
+      this.repo.inlineFindings(workspaceId, prId),
+    ]);
+    return buildSmartDiff(
+      files,
+      findings.map((f) => ({ file: f.file, start_line: f.startLine, end_line: f.endLine })),
     );
   }
 

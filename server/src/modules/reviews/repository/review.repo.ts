@@ -73,6 +73,12 @@ export async function reviewsForPull(
   }));
 }
 
+/** Findings of the given reviews (any order). */
+export async function findingsForReviews(db: Db, reviewIds: string[]): Promise<FindingRow[]> {
+  if (reviewIds.length === 0) return [];
+  return db.select().from(t.findings).where(inArray(t.findings.reviewId, reviewIds));
+}
+
 export async function getReview(db: Db, reviewId: string): Promise<ReviewRow | undefined> {
   const [row] = await db.select().from(t.reviews).where(eq(t.reviews.id, reviewId));
   return row;

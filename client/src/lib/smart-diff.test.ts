@@ -6,6 +6,7 @@ import {
   defaultGroupOpen,
   type SmartGroupKey,
 } from "./smart-diff";
+import { SMART_CLASSIFICATION_PRIORITY, matchingSmartCategories } from "@devdigest/shared/smart-diff-rules";
 
 const CASES: [SmartGroupKey, string][] = [
   ["boilerplate", "pnpm-lock.yaml"],
@@ -76,6 +77,38 @@ const CASES: [SmartGroupKey, string][] = [
 describe("classifyFile", () => {
   it.each(CASES)("%s <- %s", (group, path) => {
     expect(classifyFile(path)).toBe(group);
+  });
+});
+
+/* Paths matched by more than one category: priority boilerplate → tests → wiring → docs → core. */
+const MULTI_MATCH: [SmartGroupKey, string, string[]][] = [
+  ["boilerplate", "dist/README.md", ["boilerplate", "docs"]],
+  ["boilerplate", "docs/diagram.png", ["boilerplate", "docs"]],
+  ["boilerplate", "test/__snapshots__/a.test.ts.snap", ["boilerplate", "tests"]],
+  ["boilerplate", "e2e/pnpm-lock.yaml", ["boilerplate", "tests", "wiring"]],
+  ["tests", "test/fixtures/README.md", ["tests", "docs"]],
+  ["tests", "e2e/package.json", ["tests", "wiring"]],
+  ["tests", "docs/guide.test.ts", ["tests", "docs"]],
+  ["wiring", "docs/mkdocs.yml", ["wiring", "docs"]],
+  ["wiring", ".github/PULL_REQUEST_TEMPLATE.md", ["wiring", "docs"]],
+  ["wiring", "docs/package.json", ["wiring", "docs"]],
+  ["wiring", "docs/index.ts", ["wiring", "docs"]],
+  ["wiring", "requirements.txt", ["wiring", "docs"]],
+];
+
+describe("classifyFile — files matching several categories", () => {
+  it.each(MULTI_MATCH)("%s <- %s", (group, path, matched) => {
+    expect(matchingSmartCategories(path)).toEqual(matched);
+    expect(classifyFile(path)).toBe(group);
+  });
+
+  it("falls back to core when no category matches", () => {
+    expect(matchingSmartCategories("src/app.ts")).toEqual([]);
+    expect(classifyFile("src/app.ts")).toBe("core");
+  });
+
+  it("checks categories in the documented priority order", () => {
+    expect([...SMART_CLASSIFICATION_PRIORITY, "core"]).toEqual(["boilerplate", "tests", "wiring", "docs", "core"]);
   });
 });
 

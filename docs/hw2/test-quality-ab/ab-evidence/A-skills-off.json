@@ -1,0 +1,203 @@
+{
+  "label": "A-skills-off",
+  "pr": {
+    "id": "886a7a27-aba3-4867-9a15-3d9ebb56a42c"
+  },
+  "agent": {
+    "id": "5b50ff0b-325b-438a-84f3-fbdf85ce9d6e",
+    "name": "Test Quality Reviewer",
+    "provider": "openrouter",
+    "model": "deepseek/deepseek-v4-flash",
+    "version": 1
+  },
+  "skill_links": [
+    {
+      "skill_id": "799c14e2-3e94-4c3e-b883-3fd1e615e0e5",
+      "enabled": false
+    }
+  ],
+  "agent_run": {
+    "run_id": "385d6938-22c3-46c6-a7c8-0a4e26c676db",
+    "agent_id": "5b50ff0b-325b-438a-84f3-fbdf85ce9d6e",
+    "agent_name": "Test Quality Reviewer",
+    "provider": "openrouter",
+    "model": "deepseek/deepseek-v4-flash",
+    "status": "done",
+    "error": null,
+    "duration_ms": 33038,
+    "tokens_in": 4177,
+    "tokens_out": 3166,
+    "findings_count": 3,
+    "grounding": "3/3 passed",
+    "ran_at": "2026-10-17T12:40:07.283Z",
+    "score": 64,
+    "blockers": 0,
+    "cost_usd": 0.00018979254
+  },
+  "review": {
+    "id": "52bb076f-295b-4013-b5de-d3ee021029d1",
+    "verdict": "request_changes",
+    "score": 64,
+    "model": "deepseek/deepseek-v4-flash",
+    "summary": "The PR adds two helper functions but both the production code and tests have notable issues. The test coverage is shallow—key paths (budget-limit logic, missing-skill error, token validation) are untested. The production function fitSkillsToBudget lacks input validation for negative tokens, which can silently produce incorrect results. These gaps should be addressed before merging."
+  },
+  "findings": [
+    {
+      "severity": "WARNING",
+      "category": "bug",
+      "file": "server/src/modules/skills/budget.ts",
+      "start_line": 14,
+      "end_line": 27,
+      "confidence": 0.9,
+      "title": "fitSkillsToBudget does not validate that skill tokens are non‑negative integers",
+      "rationale": "The function assumes tokens are non‑negative integers, but the BudgetSkill interface defines tokens as `number`. Passing a negative value (e.g., -10) would cause `used + s.tokens` to be less than `used`, possibly allowing more skills to be added than the budget allows. This can lead to incorrect skill selection.",
+      "suggestion": "Add input validation for each skill's tokens: throw a RangeError if `s.tokens < 0` or `!Number.isInteger(s.tokens)`. Alternatively, cast or clamp, but explicit validation is clearer."
+    },
+    {
+      "severity": "WARNING",
+      "category": "test",
+      "file": "server/test/skills-budget.test.ts",
+      "start_line": 7,
+      "end_line": 16,
+      "confidence": 0.95,
+      "title": "Test for fitSkillsToBudget does not exercise the budget limit logic",
+      "rationale": "The only test passes a budget of 100 and only one enabled skill (10 tokens), so the budget limit is never actually tested. Missing cases: skills that exceed the budget, later smaller skills that still fit after a skipped larger one, empty skills array, budget exactly equal to used tokens, invalid budget (non‑positive or non‑integer). The test name suggests it validates the budget logic, but it does not.",
+      "suggestion": "Add multiple test cases covering: (a) a skill that exceeds the budget is omitted, (b) a later smaller skill fits after a larger one is skipped, (c) an empty list returns an empty list, (d) budget exactly equal to the sum of selected skills, (e) RangeError for invalid budget values."
+    },
+    {
+      "severity": "WARNING",
+      "category": "test",
+      "file": "server/test/skills-budget.test.ts",
+      "start_line": 18,
+      "end_line": 21,
+      "confidence": 0.95,
+      "title": "Test for loadSkillBodies only checks that the result is defined",
+      "rationale": "The assertion `expect(bodies).toBeDefined()` only verifies the function returned a value, not that it returned the correct map. It should check that the map contains the expected key-value pair (`# x`) and that the mock was called with the correct ID. Additionally, there is no test for the NotFoundError case when `repo.getBody` returns undefined.",
+      "suggestion": "Add assertions: `expect(bodies.get('a')).toBe('# x')` and `expect(repo.getBody).toHaveBeenCalledWith('a')`. Add a second test where the mock returns undefined and verify that NotFoundError is thrown."
+    }
+  ],
+  "trace": {
+    "stats": {
+      "cost_usd": 0.00018979254,
+      "findings": 3,
+      "grounding": "3/3 passed",
+      "tokens_in": 4177,
+      "tokens_out": 3166,
+      "duration_ms": 33038
+    },
+    "config": {
+      "pr": 5,
+      "agent": "Test Quality Reviewer",
+      "model": "deepseek/deepseek-v4-flash",
+      "source": "local",
+      "version": "1",
+      "provider": "openrouter"
+    },
+    "tool_calls": [
+      {
+        "ms": 33038,
+        "args": "all files",
+        "meta": "single-pass",
+        "tool": "review_file"
+      }
+    ],
+    "prompt_assembly": {
+      "skill_blocks": null,
+      "skills_tokens": null,
+      "pr_description": "Do not merge — test pull request used for reviewer evaluation.",
+      "system_chars": 1681,
+      "user_chars": 9521,
+      "system_md5": "5bce18e4fa652e6c10e2e8f73ac095c6",
+      "system_without_skills_md5": "5bce18e4fa652e6c10e2e8f73ac095c6",
+      "user_md5": "b9909e905e9720b57b4c8c42a984d1ea"
+    },
+    "log": [
+      {
+        "t": "15:40:07",
+        "msg": "Loading PR diff…",
+        "kind": "tool"
+      },
+      {
+        "t": "15:40:07",
+        "msg": "Loading PR diff done (42ms)",
+        "kind": "tool"
+      },
+      {
+        "t": "15:40:07",
+        "msg": "Diff ready — 2 changed file(s); starting 1 agent run(s)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:07",
+        "msg": "intent: resolving PR intent…",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:09",
+        "msg": "intent: resolving PR intent done (1779ms)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:09",
+        "msg": "intent: generated — cost 0.0001278 billed separately (not in review run cost)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:09",
+        "msg": "intent: attached (confidence=medium, policy=inform)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:09",
+        "msg": "Starting review with agent \"Test Quality Reviewer\" (openrouter/deepseek/deepseek-v4-flash)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:09",
+        "msg": "Resolving openrouter provider…",
+        "kind": "tool"
+      },
+      {
+        "t": "15:40:09",
+        "msg": "Resolving openrouter provider done (0ms)",
+        "kind": "tool"
+      },
+      {
+        "t": "15:40:09",
+        "msg": "repo map: 1500 token(s) attached (cached=true)",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:09",
+        "msg": "skills: none applied",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:09",
+        "msg": "Reviewing 2 changed file(s) in one pass",
+        "kind": "info"
+      },
+      {
+        "t": "15:40:09",
+        "msg": "Reviewing all files in one pass",
+        "kind": "tool"
+      },
+      {
+        "t": "15:40:42",
+        "msg": "all files: 3 candidate finding(s)",
+        "kind": "result"
+      },
+      {
+        "t": "15:40:42",
+        "msg": "Reduced to 3 finding(s); verdict=request_changes, score=40",
+        "kind": "result"
+      },
+      {
+        "t": "15:40:42",
+        "msg": "Citation grounding: 3/3 passed",
+        "kind": "result"
+      }
+    ]
+  },
+  "raw_output": "{\n  \"verdict\": \"request_changes\",\n  \"summary\": \"The PR adds two helper functions but both the production code and tests have notable issues. The test coverage is shallow—key paths (budget-limit logic, missing-skill error, token validation) are untested. The production function fitSkillsToBudget lacks input validation for negative tokens, which can silently produce incorrect results. These gaps should be addressed before merging.\",\n  \"score\": 40,\n  \"findings\": [\n    {\n      \"id\": \"bug-missing-token-validation\",\n      \"severity\": \"WARNING\",\n      \"category\": \"bug\",\n      \"title\": \"fitSkillsToBudget does not validate that skill tokens are non‑negative integers\",\n      \"file\": \"server/src/modules/skills/budget.ts\",\n      \"start_line\": 14,\n      \"end_line\": 27,\n      \"rationale\": \"The function assumes tokens are non‑negative integers, but the BudgetSkill interface defines tokens as `number`. Passing a negative value (e.g., -10) would cause `used + s.tokens` to be less than `used`, possibly allowing more skills to be added than the budget allows. This can lead to incorrect skill selection.\",\n      \"suggestion\": \"Add input validation for each skill's tokens: throw a RangeError if `s.tokens < 0` or `!Number.isInteger(s.tokens)`. Alternatively, cast or clamp, but explicit validation is clearer.\",\n      \"confidence\": 0.9,\n      \"kind\": \"finding\",\n      \"trifecta_components\": null,\n      \"evidence\": null\n    },\n    {\n      \"id\": \"test-fitSkillsToBudget-incomplete-coverage\",\n      \"severity\": \"WARNING\",\n      \"category\": \"test\",\n      \"title\": \"Test for fitSkillsToBudget does not exercise the budget limit logic\",\n      \"file\": \"server/test/skills-budget.test.ts\",\n      \"start_line\": 7,\n      \"end_line\": 16,\n      \"rationale\": \"The only test passes a budget of 100 and only one enabled skill (10 tokens), so the budget limit is never actually tested. Missing cases: skills that exceed the budget, later smaller skills that still fit after a skipped larger one, empty skills array, budget exactly equal to used tokens, invalid budget (non‑positive or non‑integer). The test name suggests it validates the budget logic, but it does not.\",\n      \"suggestion\": \"Add multiple test cases covering: (a) a skill that exceeds the budget is omitted, (b) a later smaller skill fits after a larger one is skipped, (c) an empty list returns an empty list, (d) budget exactly equal to the sum of selected skills, (e) RangeError for invalid budget values.\",\n      \"confidence\": 0.95,\n      \"kind\": \"finding\",\n      \"trifecta_components\": null,\n      \"evidence\": null\n    },\n    {\n      \"id\": \"test-loadSkillBodies-incomplete-coverage\",\n      \"severity\": \"WARNING\",\n      \"category\": \"test\",\n      \"title\": \"Test for loadSkillBodies only checks that the result is defined\",\n      \"file\": \"server/test/skills-budget.test.ts\",\n      \"start_line\": 18,\n      \"end_line\": 21,\n      \"rationale\": \"The assertion `expect(bodies).toBeDefined()` only verifies the function returned a value, not that it returned the correct map. It should check that the map contains the expected key-value pair (`# x`) and that the mock was called with the correct ID. Additionally, there is no test for the NotFoundError case when `repo.getBody` returns undefined.\",\n      \"suggestion\": \"Add assertions: `expect(bodies.get('a')).toBe('# x')` and `expect(repo.getBody).toHaveBeenCalledWith('a')`. Add a second test where the mock returns undefined and verify that NotFoundError is thrown.\",\n      \"confidence\": 0.95,\n      \"kind\": \"finding\",\n      \"trifecta_components\": null,\n      \"evidence\": null\n    }\n  ]\n}"
+}

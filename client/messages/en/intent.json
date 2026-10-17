@@ -46,5 +46,44 @@
     "not_found": "This pull request could not be found.",
     "unknown": "Something went wrong while generating the intent. Try again."
   },
-  "refreshStatus": "Refresh status"
+  "refreshStatus": "Refresh status",
+  "context": {
+    "title": "Context sources",
+    "notRecorded": "Context sources were not recorded for this intent. Recalculate to include linked issues, links and planning documents.",
+    "onlyPr": "Only the PR title and description were available.",
+    "gapsLabel": "Missing context",
+    "kind": {
+      "pr_title": "PR title",
+      "pr_description": "PR description",
+      "linked_issue": "Issue",
+      "ticket_link": "Ticket link",
+      "plan_link": "Plan link",
+      "link": "Link",
+      "plan_doc": "Planning doc"
+    },
+    "status": {
+      "confirmed": "Confirmed",
+      "unverified": "Not verified",
+      "unavailable": "Unavailable",
+      "missing": "Missing"
+    },
+    "note": {
+      "empty": "empty",
+      "truncated": "shortened to fit the prompt",
+      "not_fetched": "not fetched — content unknown",
+      "not_in_diff": "not part of this diff — not read",
+      "no_patch": "no diff text available",
+      "not_found_or_no_access": "not found or no access",
+      "github_unavailable": "GitHub not connected",
+      "fetch_failed": "could not be loaded",
+      "over_limit": "over the limit — not fetched"
+    },
+    "gaps": {
+      "descriptionMissing": "The PR description is empty.",
+      "noLinkedIssues": "No linked issue was referenced in the description.",
+      "issuesUnavailable": "{count, plural, one {# source could not be loaded} other {# sources could not be loaded}} — content not used.",
+      "unverified": "{count, plural, one {# reference was not verified} other {# references were not verified}} — only the reference itself is known.",
+      "noPlanDocs": "No planning document or plan link was found."
+    }
+  }
 }

@@ -11,7 +11,9 @@
 #
 # DB-backed tests run in server-integration.yml. reviewer-core/** is in the
 # path filter because server aliases ../reviewer-core/src at type-check time;
-# docs/skills/** because test/api-contract-skills.test.ts validates those skills.
+# docs/skills/** because test/api-contract-skills.test.ts validates those skills;
+# client/src/vendor/shared/** because test/smart-diff-rules-sync.test.ts compares the
+# client copy of the Smart Diff rules with the server one.
 name: server unit
 
 on:
@@ -21,12 +23,14 @@ on:
       - 'server/**'
       - 'reviewer-core/**'
       - 'docs/skills/**'
+      - 'client/src/vendor/shared/**'
       - '.github/workflows/server-unit.yml'
   pull_request:
     paths:
       - 'server/**'
       - 'reviewer-core/**'
       - 'docs/skills/**'
+      - 'client/src/vendor/shared/**'
       - '.github/workflows/server-unit.yml'
 
 permissions:

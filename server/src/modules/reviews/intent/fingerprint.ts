@@ -45,6 +45,13 @@ export interface FingerprintInput {
   headSha: string;
   base: string;
   files: IntentFileInput[] | null;
+  /**
+   * Locally known context (`localContextFingerprint`): issue/link refs from the
+   * description and plan-doc text hashes. Omitted/null = none, and then the key
+   * is left out so PRs without context keep their earlier fingerprint. Fetched
+   * issue content is NOT here (GET never calls GitHub); POST compares it separately.
+   */
+  context?: unknown;
 }
 
 /** The exact object that is hashed (exported for tests / debugging). */
@@ -61,6 +68,7 @@ export function canonicalInput(input: FingerprintInput) {
     head_sha: input.headSha,
     base: input.base,
     files,
+    ...(input.context != null ? { context: input.context } : {}),
   };
 }
 

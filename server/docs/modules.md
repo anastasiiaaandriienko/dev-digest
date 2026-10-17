@@ -96,7 +96,7 @@ For new lesson modules, copy `agents`, not `pulls` or `workspace`.
 - **Tables.** All tables already exist in `src/db/schema/*.ts` (exported through
   `src/db/schema.ts`). Lesson tables such as `skills`, `pr_brief`, `eval_*`,
   `memory` and `digests` sit empty until a lesson uses them. `pr_intent` is now in
-  use (L03: `GET`/`POST /pulls/:id/intent`, migration `0012`). Check there before
+  use (L03: `GET`/`POST /pulls/:id/intent`, migrations `0012` and `0013` (`context_sources`); `GET /pulls/:id/smart-diff` reads `pr_files` + findings, no table of its own). Check there before
   proposing a new table.
 - **Schema changes.** Changing a schema file requires a new migration. Ask first
   (see the safety rules in [../AGENTS.md](../AGENTS.md)).

@@ -45,6 +45,20 @@ export const findings = pgTable('findings', {
   dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
 });
 
+/**
+ * One stored intent context source: the `IntentContextSource` contract fields plus
+ * `content_hash` (sha256 of a fetched issue's title/state/body) so a later POST can
+ * tell whether the issue changed. Fetched bodies themselves are never stored.
+ */
+export interface IntentContextSourceRecord {
+  kind: string;
+  status: string;
+  ref: string;
+  title?: string | null;
+  note?: string | null;
+  content_hash?: string | null;
+}
+
 export const prIntent = pgTable('pr_intent', {
   prId: uuid('pr_id')
     .primaryKey()
@@ -66,6 +80,9 @@ export const prIntent = pgTable('pr_intent', {
   tokensIn: integer('tokens_in'),
   tokensOut: integer('tokens_out'),
   costUsd: doublePrecision('cost_usd'),
+  // L03 context: the sources the intent was generated from (status per source, no fetched bodies).
+  // Nullable: rows generated before it have no record.
+  contextSources: jsonb('context_sources').$type<IntentContextSourceRecord[]>(),
 });
 
 export const prBrief = pgTable('pr_brief', {
