@@ -109,6 +109,80 @@ Then check with `claude mcp list` or `/mcp` inside Claude Code. Tool permission 
 `mcp__devdigest__<tool>`, e.g. `mcp__devdigest__list_agents`. Allow the read-only tools if you
 like; keep `mcp__devdigest__run_agent_on_pr` on "ask".
 
+## Context overhead (L04 audit)
+
+Measured on 2026-10-17 with Claude Code 2.1.302 on Windows. Each row is a separate headless
+session running only the local `/context` command (no model call, no review, no config change).
+"Upfront" is what sits in the context window on every turn; "deferred" schemas are loaded only
+when Tool Search fetches a tool.
+
+### Measured
+
+| # | Configuration | MCP tools | Total context | Upfront tools | Deferred schemas |
+|---|---|---|---|---|---|
+| C | current servers, Tool Search **on** | 38 (Claude Docs 8, devdigest 5, desktop-commander 25) | **25.7k** | system 6.8k + MCP names 0.54k + MCP server instructions 0.96k | MCP 18.7k + system 13.6k |
+| B | current servers, Tool Search **off** | 38 | **61.1k** | system 23.5k + MCP 19.3k + instructions 0.96k | — |
+| A0 | no MCP (`--strict-mcp-config`, empty config), on | 0 | **24.2k** | system 6.8k | system 13.4k |
+| A1 | devdigest only (`--strict-mcp-config`), on | 5 | **24.2k** | system 6.8k; MCP names ≈ 0 (no row in `/context`) | MCP 1.2k |
+| A2 | devdigest only (`--strict-mcp-config`), off | 5 | **41.4k** | system 22.7k + MCP 1.2k | — |
+
+For comparison, the interactive session at the same time (Tool Search on) showed 42.4k total,
+60 MCP tools (the 38 above + 22 `claude-in-chrome`), MCP names 0.55k, deferred MCP schemas 29.4k.
+
+What the numbers show:
+
+- **Tool Search on saves 35.4k tokens** (B 61.1k → C 25.7k). About 18.8k of that is MCP
+  schemas; about 16.7k is Claude Code's **built-in deferred tools**, which are also loaded in full
+  when Tool Search is off. So turning it off costs a lot even with few MCP servers (A2: +17.2k over A1).
+- **devdigest itself is cheap**: ≈ 0 upfront and 1.2k deferred with Tool Search on (A0 vs A1),
+  exactly 1.2k upfront with it off (A2).
+- The other MCP servers (desktop-commander, Claude Docs) cost ~1.5k upfront with Tool Search on
+  (C vs A1: tool names + server instructions) and ~18k with it off.
+
+### Not measured / estimates
+
+- **Headless vs interactive:** headless (`claude -p`) has no `claude-in-chrome` (22 tools,
+  ~10k deferred) and fewer built-in tools, so its totals are lower than an interactive session.
+  Compare deltas between rows, not absolute values with an interactive `/context`.
+- `--strict-mcp-config` also drops the claude.ai connector (Claude Docs), so A0/A1 are "only
+  what the config file lists".
+- **GitHub MCP is not configured** (no user/local/project server; the official `github` plugin is
+  only in the marketplace, not installed), so its cost was not measured. If added, the official
+  server can be limited with `GITHUB_TOOLSETS=repos,pull_requests` and `GITHUB_READ_ONLY=1`
+  (remote server: `X-MCP-Toolsets` / `X-MCP-Readonly` headers) — from its docs, not verified here.
+  DevDigest does not need it: the API talks to GitHub through `octokit`.
+
+### Recommendations
+
+1. Keep Tool Search on (the default; don't set `ENABLE_TOOL_SEARCH=false`). It is the biggest lever.
+2. Keep the devdigest server as is: five tools, 1.2k deferred, nothing worth trimming.
+3. For DevDigest-only sessions, start Claude Code with a devdigest-only MCP config
+   (`--strict-mcp-config --mcp-config <file>`), or disable unrelated servers for this project in
+   `/mcp`. Saves ~1.5k per turn with Tool Search on, ~18k with it off, and leaves the model fewer
+   unrelated tools to choose from.
+4. Add GitHub MCP only when a task needs it, limited to `repos,pull_requests` and read-only.
+
+### Reproduce
+
+Run from the repo root in PowerShell (Git Bash rewrites `/context` into a Windows path; use
+`MSYS_NO_PATHCONV=1` there). The variable only applies to the started process.
+
+```powershell
+$D = "$env:TEMP\devdigest-ctx"; New-Item -ItemType Directory -Force $D | Out-Null
+$env:ENABLE_TOOL_SEARCH='true';  claude -p "/context" > "$D\ctx-C-ts-true.txt"
+$env:ENABLE_TOOL_SEARCH='false'; claude -p "/context" > "$D\ctx-B-ts-false.txt"
+$env:ENABLE_TOOL_SEARCH='true'
+claude -p "/context" --strict-mcp-config --mcp-config "$D\empty-mcp.json"     > "$D\ctx-A0-strict-empty.txt"
+claude -p "/context" --strict-mcp-config --mcp-config "$D\devdigest-mcp.json" > "$D\ctx-A1-strict-devdigest.txt"
+$env:ENABLE_TOOL_SEARCH='false'
+claude -p "/context" --strict-mcp-config --mcp-config "$D\devdigest-mcp.json" > "$D\ctx-A2-strict-devdigest-tsfalse.txt"
+```
+
+`empty-mcp.json` is `{"mcpServers":{}}`; `devdigest-mcp.json` holds only the `devdigest` entry from
+[Connect to Claude Code](#connect-to-claude-code-local-scope) with absolute paths; put both in `$D`.
+Configs and `ctx-*.txt` outputs stay outside the repo; the raw logs of the run above are kept
+locally under those names and are not committed.
+
 ## Layout
 
 Dependencies point inward (the project's onion-architecture rule, applied to a small package):
