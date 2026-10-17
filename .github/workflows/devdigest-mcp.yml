@@ -1,0 +1,45 @@
+# devdigest-mcp suite — the stdio MCP server (@devdigest/mcp), a thin HTTP
+# client of the DevDigest API. Tests are hermetic units: fetch is faked and the
+# real network is blocked, so no API, database or LLM is needed. Uses npm
+# (package-lock.json).
+name: devdigest-mcp
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'devdigest-mcp/**'
+      - '.github/workflows/devdigest-mcp.yml'
+  pull_request:
+    paths:
+      - 'devdigest-mcp/**'
+      - '.github/workflows/devdigest-mcp.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devdigest-mcp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: devdigest-mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: devdigest-mcp/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
