@@ -133,11 +133,17 @@ export class ContextRepository implements ContextStore {
       owner === 'agent'
         ? { workspaceId, agentId: ownerId, repoId, path, order: nextOrder }
         : { workspaceId, skillId: ownerId, repoId, path, order: nextOrder };
-    const inserted = await this.db
-      .insert(table)
-      .values(values as never)
-      .onConflictDoNothing()
-      .returning({ id: table.id, repoId: table.repoId, path: table.path, order: table.order });
+    const inserted = await this.db.transaction(async (tx) => {
+      // max+1 is racy without serialization; lock per (workspace, owner kind, owner, repo).
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${`${workspaceId}:${owner}:${ownerId}:${repoId}`}))`,
+      );
+      return tx
+        .insert(table)
+        .values(values as never)
+        .onConflictDoNothing()
+        .returning({ id: table.id, repoId: table.repoId, path: table.path, order: table.order });
+    });
     if (inserted[0]) return { row: toRow(ownerId, inserted[0]), created: true };
 
     const [existing] = await this.db
