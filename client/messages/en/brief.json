@@ -15,5 +15,36 @@
     "blame": "blame",
     "noHistory": "No history available for this line.",
     "noCommits": "No commits found for this line."
+  },
+  "card": {
+    "title": "PR Brief",
+    "loading": "Loading brief…",
+    "loadError": "Couldn't load the brief.",
+    "retry": "Retry",
+    "empty": "No brief yet. Generate a short summary of why this PR exists, its risks, and where to look first.",
+    "generate": "Generate brief",
+    "generating": "Generating…",
+    "refresh": "Refresh brief",
+    "callNotice": "Runs one AI call.",
+    "waitingForPr": "Waiting for the pull request to load…",
+    "risks": "Risks",
+    "reviewFocus": "Review focus ({count})",
+    "reviewFocusHint": "Read these first",
+    "stale": "Stale",
+    "staleReasons": {
+      "pr_changed": "PR changed",
+      "model_changed": "Model changed",
+      "prompt_changed": "Prompt changed"
+    },
+    "severity": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "modelErrorHint": "Choose a model in",
+    "settingsLink": "Settings → Models",
+    "errors": {
+      "fallback": "Couldn't generate the brief. Try again."
+    }
   }
 }
