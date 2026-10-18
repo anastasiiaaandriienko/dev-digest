@@ -19,7 +19,8 @@ import {
   useReorderContextDocs,
 } from "@/lib/hooks/context";
 import { useActiveRepo } from "@/lib/repo-context";
-import { BADGED_STATUSES, MAX_ATTACHMENTS, ROOT_NEUTRAL, ROOT_STYLE } from "./constants";
+import { MAX_ATTACHMENTS } from "@/components/context-doc-attachments/constants";
+import { BADGED_STATUSES, ROOT_NEUTRAL, ROOT_STYLE } from "./constants";
 import { buildRows, dropOn, filterRows, formatKb, moveBy, rootKind, rootOf, sameIds, splitPath } from "./helpers";
 import { s } from "./styles";
 

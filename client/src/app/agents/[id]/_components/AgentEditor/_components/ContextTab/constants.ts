@@ -1,8 +1,5 @@
 import type { ContextAttachmentStatus } from "@devdigest/shared";
 
-/** Max docs attachable per agent and repo (server limit L7). */
-export const MAX_ATTACHMENTS = 10;
-
 /** Root badge colours by the root's last path segment (Q23 A11); any other root is neutral. */
 export const ROOT_STYLE: Readonly<Record<string, { color: string; bg: string }>> = {
   specs: { color: "var(--accent-text)", bg: "var(--accent-bg)" },
