@@ -1,5 +1,6 @@
+import { realpath } from 'node:fs/promises';
 import type { Container } from '../../platform/container.js';
-import type { PrIntentState, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { PrIntentState, PromptAssembly, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers, type PromptIntent } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
@@ -15,6 +16,15 @@ import {
   toPromptIntent,
   type IntentResolver,
 } from './intent/for-run.js';
+import {
+  CONTEXT_NOT_ISOLATED_LINE,
+  CONTEXT_UNAVAILABLE_LINE,
+  buildProjectContext,
+  contextLogLine,
+  redactAssemblyForTrace,
+  type BuiltProjectContext,
+} from '../context/for-run.js';
+import type { ProjectContextSource } from '../context/types.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -81,6 +91,8 @@ export class ReviewRunExecutor {
     private agents: Container['agentsRepo'],
     /** Optional L03 intent source; absent → no intent step, prompt unchanged. */
     private intent?: IntentResolver,
+    /** Optional Project Context source; absent → no context step, run unchanged. */
+    private context?: ProjectContextSource,
   ) {}
 
   /**
@@ -167,6 +179,7 @@ export class ReviewRunExecutor {
           runId,
           runLog,
           promptIntent,
+          logger,
         );
         logger?.info(
           {
@@ -224,6 +237,46 @@ export class ReviewRunExecutor {
     return promptIntent;
   }
 
+  /**
+   * The Project Context for one run, or null (no source wired, nothing attached,
+   * or the store failed — then only an info line, never a failed run). The
+   * trace is built from the result; no document text is ever logged.
+   */
+  private async buildContext(
+    workspaceId: string,
+    pull: PullRow,
+    repo: typeof schema.repos.$inferSelect,
+    agent: AgentRow,
+    skillIds: string[],
+    runLog: RunLogger,
+    logger?: Logger,
+  ): Promise<BuiltProjectContext | null> {
+    const source = this.context;
+    if (!source) return null;
+    try {
+      const input = await source.loadForRun({ workspaceId, repoId: pull.repoId, agentId: agent.id, skillIds });
+      if (input.agent.length === 0 && input.skills.every((s) => s.rows.length === 0)) return null;
+      let cloneRoot: string | null = null;
+      if (repo.clonePath) {
+        try {
+          cloneRoot = await realpath(repo.clonePath);
+        } catch {
+          cloneRoot = null;
+        }
+      }
+      const built = await buildProjectContext(input, {
+        cloneRoot,
+        count: (t) => this.container.tokenizer.count(t),
+      });
+      runLog.info(contextLogLine(built.summary));
+      return built;
+    } catch {
+      runLog.info(CONTEXT_UNAVAILABLE_LINE);
+      logger?.warn({ prId: pull.id, agent: agent.name }, 'review: project context unavailable');
+      return null;
+    }
+  }
+
   /** Execute a single agent's review against a PR, streaming progress. */
   private async runOneAgent(
     workspaceId: string,
@@ -234,6 +287,7 @@ export class ReviewRunExecutor {
     runId: string,
     parentLog: RunLogger,
     promptIntent: PromptIntent | null = null,
+    logger?: Logger,
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff (and
@@ -283,6 +337,18 @@ export class ReviewRunExecutor {
       );
       runLog.info(appliedSkillsLine(skillPlan));
 
+      // Project Context: the attached docs, read ONCE here (before the first LLM
+      // request) and sent as identical `specs` to every chunk. Best-effort.
+      const projectContext = await this.buildContext(
+        workspaceId,
+        pull,
+        repo,
+        agent,
+        skillPlan.applied.map((s) => s.skill_id),
+        runLog,
+        logger,
+      );
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -308,6 +374,9 @@ export class ReviewRunExecutor {
         ...(promptIntent ? { intent: promptIntent } : {}),
         // Skills go into the SYSTEM message in this order (omitted when none).
         ...(skillPlan.prompt.length > 0 ? { skills: skillPlan.prompt } : {}),
+        // Project Context docs (untrusted; reviewer-core wraps them). Only when
+        // at least one doc was read → otherwise the prompt equals the baseline.
+        ...(projectContext && projectContext.specs.length > 0 ? { specs: projectContext.specs } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),
@@ -328,6 +397,20 @@ export class ReviewRunExecutor {
       // The trace is built BEFORE the transaction, so its log ends here: the
       // "Persisted review" / "Run complete" lines are published only after the
       // commit and are not claimed by the persisted trace (spec §3.6, D1).
+      // Doc text goes to the LLM but never into the persisted trace: `specs` and
+      // the Project Context part of `user` become placeholders (fail closed).
+      let tracedAssembly: PromptAssembly = outcome.assembly;
+      if (projectContext) {
+        const redacted = redactAssemblyForTrace(outcome.assembly, projectContext, (t) =>
+          this.container.tokenizer.count(t),
+        );
+        tracedAssembly = redacted.assembly;
+        if (!redacted.isolated) {
+          runLog.info(CONTEXT_NOT_ISOLATED_LINE);
+          logger?.warn({ runId, prId: pull.id }, 'review: project context could not be isolated in the trace');
+        }
+      }
+
       const trace: RunTrace = {
         config: {
           agent: agent.name,
@@ -348,7 +431,7 @@ export class ReviewRunExecutor {
           cost_usd: costUsd,
         },
         prompt_assembly: {
-          ...outcome.assembly,
+          ...tracedAssembly,
           // Run-time snapshot of what was applied (ids, names, versions, order,
           // per-block tokens) + the Skills-section-only token count.
           skill_blocks: skillPlan.applied.length > 0 ? skillPlan.applied : null,
@@ -362,7 +445,7 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        specs_read: projectContext ? projectContext.specsRead : [],
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load, intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
