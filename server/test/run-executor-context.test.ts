@@ -131,6 +131,8 @@ interface BuildOpts {
   skills?: boolean;
   store?: InMemoryContextStore | null;
   body?: string | null;
+  /** Agent doc paths in the order to apply via `reorderAttachments` after attaching. */
+  reorderTo?: string[];
 }
 
 function build(o: BuildOpts = {}) {
@@ -162,6 +164,11 @@ function build(o: BuildOpts = {}) {
     store.addRepo(WS, REPO_ID, o.clonePath === undefined ? clone : o.clonePath);
     for (const path of o.paths ?? []) {
       await store.insertAttachment({ workspaceId: WS, owner: 'agent', ownerId: AGENT_ID, repoId: REPO_ID, path });
+    }
+    if (o.reorderTo) {
+      const rows = await store.listAttachments(WS, 'agent', AGENT_ID, REPO_ID);
+      const ids = o.reorderTo.map((p) => rows.find((r) => r.path === p)!.id);
+      await store.reorderAttachments({ workspaceId: WS, owner: 'agent', ownerId: AGENT_ID, repoId: REPO_ID, ids });
     }
     for (const path of o.skillPaths ?? []) {
       await store.insertAttachment({ workspaceId: WS, owner: 'skill', ownerId: 'skill-1', repoId: REPO_ID, path });
@@ -334,6 +341,18 @@ describe('ReviewRunExecutor — project context (trace redaction)', () => {
     await b.run();
     expect(trace(b).specs_read).toEqual(['docs/second.md', 'docs/spec.md']);
     expect(trace(b).prompt_assembly.spec_summary).toMatchObject({ attached: 3, read: 2, missing: 1 });
+  });
+
+  it('AC-CTX-103 after reorder to [b, a] specs and specs_read list b before a', async () => {
+    // a = docs/spec.md, b = docs/second.md; attached as [a, b], reordered to [b, a]
+    const b = build({ paths: ['docs/spec.md', 'docs/second.md'], reorderTo: ['docs/second.md', 'docs/spec.md'] });
+    await b.run();
+    expect(trace(b).specs_read).toEqual(['docs/second.md', 'docs/spec.md']);
+    const specs = trace(b).prompt_assembly.specs!;
+    expect(specs.indexOf('docs/second.md')).toBeGreaterThanOrEqual(0);
+    expect(specs.indexOf('docs/second.md')).toBeLessThan(specs.indexOf('docs/spec.md'));
+    const user = sent(b.llm)[0]![1]!.content;
+    expect(user.indexOf('path: docs/second.md')).toBeLessThan(user.indexOf('path: docs/spec.md'));
   });
 
   it('AC-CTX-35 specs_tokens counts "## Project context" + the specs block as sent', async () => {
