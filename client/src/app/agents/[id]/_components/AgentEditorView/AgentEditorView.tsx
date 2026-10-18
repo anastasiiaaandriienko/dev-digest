@@ -1,7 +1,7 @@
 /* /agents/:id — Agent Editor (A2, L03; design: Agents list + editor). The list
    column (AgentsSidebar) stays on the left with this agent highlighted; the
-   editor shows the header (name, status, Run on a PR) and the Config / Skills
-   tabs, kept in `?tab=`. Picking another card keeps the open tab; if Config
+   editor shows the header (name, status, Run on a PR) and the Config / Skills / Context
+   tabs (CTX A1), kept in `?tab=`. Picking another card keeps the open tab; if Config
    has unsaved edits, UnsavedChangesModal asks first (Save and continue /
    Discard / Cancel) — also for a just-created agent and for "Run on a PR".
    Deleting the open agent goes back to /agents. Known limit: the breadcrumb

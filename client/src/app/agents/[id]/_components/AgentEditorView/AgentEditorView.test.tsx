@@ -10,6 +10,7 @@ import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-li
 import { NextIntlClientProvider } from "next-intl";
 import type { Agent } from "@devdigest/shared";
 import messages from "../../../../../../messages/en/agents.json";
+import contextMessages from "../../../../../../messages/en/context.json";
 import skillsMessages from "../../../../../../messages/en/skills.json";
 import common from "../../../../../../messages/en/common.json";
 
@@ -59,6 +60,22 @@ vi.mock("@/lib/toast", () => ({
   notify: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),
 }));
+vi.mock("@/lib/hooks/context", () => ({
+  useContextList: () => ({
+    data: { files: [{ path: "docs/spec.md", size: 1024, updated_at: "x" }], roots: ["docs"], truncated: false, truncated_reasons: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useContextDocs: () => ({ data: [], isError: false }),
+  useContextFile: () => ({ data: undefined, isLoading: false, isError: false }),
+  useAttachContextDoc: () => ({ mutate: vi.fn(), isPending: false }),
+  useDetachContextDoc: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+// Repo fixture so the Context tab does not take the no-repo branch (AC-CTX-93).
+vi.mock("@/lib/repo-context", () => ({
+  useActiveRepo: () => ({ repoId: "r1", repos: [{ id: "r1", name: "api", full_name: "acme/api" }] }),
+}));
 
 import { AgentEditorView } from "./AgentEditorView";
 
@@ -74,7 +91,7 @@ afterEach(() => {
 
 function ui() {
   return (
-    <NextIntlClientProvider locale="en" messages={{ agents: messages, skills: skillsMessages, common }}>
+    <NextIntlClientProvider locale="en" messages={{ agents: messages, skills: skillsMessages, context: contextMessages, common }}>
       <AgentEditorView />
     </NextIntlClientProvider>
   );
@@ -163,6 +180,46 @@ describe("Agent editor — unsaved Config edits", () => {
     params = new URLSearchParams("tab=config");
     view.rerender(ui());
     expect(nameInput().value).toBe("Open Agent v2");
+  });
+
+  it("AC-CTX-78 ?tab=context opens the Context tab; an unknown tab falls back to Config", () => {
+    params = new URLSearchParams("tab=context");
+    const view = render(ui());
+    expect(screen.getByRole("heading", { level: 2, name: contextMessages.agentTab.title })).toBeInTheDocument();
+    params = new URLSearchParams("tab=nope");
+    view.rerender(ui());
+    expect(screen.queryByRole("heading", { level: 2, name: contextMessages.agentTab.title })).toBeNull();
+    expect(screen.getByRole("button", { name: "Save agent" })).toBeInTheDocument();
+  });
+
+  it("AC-CTX-79 clicking the Context tab replaces the URL with ?tab=context and keeps other params", () => {
+    params = new URLSearchParams("tab=config&foo=bar");
+    render(ui());
+    fireEvent.click(screen.getByRole("button", { name: "Context" }));
+    expect(replace).toHaveBeenCalledWith("/agents/a1?tab=context&foo=bar");
+  });
+
+  it("AC-CTX-80 edits survive Config → Context → Config", () => {
+    const view = render(ui());
+    editName();
+    params = new URLSearchParams("tab=context");
+    view.rerender(ui());
+    expect(screen.getByRole("heading", { level: 2, name: contextMessages.agentTab.title })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save agent" })).toBeNull();
+    params = new URLSearchParams("tab=config");
+    view.rerender(ui());
+    expect(nameInput().value).toBe("Open Agent v2");
+  });
+
+  it("AC-CTX-81 unsaved edits on the Context tab ask first; Discard keeps tab=context", () => {
+    const view = render(ui());
+    editName();
+    params = new URLSearchParams("tab=context");
+    view.rerender(ui());
+    openOther();
+    expect(dialog()).toHaveTextContent(U.title);
+    fireEvent.click(within(dialog()!).getByRole("button", { name: U.discard }));
+    expect(push).toHaveBeenCalledWith("/agents/a2?tab=context");
   });
 
   it("a new agent created from the list is opened through the same check", async () => {
