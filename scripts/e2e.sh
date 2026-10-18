@@ -54,6 +54,7 @@ command -v agent-browser >/dev/null || \
 # --- teardown trap (installed before we start anything) ----------------------
 SERVER_PID=""
 WEB_PID=""
+CTX_FIXTURE_DIR=""
 # Recursively kill a process and all its descendants. `pnpm exec tsx` / `next dev`
 # spawn the real listener as a GRANDCHILD, so a plain `kill $PID` + `pkill -P`
 # leaves it orphaned (port stays bound). Walk the tree leaves-first instead.
@@ -77,6 +78,8 @@ cleanup() {
     [ -n "$pids" ] && kill $pids 2>/dev/null || true
   done
   docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
+  # Project Context fixture clone (temp dir created below, outside the repo).
+  if [ -n "$CTX_FIXTURE_DIR" ]; then rm -rf "$CTX_FIXTURE_DIR" 2>/dev/null || true; fi
   exit "$code"
 }
 trap cleanup EXIT INT TERM
@@ -122,6 +125,25 @@ case "$DATABASE_URL" in
   *":${PG_PORT}/"*) : ;;
   *) echo "refusing: DATABASE_URL is not on :$PG_PORT ($DATABASE_URL)"; exit 1 ;;
 esac
+# --- Project Context fixture clone (flow 08) ---------------------------------
+# A throw-away "clone" of the seeded repo holding ONE Markdown doc with a unique
+# marker. The seed (server/src/db/seed.ts) points acme/payments-api at it when
+# SEED_CONTEXT_CLONE_PATH is set, and records a run whose trace names the doc.
+# Temp dir outside the repo, removed by cleanup(); only this isolated stack sees it.
+CTX_FIXTURE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/devdigest-e2e-ctx.XXXXXX")"
+mkdir -p "$CTX_FIXTURE_DIR/docs"
+cat > "$CTX_FIXTURE_DIR/docs/spec.md" <<'EOF_SPEC'
+# Payments Spec Fixture
+
+RULE-CTX-7f3a: every public endpoint must be rate limited.
+EOF_SPEC
+# Absolute, symlink-free path in the form the API (node) expects; on Git Bash
+# for Windows that is a mixed-style drive path (C:/...).
+CTX_FIXTURE_REAL="$(cd "$CTX_FIXTURE_DIR" && pwd -P)"
+if command -v cygpath >/dev/null 2>&1; then CTX_FIXTURE_REAL="$(cygpath -m "$CTX_FIXTURE_REAL")"; fi
+export SEED_CONTEXT_CLONE_PATH="$CTX_FIXTURE_REAL"
+log "context fixture clone: $SEED_CONTEXT_CLONE_PATH"
+
 log "applying migrations (isolated db)"
 (cd server && pnpm db:migrate)
 log "seeding demo data (isolated db)"
