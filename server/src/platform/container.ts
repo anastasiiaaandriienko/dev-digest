@@ -29,6 +29,7 @@ import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import type { ContextStore } from '../modules/context/types.js';
+import { ContextRepository } from '../modules/context/repository.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
 
 /**
@@ -79,6 +80,7 @@ export class Container {
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _priceBook?: PriceBook;
+  private _contextRepo?: ContextRepository;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
     this.config = config;
@@ -121,11 +123,12 @@ export class Container {
   }
 
   /**
-   * Project Context store. `null` until the Drizzle repository lands (T6b);
-   * consumers treat null as "context unavailable".
+   * Project Context store: the injected one (tests) or the lazily built Drizzle
+   * repository (constructing it does not touch the database).
    */
   get contextStore(): ContextStore | null {
-    return this.overrides.contextStore ?? null;
+    if (this.overrides.contextStore) return this.overrides.contextStore;
+    return (this._contextRepo ??= new ContextRepository(this.db));
   }
 
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */

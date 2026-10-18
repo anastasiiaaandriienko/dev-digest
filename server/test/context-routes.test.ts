@@ -212,12 +212,14 @@ describe('context list and preview', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('503 CONTEXT_UNAVAILABLE without a store (TA11)', async () => {
-    const bare = await buildApp({ config, db: {} as Db, overrides: { auth: new MockAuthProvider() } });
-    const res = await bare.inject({ method: 'GET', url: url('/context/roots') });
-    expect(res.statusCode).toBe(503);
-    expect(res.json().error.code).toBe('CONTEXT_UNAVAILABLE');
-    await bare.close();
+  it('503 CONTEXT_UNAVAILABLE for a null store (TA11)', async () => {
+    // T6b: the container now falls back to the Drizzle repository, so only a
+    // service built on a null store reaches this path.
+    const service = new ContextService({ contextStore: null } as unknown as Container);
+    await expect(service.getRoots(WS, REPO)).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'CONTEXT_UNAVAILABLE',
+    });
   });
 });
 
