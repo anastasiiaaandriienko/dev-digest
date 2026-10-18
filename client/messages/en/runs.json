@@ -78,6 +78,25 @@
       "version": "v{version}",
       "blockTokens": "{tokens} tok",
       "sent": "Skills section as sent"
+    },
+    "specBlocks": {
+      "title": "Project context",
+      "summary": "{read} of {attached} read · {missing} missing · {skipped} skipped · {truncated} truncated",
+      "tokens": "{tokens} tokens (Project context section only)",
+      "listLabel": "Attached project context docs",
+      "source": {
+        "agent": "agent",
+        "skill": "skill"
+      },
+      "status": {
+        "read": "read",
+        "missing": "missing",
+        "skipped": "skipped"
+      },
+      "truncated": "truncated",
+      "blockTokens": "{tokens} tok",
+      "limits": "Limits: {docBytes} bytes and {docTokens} tokens per doc, {promptTokens} tokens in total, {attachments} docs per owner.",
+      "sent": "Project context as sent (placeholders; document text is never stored)"
     }
   },
   "drawer": {
