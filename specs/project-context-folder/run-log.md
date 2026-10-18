@@ -27,3 +27,7 @@
 | A1 | spec-creator (amendment A1: agent Context tab) | opus | adf88b3c347c29ee4 | UNKNOWN | 313615 | 107857 | 55 | NEEDS_CLARIFICATION (Q-A1-1..4), 30 new ACs 77–106 |
 | A1 | spec-creator (A1 decisions Q19–Q23) | opus | adf88b3c347c29ee4 | UNKNOWN | 114609 | 135664 | 22 | DONE, 0 markers, 106 ACs |
 | G1 | main agent | — | — | 2026-10-19 | — | — | — | amendment A1 approved (Q18–Q23, AC-CTX-77..106) |
+| S2 | implementation-planner (A1) | opus | a1e9a8558ead39f3c | UNKNOWN | 322112 | 109379 | 52 | READY (T1–T10, C1–C10) |
+| S3 | implementation-planner (MODE: REVIEW, A1) | sonnet | a3deb8d64757fa634 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | approve with changes (2 major, 5 minor) → applied |
+| S3 | implementation-planner (MODE: REVIEW, A1) | sonnet | a3deb8d64757fa634 | UNKNOWN | 94038 | 58022 | 23 | approve with changes (2 major, 5 minor) → applied |
+| G2 | main agent | — | — | 2026-10-19 | — | — | — | plan-a1 Approved; T1–T10 incl. Q19 granted; running AC-101 not granted |
