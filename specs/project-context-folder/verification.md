@@ -3,7 +3,7 @@
 - **Verifier:** plan-verifier (S7), 2026-10-18 · **Status:** gaps to close (T15a–d, T16 approval-gated; AC-67 manual)
 - **Scope:** spec `specs/project-context-folder/spec.md` (76 ACs) · tasks T1, T2, T3, T4, T6a, T7, T8, T9, T10, T11, T12, T13 · base `dc893e0..d35321e`. No uncommitted source changes.
 - **Reviews (S6):** architecture-reviewer — approve (1 suggestion: client `MAX_ATTACHMENTS = 10` mirrors server L7); security-reviewer — approve (0 findings).
-- **Summary:** PASS 74 / PARTIAL 1 / MISSING 1 (after T5, T6b, T14, T15a–d; pending plan-verifier re-run).
+- **Summary (plan-verifier re-run after T15d):** PASS 71 / PARTIAL 4 / MISSING 1 strictly observed; PASS 74 / PARTIAL 1 / MISSING 1 when the reported integration/e2e runs are accepted.
 - **Initial S7 summary:** PASS 65 / PARTIAL 7 / MISSING 4.
 
 ## Matrix
@@ -160,3 +160,13 @@ Remaining: AC-46 e2e run (T15d — approval), AC-68 (T16 paid manual — approva
 - Flow 08 fixes (2a6de14): wait for networkidle after Attach (Detach raced the list refetch); open PR #482 by `#482` (the truncated title link is covered by the `FINDINGS 2` chip at viewport 1262; `agent-browser` refuses covered clicks). No assertion removed or weakened.
 - Flows 02, 04, 05 FAIL at `find text "Add rate limiting to public API endpoints" click` — same covered-click cause; these flows and the PR list are unchanged on this branch. Out of T15d scope; awaiting user decision.
 - Teardown: e2e container removed, ports 3100/3101/5433 free, no fixture dirs left, `secrets.json` still absent.
+
+## Re-verification after T15d (plan-verifier, 2026-10-18)
+
+- Scope: all 76 ACs, tasks T1–T4, T5, T6a, T6b, T7–T13, T14, T15a–d, range `dc893e0..e8d8e50`; working tree clean; all evidence committed.
+- Checks run by the verifier (sequential): server typecheck PASS; server unit 49 files, 555 passed, 3 skipped (Windows symlink); reviewer-core 50 passed; client 82 files, 728 passed; `cd e2e && npm run typecheck` PASS; AC-67 grep clean (L1–L9 only under `server/src/modules/context/`; `seed.ts` imports only `placeholderLine`; client mirrors `MAX_ATTACHMENTS`).
+- Not re-run by the verifier (reported evidence): T14 `context.it.test.ts` 8/8; T15d flow 08 33/33.
+- Status changes vs the matrix above: **19, 45, 46 → PARTIAL (reported-evidence PASS)**; 67 PARTIAL (human code-review confirmation); **68 MISSING** (T16 paid manual, not approved). All other ACs PASS. Rows 03, 14, 30, 55, 58, 69 PASS with their DB-backed part resting on the reported T14 run.
+- Out-of-plan: c606811 (migrate CLI guard, user-approved, outside CTX scope); 2a6de14 (flow 08: networkidle wait, open PR by `#482`; no assertion removed); flow 08 uses `select`, detaches after attaching, and cannot assert marker absence (runner has positive checks only); client support files and the shared `context-doc-attachments` panel; C11+C12 combined (d35321e).
+- Protected paths: only the new `0014_optimal_jocasta.sql`, `meta/0014_snapshot.json` and the generated `_journal.json` entry under migrations; no lockfile/`package.json`/workspace changes.
+- Gaps: AC-68 (T16, approval), AC-67 (human confirmation), flows 02/04/05 fail on the pre-existing covered PR-title click (outside CTX), manual UI check.

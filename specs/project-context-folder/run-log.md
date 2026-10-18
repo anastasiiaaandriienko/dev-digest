@@ -23,3 +23,4 @@
 | S4 | implementer (T14 defect fix) | sonnet | a110c47a5c1cde59f | UNKNOWN | 47613 | 32513 | 5 | DONE → fix f5c2ce4; context.it 8/8 |
 | S4 | implementer (T15a–c + T15d file) | sonnet | a80a9ff337bcc798e | UNKNOWN | 235781 | 135458 | 75 | DONE (not run) → C15, C16 |
 | T15d | main agent (e2e.sh ×3 + debug stack) | — | — | 2026-10-18 | UNKNOWN | — | — | migrate CLI fix c606811; flow 08 fix 2a6de14; final 5/8 flows (08: 33/33), 02/04/05 pre-existing covered-click |
+| S7 | plan-verifier (re-run after T15d) | sonnet | a77091b9efb3f7862 | UNKNOWN | 137934 | 72568 | 16 | PASS 71 / PARTIAL 4 / MISSING 1 (74/1/1 with reported runs) |
