@@ -1,0 +1,38 @@
+{
+  "name": "Project Context: browse a repo doc, attach it to an agent, see it in a run's trace",
+  "description": "AC-CTX-46. Needs the Project Context fixtures: SEED_CONTEXT_CLONE_PATH (set by scripts/e2e.sh and e2e-web.yml) points the seeded repo acme/payments-api at a fixture clone holding docs/spec.md (unique marker RULE-CTX-7f3a), and the seed adds one finished run for PR #482 whose trace read docs/spec.md. Part 1: the Context page shows the roots, the docs/spec.md entry and a read-only preview. Part 2: attach docs/spec.md to the first agent, see it listed (its Detach button exists), then detach it again so the DB is left as seeded. Part 3: PR #482 > Agent runs > open the seeded run's trace; the drawer lists docs/spec.md and the Project context section shows the placeholder line, not the doc text. No review is started, nothing is imported and no LLM is called. The flow runner has no negative assertion, so 'the marker is absent from the trace' is not asserted here: the seeded trace holds no marker by construction (server/src/db/seed.ts) and the real executor path is covered by server/test/run-executor-context.test.ts and context.it.test.ts.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the seeded repo's PR list" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR list settles" },
+    { "cmd": ["find", "text", "Project Context", "click"], "label": "open Project Context from the sidebar" },
+    { "cmd": ["wait", "--url", "/context"], "label": "context route reached" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "roots and doc list settle" },
+    { "cmd": ["wait", "--text", "One folder per line"], "label": "the Roots editor is shown" },
+    { "cmd": ["wait", "--text", "docs/spec.md"], "label": "the fixture doc is listed" },
+    { "cmd": ["find", "role", "button", "click", "--name", "docs/spec.md"], "label": "select docs/spec.md" },
+    { "cmd": ["wait", "--text", "Read-only preview"], "label": "the preview is read-only" },
+    { "cmd": ["wait", "--text", "Payments Spec Fixture"], "label": "preview renders the doc heading" },
+    { "cmd": ["wait", "--text", "RULE-CTX-7f3a"], "label": "preview shows the doc's marker" },
+    { "cmd": ["wait", "--text", "Attach to an agent"], "label": "the attach section is shown" },
+    { "cmd": ["select", "select[aria-label=\"Doc to attach\"]", "docs/spec.md"], "label": "pick docs/spec.md in the attach picker" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Attach"], "label": "attach it to the first agent" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Detach docs/spec.md"], "label": "the attachment is listed (its Detach button exists); detach it" },
+    { "cmd": ["wait", "--text", "Nothing attached for this repo yet."], "label": "detached: back to the seeded state" },
+
+    { "cmd": ["open", "{BASE}/"], "label": "back to the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Agent runs"], "label": "switch to the Agent runs tab" },
+    { "cmd": ["wait", "--url", "tab=findings"], "label": "findings tab is active in the URL" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Open run trace & logs"], "label": "open the seeded run's Trace drawer" },
+    { "cmd": ["wait", "--url", "trace="], "label": "trace drawer is open in the URL" },
+    { "cmd": ["wait", "--text", "docs/spec.md"], "label": "Configuration lists docs/spec.md as read" },
+    { "cmd": ["find", "text", "Prompt assembly", "click"], "label": "expand Prompt assembly" },
+    { "cmd": ["wait", "--text", "1 of 1 read"], "label": "Project context summary shows the doc was read" },
+    { "cmd": ["find", "text", "Project context as sent", "click"], "label": "expand the persisted Project context block" },
+    { "cmd": ["wait", "--text", "[project-context omitted from trace] path=docs/spec.md"], "label": "the trace holds the placeholder line, not the doc text" }
+  ]
+}
