@@ -21,3 +21,6 @@
 | S6 | security-reviewer | opus | af5bc433da68044ce | UNKNOWN | 72014 | 80630 | 19 | approve (0 findings) |
 | S6 | architecture-reviewer | opus | ad981c7c44eec38af | UNKNOWN | 134059 | 104402 | 33 | approve (1 suggestion: Tokenizer type import → fixed 9feb6b4) |
 | S7 | plan-verifier | sonnet | ad579666f07eb423e | UNKNOWN | 148600 | 62922 | 12 | PASS 33 / PARTIAL 15 / MISSING 1 (runs not approved) |
+| T6 run | main agent (vitest, testcontainers) | — | — | 2026-10-18 | UNKNOWN | — | — | brief.it.test.ts 16/16 passed |
+| T11 run | main agent (e2e.sh ×2) | — | — | 2026-10-18 | UNKNOWN | — | — | run 1 8/9 (uppercase heading); fix f269cdf; run 2 9/9 passed |
+| S7 | plan-verifier (re-run after T6/T11) | sonnet | aa43688ee9191a85f | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | PASS 47 / PARTIAL 1 / MISSING 1 |
