@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Finding, Verdict } from './findings.js';
-import { Intent, IntentConfidence, SmartDiff } from './brief.js';
+import { Intent, IntentConfidence, PrBrief, SmartDiff } from './brief.js';
 
 /**
  * A2 — Review-Core API surface contracts. These extend the core
@@ -165,6 +165,16 @@ export const IntentRunRequest = z.object({
   force: z.boolean().default(false),
 });
 export type IntentRunRequest = z.infer<typeof IntentRunRequest>;
+
+/** GET/POST /pulls/:id/brief. Lives here (not in brief.ts) because this file already imports brief.ts. */
+export const PrBriefState = z.object({
+  pr_id: z.string(),
+  brief: PrBrief.nullable(),
+  freshness: IntentFreshness,
+  stale_reasons: z.array(IntentStaleReason),
+  model_error: z.string().nullish(),
+});
+export type PrBriefState = z.infer<typeof PrBriefState>;
 
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;
