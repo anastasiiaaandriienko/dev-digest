@@ -1,6 +1,6 @@
 # Spec: Project Context Folder (L05)
 - **Key:** CTX · **Status:** Approved (2026-10-18; amendment A1) · **Date:** 2026-10-18 · **Packages:** server | client | contracts (reviewer-core: tests only)
-- **Approval history:** §1–§16 (AC-CTX-01..76) Approved 2026-10-18 (AC-CTX-46 revised); implemented and verified 75 PASS / 1 MISSING. Amendment A1 (§17, AC-CTX-77..106) is Draft; the approved content is unchanged except Q8 being marked superseded.
+- **Approval history:** §1–§16 (AC-CTX-01..76) Approved 2026-10-18 (AC-CTX-46 revised); implemented and verified 75 PASS / 1 MISSING. Amendment A1 (§17, AC-CTX-77..106) Approved 2026-10-19 (G1); the approved content is unchanged except Q8 being marked superseded.
 - **Source request:** User (Lab 05 / Stage 2): Markdown discovery with configurable roots; list, search, preview; agent and skill attachments; persist paths, not contents; runtime injection without an extra LLM call; injection guard + filesystem boundaries; trace + token accounting; degraded/missing-file behaviour; acceptance tests proving a reviewer uses an attached spec. Roadmap `README.md:88`.
 - **Requirement sources and limitations:** requirements come only from the user's Stage 2 request and the user's decisions recorded in §15. The original Lab 05 assignment text was not available; no further mandatory features are assumed from it.
 
@@ -334,7 +334,7 @@
 - **A1 — tab-count rule:** HW2 #35 changes from two to three tabs (comment and test edits, §17.6); the user confirms this by approving A1.
 - **A1 — no paid LLM call, no new dependency, no reviewer-core change.**
 
-## 17. Amendment A1 — Agent editor Context tab (Draft, 2026-10-18)
+## 17. Amendment A1 — Agent editor Context tab (Approved 2026-10-19)
 ### 17.1 Goals
 - G-A1-1 From Agents → agent → Context, see the discovered docs of a repo, attach/detach them by checkbox, set their order, preview one, and see "`a` of `d` attached".
 - G-A1-2 Reuse the existing context API, hooks and components; add exactly one backend capability, reorder (Q19).
