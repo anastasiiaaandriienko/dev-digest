@@ -3,7 +3,7 @@
 - **Verifier:** plan-verifier (S7), 2026-10-18 · **Status:** gaps to close (T15a–d, T16 approval-gated; AC-67 manual)
 - **Scope:** spec `specs/project-context-folder/spec.md` (76 ACs) · tasks T1, T2, T3, T4, T6a, T7, T8, T9, T10, T11, T12, T13 · base `dc893e0..d35321e`. No uncommitted source changes.
 - **Reviews (S6):** architecture-reviewer — approve (1 suggestion: client `MAX_ATTACHMENTS = 10` mirrors server L7); security-reviewer — approve (0 findings).
-- **Summary:** PASS 73 / PARTIAL 2 / MISSING 1 (updated after T5, T6b, T14 and T15a–c; see the update sections).
+- **Summary:** PASS 74 / PARTIAL 1 / MISSING 1 (after T5, T6b, T14, T15a–d; pending plan-verifier re-run).
 - **Initial S7 summary:** PASS 65 / PARTIAL 7 / MISSING 4.
 
 ## Matrix
@@ -57,7 +57,7 @@ Commit key: C1=a029fcd (T1), C3=a3f5f89 (T3), C4=585c53c (T4), C6=4c7aed8 (T6a),
 | 43 | T7,T12 | service.ts; ContextDocStatus | routes:324; AgentAttachments.test.tsx:85 | C7,C11/12 | PASS | |
 | 44 | T2 | reviewer-core prompt (unchanged) | project-context.test.ts:63 | C2 | PASS | |
 | 45 | T14 | run-executor.ts, for-run.ts, repository.ts | server/test/context.it.test.ts "AC-CTX-45 marker reaches the provider inside spec-0; persisted trace has placeholders only" | C14 | PASS | MockLLMProvider only |
-| 46 | T15a–d | seed.ts (env-gated fixtures), scripts/e2e.sh, e2e-web.yml, e2e/specs/08-project-context.flow.json | flow 08 authored, NOT run | 207569b, 5c0d2a9 | PARTIAL | fixtures + flow committed; e2e run (T15d) awaits approval |
+| 46 | T15a–d | seed.ts (env-gated fixtures), scripts/e2e.sh, e2e-web.yml, e2e/specs/08-project-context.flow.json | `./scripts/e2e.sh` flow 08: 33/33 steps passed | 207569b, 5c0d2a9, 2a6de14 | PASS | hermetic stack, credentials blanked; flows 02/04/05 fail on a pre-existing PR-list click issue (not CTX) |
 | 47 | T4 | discovery.ts | discovery:123 | C4 | PASS | |
 | 48 | T4 | discovery.ts | discovery:133 | C4 | PASS | |
 | 49 | T3,T7 | helpers.ts, service.ts | helpers:41; routes:85 | C3,C7 | PASS | |
@@ -150,3 +150,13 @@ Remaining: AC-46 (T15a–d: seed, e2e.sh, e2e-web.yml, e2e run — approval), AC
 - Checks: server typecheck pass; server unit 552 passed, 3 skipped; `bash -n scripts/e2e.sh` pass; flow JSON parses; workflow YAML checked by eye (no parser available). `cd e2e && npm run typecheck` NOT run — `e2e/node_modules` not installed (install needs approval); no e2e TS changed.
 
 Remaining: AC-46 e2e run (T15d — approval), AC-68 (T16 paid manual — approval), AC-67 (manual confirmation), manual UI check.
+
+## Update after T15d (main agent, 2026-10-18)
+
+- Prerequisites (user-approved): `cd e2e && npm ci` (lockfile unchanged), `agent-browser` 0.39.1 + Chrome 155. Runner given the native binary via the existing `AGENT_BROWSER_BIN` knob (`spawn agent-browser ENOENT` with the npm .cmd shim on Windows).
+- Credential isolation: no `~/.devdigest/secrets.json` on the machine; run with `OPENAI_API_KEY= ANTHROPIC_API_KEY= OPENROUTER_API_KEY= GITHUB_TOKEN= GITHUB_PAT=` exported empty (dotenv 16 does not override) and `DEVDIGEST_CLONE_DIR` in a temp dir. API log confirmed `GITHUB_TOKEN is not configured` → persisted PRs only.
+- Run 1 failed at seed: `pnpm db:migrate` exited 0 without applying on Windows (`migrate.ts` CLI guard). Fixed with user approval in c606811 (`isCliEntry` via `pathToFileURL`, regression test `server/test/migrate-cli.test.ts`); verified on a throwaway DB (:5434): `✓ migrations applied`, 15 migrations, both context tables.
+- Final run (`./scripts/e2e.sh`, isolated :5433/:3101/:3100): test DB had 15 migrations and both `agent_context_docs`, `skill_context_docs`. Flows **5/8 passed**: 01, 03, 06, 07, **08 (33/33 steps)**. Flow 08 covers the Context page, roots editor, doc list, read-only Markdown preview with marker, attach to agent (201) + listed + detach, PR #482 Trace drawer with `docs/spec.md` read, `1 of 1 read` and the placeholder line.
+- Flow 08 fixes (2a6de14): wait for networkidle after Attach (Detach raced the list refetch); open PR #482 by `#482` (the truncated title link is covered by the `FINDINGS 2` chip at viewport 1262; `agent-browser` refuses covered clicks). No assertion removed or weakened.
+- Flows 02, 04, 05 FAIL at `find text "Add rate limiting to public API endpoints" click` — same covered-click cause; these flows and the PR list are unchanged on this branch. Out of T15d scope; awaiting user decision.
+- Teardown: e2e container removed, ports 3100/3101/5433 free, no fixture dirs left, `secrets.json` still absent.
