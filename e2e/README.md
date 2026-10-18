@@ -100,3 +100,5 @@ a CI artifact by `.github/workflows/e2e-web.yml`).
 | `05-pr-diff` | PR #482 → Files changed tab → seeded file renders in the diff viewer |
 | `06-onboarding` | `/onboarding` → add-repository form renders (no submit) |
 | `07-settings` | `/settings/api-keys` + `/settings/models` → section titles render |
+| `08-project-context` | Context page: roots, doc list, read-only preview → attach/detach to an agent → seeded run Trace drawer shows the doc path and placeholder (no LLM) |
+| `09-pr-brief` | PR #482 Overview shows the seeded PR Brief (summary, a risk, "Review focus (2)") → focus link opens Files changed with `file=`/`line=` and the focus notice (no LLM) |

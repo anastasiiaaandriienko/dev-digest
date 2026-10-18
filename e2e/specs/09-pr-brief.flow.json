@@ -1,0 +1,20 @@
+{
+  "name": "PR Brief: seeded brief on the Overview tab, Review focus link deep-links into Files changed",
+  "description": "AC-BRIEF-44, AC-BRIEF-41. Needs the seeded fresh PR Brief for PR #482 (server/src/db/seed-brief.ts, called by seed.ts): summary SEED_BRIEF_SUMMARY, two risks, two Review focus items src/middleware/ratelimit.ts:12 and src/config.ts:12, fresh against the default risk_brief model. Part 1: the Overview tab of PR #482 shows the stored brief (summary, a risk title, the 'Review focus (2)' heading) with no review, no import and no LLM call (the card only GETs /pulls/:id/brief). Part 2: clicking the first focus link navigates to the Files changed tab with file= and line=12 in the URL; the seeded files have no patches, so line 12 is not a rendered line and the focus-missing-line notice is shown (this is the e2e proof for AC-BRIEF-41; forced expansion of an oversized file is covered by the DiffTab/FileCard RTL tests). The flow is read-only: the Generate and Refresh buttons are never clicked.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the seeded repo's PR list" },
+    { "cmd": ["wait", "--text", "Add rate limiting to public API endpoints"], "label": "seeded PR row is visible" },
+    { "cmd": ["find", "text", "#482", "click"], "label": "open the PR row by its number (the truncated title link is covered by the findings chip)" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route (Overview tab)" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail and brief data settle" },
+    { "cmd": ["wait", "--text", "Seeded brief: adds a token-bucket rate limiter to public API endpoints; the limiter config and middleware are the riskiest parts."], "label": "the seeded brief summary is shown" },
+    { "cmd": ["wait", "--text", "Limiter may reject legitimate traffic"], "label": "a seeded risk title is shown" },
+    { "cmd": ["wait", "--text", "Review focus (2)"], "label": "the Review focus heading counts the two seeded items" },
+    { "cmd": ["find", "text", "src/middleware/ratelimit.ts:12", "click"], "label": "click the first Review focus link (listed before the risks, so it is the first match)" },
+    { "cmd": ["wait", "--url", "tab=diff"], "label": "Files changed tab is active in the URL" },
+    { "cmd": ["wait", "--url", "file="], "label": "the focused file is in the URL" },
+    { "cmd": ["wait", "--url", "line=12"], "label": "the focused line is in the URL" },
+    { "cmd": ["wait", "--text", "Line 12 of src/middleware/ratelimit.ts is not in the loaded diff (it may be outside the changed hunks or the patch was not fetched)."], "label": "the seeded files carry no patch, so the focus-missing-line notice is shown" }
+  ]
+}
