@@ -266,6 +266,92 @@ d('Project Context (Testcontainers pg)', () => {
     expect(orders).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
+  it('AC-CTX-101 concurrent reorder/attach and reorder/reorder keep distinct gap-free orders under the advisory lock', async () => {
+    const a = await makeApp();
+    type Dto = { id: string; path: string; order: number };
+
+    for (const kind of ['agent', 'skill'] as const) {
+      const files: Record<string, string> = {};
+      for (const n of ['a', 'b', 'c', 'd']) files[`docs/${n}.md`] = `# ${n}`;
+      const repo = await newRepo(workspaceId, await makeClone(files));
+      const owner = kind === 'agent' ? await newAgent(workspaceId) : await newSkill(workspaceId);
+      const base = `/${kind}s/${owner.id}/context-docs`;
+      const qs = `?repo_id=${repo.id}`;
+
+      const attach = (path: string) => a.inject({ method: 'POST', url: base + qs, payload: { path } });
+      const put = (ids: string[]) => a.inject({ method: 'PUT', url: `${base}/order${qs}`, payload: { ids } });
+      const stored = async (): Promise<{ id: string; path: string; order: number }[]> => {
+        const rows =
+          kind === 'agent'
+            ? await pg.handle.db
+                .select()
+                .from(t.agentContextDocs)
+                .where(and(eq(t.agentContextDocs.agentId, owner.id), eq(t.agentContextDocs.repoId, repo.id)))
+            : await pg.handle.db
+                .select()
+                .from(t.skillContextDocs)
+                .where(and(eq(t.skillContextDocs.skillId, owner.id), eq(t.skillContextDocs.repoId, repo.id)));
+        return rows.map((r) => ({ id: r.id, path: r.path, order: r.order })).sort((x, y) => x.order - y.order);
+      };
+      /** Orders are exactly 1..n with no duplicates. */
+      const expectGapFree = (rows: { order: number }[]) =>
+        expect(rows.map((r) => r.order).sort((x, y) => x - y)).toEqual(rows.map((_, i) => i + 1));
+
+      const seeded: Dto[] = [];
+      for (const n of ['a', 'b', 'c']) {
+        const r = await attach(`docs/${n}.md`);
+        expect(r.statusCode).toBe(201);
+        seeded.push(r.json());
+      }
+      const [ida, idb, idc] = seeded.map((r) => r.id) as [string, string, string];
+      expectGapFree(await stored());
+
+      // (1) reorder vs attach of a new path. The lock gives two legal outcomes:
+      //   reorder first  -> 200 [c,b,a], then d appended at order 4;
+      //   attach first   -> reorder sees 4 rows, answers 422, table stays [a,b,c,d].
+      const [reordered, attached] = await Promise.all([put([idc, idb, ida]), attach('docs/d.md')]);
+      expect([200, 422]).toContain(reordered.statusCode);
+      expect(attached.statusCode).toBe(201);
+      expect(attached.json().order).toBe(4);
+      const afterMixed = await stored();
+      expect(afterMixed).toHaveLength(4);
+      expectGapFree(afterMixed);
+      if (reordered.statusCode === 200) {
+        const body = reordered.json() as Dto[];
+        expect(body.map((r) => [r.path, r.order])).toEqual([
+          ['docs/c.md', 1],
+          ['docs/b.md', 2],
+          ['docs/a.md', 3],
+        ]);
+        expect(afterMixed.map((r) => r.path)).toEqual(['docs/c.md', 'docs/b.md', 'docs/a.md', 'docs/d.md']);
+      } else {
+        expect(afterMixed.map((r) => r.path)).toEqual(['docs/a.md', 'docs/b.md', 'docs/c.md', 'docs/d.md']);
+      }
+      const idd = afterMixed.find((r) => r.path === 'docs/d.md')!.id;
+
+      // (2) two reorders with different permutations of the full set.
+      const p1 = [idd, ida, idc, idb];
+      const p2 = [idb, idd, ida, idc];
+      const [r1, r2] = await Promise.all([put(p1), put(p2)]);
+      expect([200, 422]).toContain(r1.statusCode);
+      expect([200, 422]).toContain(r2.statusCode);
+      const winners: string[][] = [];
+      for (const [res, ids] of [[r1, p1], [r2, p2]] as const) {
+        if (res.statusCode !== 200) continue;
+        // Re-selected in the same transaction: the response is exactly the requested permutation.
+        const body = res.json() as Dto[];
+        expect(body.map((r) => r.id)).toEqual(ids);
+        expect(body.map((r) => r.order)).toEqual([1, 2, 3, 4]);
+        winners.push([...ids]);
+      }
+      expect(winners.length).toBeGreaterThan(0);
+      const finalRows = await stored();
+      expect(finalRows).toHaveLength(4);
+      expectGapFree(finalRows);
+      expect(winners).toContainEqual(finalRows.map((r) => r.id));
+    }
+  });
+
   it('AC-CTX-19 attachment/settings rows and run_traces hold paths only, never doc text', async () => {
     const llm = new MockLLMProvider('openai', { structured: REVIEW });
     const a = await makeApp({ llm });
