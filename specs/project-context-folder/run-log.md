@@ -21,3 +21,4 @@
 | S6 | security-reviewer (T5, T6b) | opus | a4712a856a7ef04bc | UNKNOWN | 29408 | 39860 | 6 | approve (0 findings) |
 | S5 | test-writer (T14) | sonnet | a33af98f9100d4a4d | UNKNOWN | 132951 | 91885 | 29 | PARTIAL: 7/8 green, defect: concurrent attach order race (repository.ts:131-140) |
 | S4 | implementer (T14 defect fix) | sonnet | a110c47a5c1cde59f | UNKNOWN | 47613 | 32513 | 5 | DONE → fix f5c2ce4; context.it 8/8 |
+| S4 | implementer (T15a–c + T15d file) | sonnet | a80a9ff337bcc798e | UNKNOWN | 235781 | 135458 | 75 | DONE (not run) → C15, C16 |

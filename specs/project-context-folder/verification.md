@@ -3,7 +3,7 @@
 - **Verifier:** plan-verifier (S7), 2026-10-18 · **Status:** gaps to close (T15a–d, T16 approval-gated; AC-67 manual)
 - **Scope:** spec `specs/project-context-folder/spec.md` (76 ACs) · tasks T1, T2, T3, T4, T6a, T7, T8, T9, T10, T11, T12, T13 · base `dc893e0..d35321e`. No uncommitted source changes.
 - **Reviews (S6):** architecture-reviewer — approve (1 suggestion: client `MAX_ATTACHMENTS = 10` mirrors server L7); security-reviewer — approve (0 findings).
-- **Summary:** PASS 73 / PARTIAL 1 / MISSING 2 (updated after T5, T6b and T14; see the T14 section).
+- **Summary:** PASS 73 / PARTIAL 2 / MISSING 1 (updated after T5, T6b, T14 and T15a–c; see the update sections).
 - **Initial S7 summary:** PASS 65 / PARTIAL 7 / MISSING 4.
 
 ## Matrix
@@ -57,7 +57,7 @@ Commit key: C1=a029fcd (T1), C3=a3f5f89 (T3), C4=585c53c (T4), C6=4c7aed8 (T6a),
 | 43 | T7,T12 | service.ts; ContextDocStatus | routes:324; AgentAttachments.test.tsx:85 | C7,C11/12 | PASS | |
 | 44 | T2 | reviewer-core prompt (unchanged) | project-context.test.ts:63 | C2 | PASS | |
 | 45 | T14 | run-executor.ts, for-run.ts, repository.ts | server/test/context.it.test.ts "AC-CTX-45 marker reaches the provider inside spec-0; persisted trace has placeholders only" | C14 | PASS | MockLLMProvider only |
-| 46 | T15a–d | — | — | — | MISSING | blocked: approval (seed, e2e.sh, flow, e2e run) |
+| 46 | T15a–d | seed.ts (env-gated fixtures), scripts/e2e.sh, e2e-web.yml, e2e/specs/08-project-context.flow.json | flow 08 authored, NOT run | 207569b, 5c0d2a9 | PARTIAL | fixtures + flow committed; e2e run (T15d) awaits approval |
 | 47 | T4 | discovery.ts | discovery:123 | C4 | PASS | |
 | 48 | T4 | discovery.ts | discovery:133 | C4 | PASS | |
 | 49 | T3,T7 | helpers.ts, service.ts | helpers:41; routes:85 | C3,C7 | PASS | |
@@ -142,3 +142,11 @@ Rows 03, 14, 19, 30, 45, 55, 58, 69 updated from the evidence below; the remaini
 - Re-run (verbose, main agent): `cd server && DATABASE_URL=postgres://guard@127.0.0.1:1/do_not_use pnpm exec vitest run test/context.it.test.ts` → 1 file, **8 passed**, 0 skipped. Server typecheck pass; server unit 552 passed, 3 skipped.
 
 Remaining: AC-46 (T15a–d: seed, e2e.sh, e2e-web.yml, e2e run — approval), AC-68 (T16 paid manual — approval), AC-67 (manual code review confirmation), manual UI check.
+
+## Update after T15a–c (main agent, 2026-10-18)
+
+- 207569b: `server/src/db/seed.ts` — additive block gated by `SEED_CONTEXT_CLONE_PATH` (unset → dev seed unchanged): sets `acme/payments-api.clonePath`, inserts one `agent_runs` + `run_traces` row for PR #482 with `specs_read: ['docs/spec.md']`, one `spec_blocks` entry and AC-72 placeholder `specs`/`user` (no doc text, no marker). `scripts/e2e.sh` creates a `mktemp` fixture clone with `docs/spec.md` (marker `RULE-CTX-7f3a`), exports the path, removes it on teardown. `.github/workflows/e2e-web.yml` gets the same fixture step because `e2e/run.ts:54-60` runs every `specs/*.flow.json` in CI.
+- 5c0d2a9: `e2e/specs/08-project-context.flow.json` (33 steps, not run). Uses a `select` step (native picker) not used by other flows; marker absence is not asserted by the runner (positive checks only) and holds by construction of the seed.
+- Checks: server typecheck pass; server unit 552 passed, 3 skipped; `bash -n scripts/e2e.sh` pass; flow JSON parses; workflow YAML checked by eye (no parser available). `cd e2e && npm run typecheck` NOT run — `e2e/node_modules` not installed (install needs approval); no e2e TS changed.
+
+Remaining: AC-46 e2e run (T15d — approval), AC-68 (T16 paid manual — approval), AC-67 (manual confirmation), manual UI check.
