@@ -1,5 +1,5 @@
 # Spec: PR Why + Risk Brief (HW-05)
-- **Key:** BRIEF · **Status:** Approved (2026-10-18) · **Date:** 2026-10-18 · **Packages:** server | client | contracts
+- **Key:** BRIEF · **Status:** Approved (2026-10-18) · amended 2026-10-18 (D18, AC-BRIEF-42 clarified) · **Date:** 2026-10-18 · **Packages:** server | client | contracts
 - **Source request:** HW-05 "PR Why + Risk Brief": a PR Brief card on the PR Overview tab. It combines existing Intent (L03), Smart Diff (L03) and Blast Radius (HW-04) with a newly generated summary ("why"), risks and review focus. Relayed by the main agent on behalf of the user.
 - **Requirement-source limitation:** the original HW-05 assignment text is not in the repo. The only repo mention is `README.md:88` ("L05 | … · PR Brief card"). Requirements come only from the relayed request and the user's decisions in §14.
 
@@ -7,7 +7,7 @@
 - G1. Show a PR Brief card on the Overview tab, placed above the Intent/Blast row. It shows a generated summary (the "why"), risks and review focus.
 - G2. Review focus items read `path:line — reason`. Clicking one opens Files changed at `?tab=diff&file=<path>&line=<n>`.
 - G3. Generate / Refresh actions. The result is stored in `pr_brief` and survives reloads. It is marked stale when the PR head SHA changes.
-- G4. Exactly one `completeStructured` call. The model comes from `resolveFeatureModel(container, workspaceId, 'risk_brief')`. Input is pre-computed metadata only (no raw diff hunks), at most 8,000 tokens.
+- G4. Exactly one `completeStructured` call. The model comes from `resolveFeatureModel(container, workspaceId, 'risk_brief')`. Input is pre-computed metadata only (no raw diff hunks), at most 8,000 tokens per provider attempt (D18).
 - G5. The model output is checked with Zod. Every returned path must be one of the PR's changed files.
 - G6. Works with the existing `pr_brief` table (no migration) and extends the existing contracts. Tests make no paid calls.
 
@@ -72,7 +72,7 @@
 - **Contract (D1), identical in both `vendor/shared` copies.** `PrBrief` gains optional fields:
   - `summary: string`.
   - `review_focus: {path, line: int ≥ 1, reason}[]` (≤ 8).
-  - `meta: {head_sha, provider, model, prompt_version, tokens_in, tokens_out, cost_usd, generated_at, truncated, intent_available}`.
+  - `meta: {head_sha, provider, model, prompt_version, tokens_in, tokens_out, attempts, cost_usd, generated_at, truncated, intent_available}`. `tokens_in`/`tokens_out` are the adapter's cumulative totals over all attempts, `attempts` is `StructuredResult.attempts`, and `cost_usd` is computed from the cumulative totals (D18).
   - `history` becomes optional and is not filled. `risks.risks` holds ≤ 6 entries. `Risk.file_refs` entries are `path` or `path:line`.
   - New `PrBriefState {pr_id, brief|null, freshness, stale_reasons, model_error?}` reuses `IntentFreshness` and `IntentStaleReason`.
 - **Persistence (D2):** one `pr_brief` row per PR. `json` holds the validated `PrBrief` including `meta`. No migration.
@@ -82,7 +82,7 @@
 ## 7. Functional requirements
 - FR-1 `GET` state (no LLM) → AC-BRIEF-14, 15, 16, 22, 23
 - FR-2 `POST`: cache hit, force, single-flight, rate limit, caller timeout → AC-BRIEF-01, 17, 18, 19, 29, 45
-- FR-3 Input assembly: no hunks, 8k budget, fixed truncation order, untrusted wrapping, no intent generation, no files synced → AC-BRIEF-03, 04, 05, 06, 07, 25, 26, 46, 49
+- FR-3 Input assembly: no hunks, 4,500-token assembly budget (8k per attempt), fixed truncation order, untrusted wrapping, no intent generation, no files synced → AC-BRIEF-03, 04, 05, 06, 07, 25, 26, 46, 49
 - FR-4 Model, output limit and cost → AC-BRIEF-02, 24, 50
 - FR-5 Output validation: Zod, paths, lines, caps → AC-BRIEF-08, 09, 10, 11, 12, 47
 - FR-6 Persistence and freshness → AC-BRIEF-13, 16
@@ -93,8 +93,11 @@
 - FR-11 e2e and manual paid → AC-BRIEF-41, 42, 44
 
 ## 8. Constraints
-- **Budget (D4):** `BRIEF_INPUT_MAX_TOKENS = 8000` covers all input messages (system + user), counted with `container.tokenizer.count`. It is defined in `server/src/modules/brief/constants.ts`.
-- **Size constants (D17), in `server/src/modules/brief/constants.ts`:** `BRIEF_BODY_MAX_TOKENS = 1500` (the PR body is clipped to this before assembly, inside the 8,000 input budget) and `BRIEF_OUTPUT_MAX_TOKENS = 2000` (passed as `maxTokens` to `completeStructured`).
+- **Budget (D4, D18, D19):** these constants live in `server/src/modules/brief/constants.ts`.
+  - `BRIEF_INPUT_MAX_TOKENS = 8000` is the input limit for each provider attempt, not cumulative.
+  - The server builds the prompt to `BRIEF_ASSEMBLY_MAX_TOKENS = 4500`: all system + user messages, counted with `container.tokenizer.count`. That is 8,000 − 2,000 (`BRIEF_OUTPUT_MAX_TOKENS`, the raw output the adapter appends on a repair attempt) − 1,500 reserve (reprompt text plus schema and provider-tokenizer overhead). This way both the first attempt and the single repair attempt stay within 8,000.
+  - Residual risk: the reprompt length grows with the number of Zod issues and is not capped by code. The 1,500 reserve is a design allowance, not a guarantee (D19).
+- **Size constants (D17), in `server/src/modules/brief/constants.ts`:** `BRIEF_BODY_MAX_TOKENS = 1500` (the PR body is clipped to this before assembly, inside the 4,500 assembly budget) and `BRIEF_OUTPUT_MAX_TOKENS = 2000` (passed as `maxTokens` to `completeStructured`).
 - **Truncation order (D5):** blast callers → smart-diff detail (per-file entries, keeping group counts) → PR body → tail of the file list. Title and intent are never dropped.
 - **Caps (D7):** ≤ 8 review focus items, ≤ 6 risks. `Risk.kind` is free text.
 - **Call settings (D4, as intent):** `temperature: 0`, `maxRetries: 1`, provider `timeoutMs: 0`. Caller wait is `BRIEF_TIMEOUT_MS = 60000`. Schema-repair retries inside the one `completeStructured` call count as one call.
@@ -110,7 +113,7 @@
 
 ## 10. Performance
 - One LLM call per generation. GET makes zero LLM and zero GitHub calls.
-- Input ≤ 8,000 tokens, with the PR body ≤ 1,500 tokens of that. Output `maxTokens` = `BRIEF_OUTPUT_MAX_TOKENS` = 2,000 (AC-BRIEF-49, AC-BRIEF-50).
+- Input ≤ 8,000 tokens per provider attempt, not cumulative (D18). The server-assembled messages are ≤ 4,500 tokens, leaving headroom for a repair attempt (D19). The PR body is ≤ 1,500 tokens of that. Output `maxTokens` = `BRIEF_OUTPUT_MAX_TOKENS` = 2,000 (AC-BRIEF-49, AC-BRIEF-50).
 - Each HTTP caller waits ≤ 60 s, then gets 504 while the flight continues and saves (AC-BRIEF-45).
 - POST is rate-limited to 10 per minute (D8).
 
@@ -141,8 +144,8 @@
 | AC-BRIEF-01 | When `POST /pulls/:id/brief` regenerates, the server shall issue exactly one `completeStructured` call (internal schema-repair retries included). | unit + integration (approval) |
 | AC-BRIEF-02 | When generating, the server shall resolve provider/model via `resolveFeatureModel(container, workspaceId, 'risk_brief')`. | unit |
 | AC-BRIEF-03 | The brief prompt shall contain no `pr_files.patch` content or diff hunk text. | unit |
-| AC-BRIEF-04 | The brief's system + user messages shall together measure ≤ 8,000 tokens with `container.tokenizer.count`. | unit |
-| AC-BRIEF-05 | If assembled metadata exceeds 8,000 tokens, then the server shall drop content in the order blast callers → smart-diff detail → PR body → tail of the file list until it fits, and set `meta.truncated = true`. | unit |
+| AC-BRIEF-04 | The brief's assembled system + user messages shall together measure ≤ 4,500 tokens (`BRIEF_ASSEMBLY_MAX_TOKENS`) with `container.tokenizer.count`, so the first provider attempt is ≤ 8,000 with the D19 headroom left for a repair attempt. | unit |
+| AC-BRIEF-05 | If assembled metadata exceeds 4,500 tokens (`BRIEF_ASSEMBLY_MAX_TOKENS`), then the server shall drop content in the order blast callers → smart-diff detail → PR body → tail of the file list until it fits, and set `meta.truncated = true`. | unit |
 | AC-BRIEF-06 | The server shall wrap every PR-derived string in the prompt with `wrapUntrusted`. | unit |
 | AC-BRIEF-07 | When generating a brief, the server shall not call the intent LLM or write `pr_intent`. | integration (approval) |
 | AC-BRIEF-08 | If the model output fails Zod validation, then the server shall return a user-safe error and persist nothing. | unit |
@@ -150,7 +153,7 @@
 | AC-BRIEF-10 | If a `Risk.file_refs` entry is not `path` or `path:line` with `path` a changed file and line ≥ 1, then the server shall drop that entry. | unit |
 | AC-BRIEF-11 | If a review focus `line` is not an integer ≥ 1, then the server shall drop that item. | unit |
 | AC-BRIEF-12 | If the model returns more than 8 valid review focus items, then the server shall keep only the first 8. | unit |
-| AC-BRIEF-13 | When generation succeeds, the server shall upsert `pr_brief.json` with the validated brief and `meta` (head_sha, provider, model, prompt_version, tokens_in, tokens_out, cost_usd, generated_at, truncated, intent_available). | integration (approval) |
+| AC-BRIEF-13 | When generation succeeds, the server shall upsert `pr_brief.json` with the validated brief and `meta` (head_sha, provider, model, prompt_version, tokens_in, tokens_out, attempts, cost_usd, generated_at, truncated, intent_available), with `tokens_in`, `tokens_out` and `attempts` taken unchanged from the adapter's `StructuredResult`. | integration (approval) |
 | AC-BRIEF-14 | When `GET /pulls/:id/brief` is called and a row exists, the server shall return it without any LLM or GitHub call. | integration (approval) |
 | AC-BRIEF-15 | When `GET` is called and no row exists, the server shall return `brief: null`, `freshness: unknown`. | integration (approval) |
 | AC-BRIEF-16 | While the PR head SHA, the resolved model or the prompt version differs from `meta`, the server shall report `freshness: stale` with `pr_changed`, `model_changed` or `prompt_changed` respectively. | unit + integration (approval) |
@@ -179,7 +182,7 @@
 | AC-BRIEF-39 | When a Generate/Refresh mutation settles, the client shall invalidate that PR's brief query key. | unit |
 | AC-BRIEF-40 | **Withdrawn** (conflicts with D14: PR #482 now has a seeded brief, so its no-brief state can't be shown in e2e; the no-brief state is covered by AC-BRIEF-31). | — |
 | AC-BRIEF-41 | Where the seeded brief for PR #482 exists, clicking a review focus item shall open Files changed with that file's card expanded. | e2e (approval) |
-| AC-BRIEF-42 | When a user-approved paid run generates a brief on a real open PR, `tokens_in` shall be ≤ 8,000 and every review focus path shall be a changed file. | manual (paid, approval) |
+| AC-BRIEF-42 | When a user-approved paid run generates a brief on a real open PR, each provider attempt's input shall be within 8,000 tokens and every review focus path shall be one of the PR's changed files. Evidence: if `meta.attempts = 1`, then `meta.tokens_in` (the provider-reported input of that single attempt) shall be ≤ 8,000. If `meta.attempts > 1`, then `meta.tokens_in` is the adapter's sum over attempts and can't be split per attempt. In that case the check falls back to the server's pre-call count of the assembled messages (≤ 4,500, AC-BRIEF-04), and the run is repeated until a sample with `meta.attempts = 1` is observed. Per-attempt input is not estimated. The repair-attempt caveat is recorded in D18 / Q17. | manual (paid, approval) |
 | AC-BRIEF-43 | The brief's unit, integration and e2e tests shall use `MockLLMProvider` or no LLM, and make no network call to a provider. | manual (code review) |
 | AC-BRIEF-44 | When seeded PR #482 is opened in the hermetic stack, the Overview shall show the seeded brief (summary, risks, review focus) without any LLM call. | e2e (approval) |
 | AC-BRIEF-45 | If a generation exceeds the 60 s caller wait, then the server shall respond 504 with a fixed message, and the flight shall still save its result. | unit |
@@ -190,7 +193,7 @@
 | AC-BRIEF-50 | When generating, the server shall pass `maxTokens: 2000` to `completeStructured`. | unit |
 
 ## 13. Test scenarios
-- T1 unit, input builder: fixture with patches → no patch text, wrapped fields, ≤ 8k. Oversize fixture → D5 order and flag. Fixtures with no intent and degraded blast. A body over 1,500 tokens is clipped → 03, 04, 05, 06, 25, 26, 49.
+- T1 unit, input builder: fixture with patches → no patch text, wrapped fields, ≤ 4,500 tokens. Oversize fixture → D5 order and flag. Fixtures with no intent and degraded blast. A body over 1,500 tokens is clipped → 03, 04, 05, 06, 25, 26, 49.
 - T2 unit, validator: unknown path, line 0, bad `file_refs`, 9 focus items / 7 risks, Zod-invalid output → 08–12, 47.
 - T3 unit, service with `MockLLMProvider` + a fake slow provider: one call with `maxTokens: 2000`, `risk_brief` model, cost fallback, error keeps the old row, 504 then saved → 01, 02, 21, 24, 45, 50.
 - T4 unit, freshness: same SHA/model/version → fresh; each differing → its reason → 16.
@@ -204,7 +207,7 @@
 - D1 (Q1, A1): extend `PrBrief` in both copies with optional `summary`, `review_focus`, `meta`, and add `PrBriefState`. `history` is optional and not filled.
 - D2 (Q2, A4): freshness metadata lives inside `pr_brief.json`. No migration.
 - D3 (Q3, A2): generate without intent and flag it. The brief only reads stored intent, Smart Diff and blast, and never triggers intent generation.
-- D4 (Q4): 8k covers system + user. `timeoutMs`/`maxRetries` as intent (`intent/service.ts:344-346`, `constants.ts:30,41`). Schema-repair retries inside the call count as one call.
+- D4 (Q4): 8k covers system + user (refined by D18: per attempt; and D19: assembled to 4,500). `timeoutMs`/`maxRetries` as intent (`intent/service.ts:344-346`, `constants.ts:30,41`). Schema-repair retries inside the call count as one call.
 - D5 (Q5): input = title, clipped body, file list with stats, smart-diff groups, blast summary, intent. Truncation order: blast callers → smart-diff detail → body → file-list tail.
 - D6 (Q6): PR-head new-side line ≥ 1. Paths limited to changed files. `Risk.file_refs` is `path` or `path:line`, checked against changed files.
 - D7 (Q7): ≤ 8 review focus items, ≤ 6 risks, `Risk.kind` free text.
@@ -218,15 +221,27 @@
 - D15 (Q15): "Why" = the generated `summary`. `WhyTimeline` is out of scope.
 - D16 (Q16): no stored `pr_files` → POST returns 409 with a fixed message, in the code/shape style of intent's `intent_inputs_incomplete` (`intent/failures.ts:29`). No LLM call.
 - D17 (plan values): `BRIEF_BODY_MAX_TOKENS = 1500`; `BRIEF_OUTPUT_MAX_TOKENS = 2000`, passed as `maxTokens`.
+- D18 (SPEC_GAP, option B, 2026-10-18): `maxRetries: 1` stays as in D4. Transport retries (`withRetry`) and the LLM adapters are not changed.
+  - The 8,000 input-token limit applies to each individual provider attempt, not to the cumulative `tokens_in`.
+  - `meta.tokens_in`/`tokens_out` record the adapter's cumulative totals unchanged, and `cost_usd` uses them. The adapter sums usage per attempt (`server/src/adapters/llm/openai.ts:112-113`) and returns `attempts: attempt` (`:124`). The type field is `StructuredResult.attempts: number` (`server/src/vendor/shared/adapters.ts:79`).
+  - `meta.attempts` records that value, so AC-BRIEF-42 can be checked.
+  - Verified caveat: on a schema-repair attempt the adapter appends the previous raw output and a reprompt message to the messages (`openai.ts:128-129`, `anthropic.ts:140-144`). The OpenRouter provider does the same (`reviewer-core/src/llm/openrouter.ts:113`). So attempt 2's input is the assembled messages plus up to `BRIEF_OUTPUT_MAX_TOKENS` (2,000) plus the reprompt text. This is resolved by D19.
+  - Usage from failed `withRetry` transport attempts is not part of the returned totals, because only the settled response's `usage` is added (`openai.ts:97-113`).
+- D19 (Q17 → B, 2026-10-18): the 8,000 limit applies to EACH provider attempt. `maxRetries: 1` stays, with no adapter or transport changes.
+  - The server builds the prompt to `BRIEF_ASSEMBLY_MAX_TOKENS = 4500` = 8,000 − 2,000 (`BRIEF_OUTPUT_MAX_TOKENS`, the raw output appended on repair) − 1,500 reserve (reprompt text plus schema and provider-tokenizer overhead).
+  - `BRIEF_INPUT_MAX_TOKENS = 8000` stays the per-attempt limit. `BRIEF_BODY_MAX_TOKENS = 1500` is unchanged and fits inside 4,500.
+  - The reprompt comes from `parseWithRepair` (`reviewer-core/src/llm/structured.ts:54-84`). It is either a fixed sentence plus the JSON parse error (`:67-71`) or a fixed sentence plus one line per Zod issue (`:76-82`).
+  - Residual risk: the reprompt length grows with the number of Zod issues (and the parse-error text) and is not capped by code. The 1,500 reserve is a design allowance, not a guarantee.
+  - AC-BRIEF-42's evidence rule (a `meta.attempts = 1` sample) stays as written in D18.
 - D-A3: generation is manual only. D-A6: model or prompt-version changes also mark the brief stale.
 
 ## 15. Open questions
-none (all resolved; see §14).
+none (Q1–Q17 resolved; see §14).
 
 ## 16. Approvals required
 - **UI gate (precondition):** client planning and implementation start only after the user provides screenshots of the CURRENT PR Overview and Files changed tabs. The mockups are visual reference only.
 - Contract change in both `server/src/vendor/shared` and `client/src/vendor/shared` (D1).
 - Seed change: a `pr_brief` row for PR #482 in `server/src/db/seed.ts`, which the hermetic e2e stack also uses (D14). Running `db:seed` needs separate approval.
 - Running integration tests (Docker/testcontainers) and e2e (running stack + agent-browser).
-- Manual paid LLM run for AC-BRIEF-42: explicit approval, test agent setup, an open PR with a real diff.
+- Manual paid LLM run for AC-BRIEF-42: explicit approval, test agent setup, an open PR with a real diff. Evidence rules and possible repeat runs (until a `meta.attempts = 1` sample) are in AC-BRIEF-42 / D18. Each repeat run is a paid call covered by this same approval; no new approval category.
 - No migration and no schema change (D2). No dependency or lockfile changes.

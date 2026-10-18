@@ -10,3 +10,6 @@
 | S3 | implementation-planner (MODE: REVIEW) | sonnet | ab1c644f7476a56e7 | UNKNOWN | 171136 | 98568 | 50 | approve with changes (3 major, 11 minor) |
 | S2 | implementation-planner (final revision) | opus | a3bb02f950133d07d | UNKNOWN | 113585 | 196726 | 1 | READY (14 review fixes applied) |
 | G2 | main agent | — | — | 2026-10-18 | — | — | — | plan Approved; T1, T10 approved; A7 head check added; SPEC_GAP AC-42 vs maxRetries reported |
+| S1 | spec-creator (D18 amendment) | opus | abce2ccc5229ba587 | UNKNOWN | 88331 | 97772 | 17 | NEEDS_CLARIFICATION (Q17: repair attempt input) |
+| S1 | spec-creator (D19, Q17 = B) | opus | abce2ccc5229ba587 | UNKNOWN | 53026 | 112419 | 17 | DONE, 0 markers, 50/49/1 ACs |
+| G1/G2 | main agent | — | — | 2026-10-18 | — | — | — | spec amended (D18 per-attempt 8k + meta.attempts; D19 assembly 4,500); plan updated (A12, T1, T2, T12, retries section); approvals unchanged: T1, T10 granted; T6/T11 runs and T12 not granted |
