@@ -371,6 +371,16 @@ export type ContextAttachment = z.infer<typeof ContextAttachment>;
 export const ContextAttachRequest = z.object({ path: z.string().min(1) });
 export type ContextAttachRequest = z.infer<typeof ContextAttachRequest>;
 
+// Full new order of one owner's attached docs for a repo. `.max(10)` mirrors the
+// server's MAX_ATTACHMENTS (server/src/modules/context/constants.ts).
+export const ContextReorderRequest = z.object({
+  ids: z
+    .array(z.string().uuid())
+    .max(10)
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'ids must be unique' }),
+});
+export type ContextReorderRequest = z.infer<typeof ContextReorderRequest>;
+
 // ---- Run request (review trigger; owned by A2, contract lives here) ----
 export const RunRequest = z.object({
   agentId: z.string().optional(),
