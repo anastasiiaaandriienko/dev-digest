@@ -20,6 +20,11 @@ import {
   PrMeta,
   PrIntentState,
   IntentRunRequest,
+  PromptAssembly,
+  SpecBlock,
+  SpecSummary,
+  ContextList,
+  ContextAttachment,
 } from '@devdigest/shared';
 
 /**
@@ -323,5 +328,54 @@ describe('L03 intent contracts', () => {
     expect(IntentRunRequest.parse({})).toEqual({ force: false });
     expect(IntentRunRequest.parse({ force: true }).force).toBe(true);
     expect(IntentRunRequest.safeParse({ force: 'yes' }).success).toBe(false);
+  });
+});
+
+describe('Project Context contracts', () => {
+  it('AC-CTX-34 PromptAssembly parses with and without spec fields', () => {
+    const old = PromptAssembly.parse({ system: 's', user: 'u' });
+    expect(old.spec_blocks).toBeUndefined();
+    expect(old.specs_tokens).toBeUndefined();
+    expect(old.spec_summary).toBeUndefined();
+    const summary = {
+      attached: 2,
+      read: 1,
+      missing: 1,
+      skipped: 0,
+      truncated: 0,
+      tokens: 42,
+      limits: { doc_bytes: 32768, doc_tokens: 4000, prompt_tokens: 12000, attachments: 10 },
+    };
+    const fresh = PromptAssembly.parse({
+      system: 's',
+      user: 'u',
+      spec_blocks: [
+        { path: 'docs/a.md', source: 'agent', status: 'read', tokens: 42, truncated: false },
+        { path: 'docs/b.md', source: 'skill', skill_id: 'sk1', status: 'missing', reason: 'missing' },
+      ],
+      specs_tokens: 45,
+      spec_summary: summary,
+    });
+    expect(fresh.spec_blocks).toHaveLength(2);
+    expect(fresh.spec_summary?.limits.prompt_tokens).toBe(12000);
+    expect(PromptAssembly.parse({ system: 's', user: 'u', specs_tokens: null, spec_summary: null }).specs_tokens).toBeNull();
+    expect(PromptAssembly.safeParse({ system: 's', user: 'u', spec_blocks: [{ path: 'a', source: 'x', status: 'read' }] }).success).toBe(false);
+    // AC-CTX-35 / AC-CTX-65: absent on old traces, accepted on new ones.
+    expect(SpecSummary.safeParse(summary).success).toBe(true);
+    expect(SpecBlock.safeParse({ path: 'a.md', source: 'agent', status: 'skipped', reason: 'budget exhausted' }).success).toBe(true);
+  });
+
+  it('AC-CTX-08 ContextList item has no content', () => {
+    const list = ContextList.parse({
+      files: [{ path: 'docs/a.md', size: 10, updated_at: '2026-10-18T00:00:00.000Z', content: 'SECRET BODY' }],
+      roots: ['docs'],
+      truncated: false,
+      truncated_reasons: [],
+    });
+    expect(Object.keys(list.files[0]!).sort()).toEqual(['path', 'size', 'updated_at']);
+    expect(JSON.stringify(list)).not.toContain('SECRET BODY');
+    expect(ContextList.safeParse({ ...list, truncated_reasons: ['nope'] }).success).toBe(false);
+    expect(ContextAttachment.safeParse({ id: '1', repo_id: 'r', path: 'a.md', order: 0, status: 'gone' }).success).toBe(false);
+    expect(ContextAttachment.parse({ id: '1', repo_id: 'r', path: 'a.md', order: 0, status: 'outside_roots' }).status).toBe('outside_roots');
   });
 });
