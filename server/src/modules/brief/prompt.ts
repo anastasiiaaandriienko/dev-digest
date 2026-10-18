@@ -1,8 +1,12 @@
 import { z } from 'zod';
 import type { BlastRadius, ChatMessage, Intent, SmartDiff } from '@devdigest/shared';
-import type { Tokenizer } from '../../adapters/tokenizer/index.js';
 import { wrapUntrusted } from '../../platform/prompt.js';
 import { BRIEF_ASSEMBLY_MAX_TOKENS, BRIEF_BODY_MAX_TOKENS, BRIEF_TITLE_MAX_CHARS } from './constants.js';
+
+/** Token counter port; the service passes `container.tokenizer`. */
+export interface Tokenizer {
+  count(text: string): number;
+}
 
 /**
  * What the model must answer. Strict structured output with NO caps and
