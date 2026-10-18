@@ -8,15 +8,49 @@ themselves live in the agent files — read those, not this page, for details.
 |---|---|---|---|---|
 | researcher | [researcher.md](researcher.md) | `sonnet` | no | Facts from the repo and external docs, with evidence |
 | brainstorm | [brainstorm.md](brainstorm.md) | `opus` | no | Solution options before planning: approaches, trade-offs, risks, open questions |
-| planner | [planner.md](planner.md) | `opus` | no | Requirement → Development Plan (or clarification questions) |
+| spec-creator | [spec-creator.md](spec-creator.md) | `opus` | yes (one `specs/<slug>/spec.md`) | SDD: request → spec with EARS acceptance criteria (`AC-<KEY>-NN`) and `[NEEDS CLARIFICATION]` markers |
+| implementation-planner | [implementation-planner.md](implementation-planner.md) | `opus` | no | SDD: approved spec → plan where every task cites AC-IDs; `MODE: REVIEW` for the cross-model plan review |
+| planner | [planner.md](planner.md) | `opus` | no | Ad-hoc requirement → Development Plan (or clarification questions), no spec |
 | implementer | [implementer.md](implementer.md) | `sonnet` | yes (plan files) | Executes an approved plan, runs checks, reports |
 | test-writer | [test-writer.md](test-writer.md) | `sonnet` | yes (test files only) | Adds/updates unit tests; never changes production code |
 | architecture-reviewer | [architecture-reviewer.md](architecture-reviewer.md) | `opus` | no | Layering, dependencies, contracts, coupling — findings with file:line |
 | security-reviewer | [security-reviewer.md](security-reviewer.md) | `opus` | no | Exploitable issues and security invariants — findings with file:line |
-| plan-verifier | [plan-verifier.md](plan-verifier.md) | `sonnet` | no | Plan criteria → PASS / PARTIAL / MISSING matrix with evidence |
+| plan-verifier | [plan-verifier.md](plan-verifier.md) | `sonnet` | no | Last stage: AC → task → test → commit (SDD) or plan criteria → PASS / PARTIAL / MISSING with evidence |
 | doc-writer | [doc-writer.md](doc-writer.md) | `sonnet` | yes (docs only) | Updates docs/ and package docs, Mermaid diagrams |
 
-## Workflow
+## SDD workflow (`/run-plan`)
+
+Used for features that need a spec (Lab 05 onward). The orchestration, gates and
+artifacts are defined once in [../skills/run-plan/SKILL.md](../skills/run-plan/SKILL.md);
+the user starts it with `/run-plan <slug> <request>`.
+
+```
+spec-creator ──► specs/<slug>/spec.md (Draft, [NEEDS CLARIFICATION] → questions)
+   │             main agent relays questions, re-runs until no markers
+   ▼  G1: user approves the spec → Status: Approved
+implementation-planner ──► plan (every task → AC-IDs; SPEC_GAP → back to spec)
+   │
+   ▼
+implementation-planner MODE: REVIEW on another model ──► verdict + findings
+   │             (rework → planner again, ≤ 2 rounds)
+   ▼  G2: user approves the plan + every APPROVAL REQUIRED item → plan.md
+implementer ──► test-writer
+   │
+   ▼
+architecture-reviewer (+ security-reviewer when relevant), fresh contexts, in parallel
+   │             findings → implementer → re-review (≤ 2 rounds)
+   ▼
+plan-verifier (last) ──► AC → task → test → commit matrix → verification.md
+   │
+   ▼  G4: user reviews the diff and asks for commits
+/workflow-retro <slug> ──► docs/retros/ledger.md (manual)
+```
+
+Artifacts in `specs/<slug>/`: `spec.md` (spec-creator), `plan.md`, `verification.md`,
+`run-log.md` (main agent). Repo-root `specs/` is separate from the older
+per-package spec files (`server/specs/`, `client/specs/`, …), which stay untouched.
+
+## Ad-hoc workflow (no spec)
 
 ```
 user request
@@ -53,8 +87,10 @@ user (reviews git diff, decides on commit)
 - Subagents never call each other (`Agent` is denied to all of them). The **main
   agent** is the only hub: it passes reports between agents and asks the user every
   question (subagents cannot ask the user — they return questions in their report).
-- Artifacts travel **in prompts**, not files: the approved plan is pasted verbatim
-  with the task IDs to run and any extra approvals.
+- Artifacts travel **in prompts**: the approved plan is pasted verbatim with the
+  task IDs to run and any extra approvals. In the SDD workflow the main agent also
+  saves them under `specs/<slug>/` for traceability; subagents other than
+  spec-creator still never write artifacts.
 - **REVIEW PACKET** (input of reviewers and plan-verifier): approved plan verbatim,
   task IDs, acceptance criteria, base ref (default: uncommitted work vs `HEAD` incl.
   untracked), changed-file list, approvals granted. It does **not** include the
@@ -94,10 +130,43 @@ user (reviews git diff, decides on commit)
   `localhost` or paid APIs; protected areas are listed as `APPROVAL REQUIRED`; it
   cannot ask the user — the main agent relays its open questions.
 
+## spec-creator
+
+- **Purpose:** SDD stage 1 — clarify a request across six categories (actors,
+  triggers, inputs, outputs, constraints, failure modes) and write ONE spec: goals,
+  non-goals, input provenance, security, performance, error handling, EARS
+  acceptance criteria with unique `AC-<KEY>-NN` IDs, test scenarios, assumptions.
+- **Tools:** `Read, Grep, Glob, Write, Edit` + read-only devdigest MCP
+  (`list_agents`, `get_findings`, `get_conventions`, `get_blast_radius`); denied
+  `Bash, PowerShell, NotebookEdit, WebFetch, WebSearch, Agent, Skill,
+  mcp__devdigest__run_agent_on_pr`.
+- **Write scope:** exactly the target `specs/<slug>/spec.md` named in the prompt.
+- **Input → output:** request + target path + user answers → `DONE |
+  NEEDS_CLARIFICATION | BLOCKED`: spec path, key, AC count, questions with recommended
+  defaults, assumptions, context used, Unknowns, Limitations.
+- **Limits:** never invents requirements (gaps → `[NEEDS CLARIFICATION]`); sets only
+  `Status: Draft`; MCP is optional — unavailable → repo only, noted in Limitations.
+
+## implementation-planner
+
+- **Purpose:** SDD stage 2 — approved spec → Development Plan; every task cites
+  ≥ 1 AC-ID, every AC is covered, unit ACs name their tests; proposed commits.
+  `MODE: REVIEW` checks a draft plan against the spec (run on another model).
+- **Tools:** same as planner (`Read, Grep, Glob`, everything else denied).
+- **Input → output:** spec path (`Status: Approved`) → `READY | BLOCKED | SPEC_GAP`
+  plan with tasks (AC, files, depends on, skills, steps, acceptance criteria, tests,
+  checks, risks, commit) — the planner task fields plus `AC`, `Tests`, `Commit`, so
+  implementer and test-writer read it unchanged, AC coverage table, commit table; REVIEW → verdict + findings table.
+- **Limits:** does not re-clarify product requirements (contradictions → `SPEC_GAP`);
+  protected areas, allowed checks, context order and skill map are read from
+  `planner.md` instead of being copied; never implements.
+
 ## planner
 
-- **Purpose:** requirement → small, checkable tasks; knows architecture, protected
-  areas, skills, and which agent executes each task.
+- **Purpose:** ad-hoc requirement → small, checkable tasks without a spec; knows
+  architecture, protected areas, skills, and which agent executes each task. Its
+  "Hard rules", "Planning rules", "Context to load" and "Skill map" are also the
+  reference for implementation-planner — keep them in sync when editing.
 - **Tools:** `Read, Grep, Glob`; denied `Write, Edit, NotebookEdit, Bash, PowerShell,
   WebFetch, WebSearch, Agent, Skill`. External facts come from researcher reports.
 - **Run when:** after research, before a change that spans more than one file or
@@ -172,16 +241,20 @@ user (reviews git diff, decides on commit)
 
 ## plan-verifier
 
-- **Purpose:** map every task and acceptance criterion of the approved plan to the
-  code: PASS (code + test/command evidence) / PARTIAL / MISSING (after a documented
-  search).
+- **Purpose:** the last stage — map every AC (SDD) or plan criterion to code, tests
+  and commits: PASS (code + test that ran green / observed output) / PARTIAL /
+  MISSING (after a documented search). No evidence → never PASS.
 - **Tools:** `Read, Grep, Glob, Bash`; denied `Write, Edit, NotebookEdit,
-  PowerShell, WebFetch, WebSearch, Agent, Skill`. Bash: read-only git + the three
-  unit gates from root `AGENTS.md`, only when the plan lists them.
-- **Run when:** after implementer/test-writer, in a fresh context, with a REVIEW PACKET.
-- **Output:** `DONE | BLOCKED`: matrix `Task | Criterion | Status | Evidence | Note`,
-  checks run, out-of-plan changes, protected paths, summary counts, verdict,
-  limitations.
+  PowerShell, WebFetch, WebSearch, Agent, Skill`. Bash: read-only git + the unit
+  gates from root `AGENTS.md` (incl. `devdigest-mcp`), one at a time, only when the
+  plan lists them.
+- **Run when:** last, after implementer/test-writer and the reviewers, in a fresh
+  context, with a REVIEW PACKET (+ spec path for SDD).
+- **Output:** `DONE | BLOCKED`: SDD matrix `AC-ID | Task(s) | Implementation | Test |
+  Commit | Status | Note` (or plain `Task | Criterion | …`), traceability gaps, checks
+  run, out-of-plan changes, protected paths, summary counts, verdict, limitations.
+  Uncommitted evidence is marked `uncommitted` and the verdict says traceability is
+  incomplete until committed.
 - **Limits:** no edits; integration/e2e only with approval.
 
 ## doc-writer
@@ -215,8 +288,10 @@ user (reviews git diff, decides on commit)
   - architecture-reviewer and security-reviewer reuse the group → skills table from
     `pr-self-review` by reference.
   - doc-writer: reads `mermaid-diagram/SKILL.md` (no Skill tool).
-  - `pr-self-review` is manual-only (`disable-model-invocation`); the user runs
-    `/pr-self-review`, agents cannot.
+  - `pr-self-review`, `run-plan` and `workflow-retro` are manual-only
+    (`disable-model-invocation`); the user runs them, agents cannot.
+  - spec-creator and implementation-planner: no skills (implementation-planner
+    names them per task from planner's skill map).
 - **INSIGHTS.md** (today `server/` and `client/`): researcher and planner read the
   touched packages' files and re-verify entries; implementer and test-writer read them
   via `engineering-insights` (read mode) before editing a package. No agent writes
@@ -229,7 +304,7 @@ user (reviews git diff, decides on commit)
 |---|---|---|
 | `tools` / `disallowedTools` | Claude Code | Which tools an agent has at all (researcher, brainstorm, planner, reviewers, plan-verifier: no write tools; doc-writer: no Bash) |
 | `permissions.deny` in [../settings.json](../settings.json) | Claude Code | `WebFetch` to `localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]` — for main session and subagents |
-| Agent prompt rules | the model only | Everything else: write scopes of implementer / test-writer / doc-writer, read-only git for reviewers, no commit / install / migrations / lockfiles / app start |
+| Agent prompt rules | the model only | Everything else: write scopes of spec-creator / implementer / test-writer / doc-writer, approval gates of `/run-plan`, read-only git for reviewers, no commit / install / migrations / lockfiles / app start |
 
 Write scopes and Bash allowlists are **prompt-level only** today. Bash/Edit deny
 rules were researched but not added: per the docs, Bash deny rules are not a security
@@ -256,6 +331,7 @@ an optional, approval-gated step and is not in place. Review `git status` /
 | Agent | Based on |
 |---|---|
 | planner, brainstorm | sub-agents, best-practices, model-config, skills |
+| spec-creator, implementation-planner | sub-agents (MCP tools in `tools`, model override per call), best-practices (spec → plan → implement → verify), model-config |
 | implementer, test-writer | sub-agents, skills, best-practices, model-config, permissions |
 | architecture-reviewer, security-reviewer, plan-verifier | sub-agents, best-practices (verifier ≠ author, fresh context, no noise), model-config |
 | doc-writer | sub-agents, skills |
