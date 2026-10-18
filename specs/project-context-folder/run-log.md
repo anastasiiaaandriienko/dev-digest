@@ -17,3 +17,7 @@
 | S6 | security-reviewer | opus | a2488a9db8bb48857 | UNKNOWN | 130682 | 81520 | 20 | approve (0 findings) |
 | S6 | architecture-reviewer | opus | a8187ce18f359debc | UNKNOWN | 139570 | 94169 | 23 | approve (1 suggestion: client mirrors L7=10) |
 | S7 | plan-verifier | sonnet | a74c7b76b620cf579 | UNKNOWN | 121547 | 64036 | 12 | PASS 65 / PARTIAL 7 / MISSING 4 (approval-gated) |
+| S4 | implementer (T5, T6b) | sonnet | a46b85f89d059a207 | UNKNOWN | 144015 | 70174 | 34 | DONE → C5 6f7a0cd, C10 8b38feb (0014_optimal_jocasta) |
+| S6 | security-reviewer (T5, T6b) | opus | a4712a856a7ef04bc | UNKNOWN | 29408 | 39860 | 6 | approve (0 findings) |
+| S5 | test-writer (T14) | sonnet | a33af98f9100d4a4d | UNKNOWN | 132951 | 91885 | 29 | PARTIAL: 7/8 green, defect: concurrent attach order race (repository.ts:131-140) |
+| S4 | implementer (T14 defect fix) | sonnet | a110c47a5c1cde59f | UNKNOWN | 47613 | 32513 | 5 | DONE → fix f5c2ce4; context.it 8/8 |

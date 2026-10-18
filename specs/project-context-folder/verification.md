@@ -1,9 +1,10 @@
 # Verification — Project Context Folder (Key CTX)
 
-- **Verifier:** plan-verifier (S7), 2026-10-18 · **Status:** gaps to close (approval-gated tasks not implemented)
+- **Verifier:** plan-verifier (S7), 2026-10-18 · **Status:** gaps to close (T15a–d, T16 approval-gated; AC-67 manual)
 - **Scope:** spec `specs/project-context-folder/spec.md` (76 ACs) · tasks T1, T2, T3, T4, T6a, T7, T8, T9, T10, T11, T12, T13 · base `dc893e0..d35321e`. No uncommitted source changes.
 - **Reviews (S6):** architecture-reviewer — approve (1 suggestion: client `MAX_ATTACHMENTS = 10` mirrors server L7); security-reviewer — approve (0 findings).
-- **Summary:** PASS 65 / PARTIAL 7 / MISSING 4.
+- **Summary:** PASS 73 / PARTIAL 1 / MISSING 2 (updated after T5, T6b and T14; see the T14 section).
+- **Initial S7 summary:** PASS 65 / PARTIAL 7 / MISSING 4.
 
 ## Matrix
 
@@ -13,7 +14,7 @@ Commit key: C1=a029fcd (T1), C3=a3f5f89 (T3), C4=585c53c (T4), C6=4c7aed8 (T6a),
 |---|---|---|---|---|---|---|
 | 01 | T4 | src/modules/context/discovery.ts | "AC-CTX-01 order" context-discovery.test.ts:40 | C4 | PASS | |
 | 02 | T4,T7 | context/{constants,discovery,service}.ts | discovery:62; routes:93 | C4,C7 | PASS | |
-| 03 | T3,T7 | context/{helpers,service}.ts (`planRootsUpsert`) | helpers:66; routes:65 | C3,C7 | PARTIAL | In-memory store only; Drizzle upsert T6b and `.it` test T14 blocked: approval |
+| 03 | T3,T7,T6b,T14 | context/{helpers,service,repository}.ts | helpers:66; routes:65; server/test/context.it.test.ts "AC-CTX-03 roots save/read…concurrent saves leave one workspace-level row" | C3,C7,C10,C14 | PASS | real Drizzle upsert under advisory lock |
 | 04 | T3,T7 | context/helpers.ts | routes:74 | C3,C7 | PASS | |
 | 05 | T4 | discovery.ts | discovery:71, :90 | C4 | PASS | |
 | 06 | T4 | discovery.ts | discovery:83, :97 | C4 | PASS | symlink test skipIf-guarded on Windows |
@@ -24,12 +25,12 @@ Commit key: C1=a029fcd (T1), C3=a3f5f89 (T3), C4=585c53c (T4), C6=4c7aed8 (T6a),
 | 11 | T7 | service.ts | routes:156 | C7 | PASS | |
 | 12 | T10,T11 | client ContextView.tsx, client/src/vendor/ui/nav.ts | ContextView.test.tsx:72 | C11/12 | PASS | |
 | 13 | T7,T11 | service.ts; ContextView.tsx | routes:98; ContextView.test.tsx:115 | C7,C11/12 | PASS | |
-| 14 | T6a,T7,T12 | service.ts, types.ts | routes:229; AgentAttachments.test.tsx:59 | C6,C7,C11/12 | PARTIAL | real table/repository blocked (T5, T6b) |
+| 14 | T5,T6a,T6b,T7,T12,T14 | schema/project-context.ts, repository.ts, service.ts | routes:229; AgentAttachments.test.tsx:59; server/test/context.it.test.ts (migration, agent/skill CRUD, concurrent attaches) | C5,C6,C7,C10,C11/12,C14,fix | PASS | concurrent-order defect found and fixed (f5c2ce4) |
 | 15 | T7 | service.ts | routes:246 | C7 | PASS | service level, in-memory store |
 | 16 | T8,T9 | for-run.ts | context-for-run.test.ts:81; run-executor-context.test.ts:430 | C8,C9 | PASS | |
 | 17 | T7 | service.ts | routes:274 | C7 | PASS | |
 | 18 | T7 | service.ts | routes:291 | C7 | PASS | |
-| 19 | T14 | — | — | — | MISSING | blocked: approval (T5, T14) |
+| 19 | T14 | repository.ts, run-executor.ts | server/test/context.it.test.ts "AC-CTX-19 attachment/settings rows and run_traces hold paths only" | C14 | PASS | |
 | 20 | T9 | run-executor.ts | run-executor-context.test.ts:320 | C9 | PASS | |
 | 21 | T8,T9 | for-run.ts | for-run:74 | C8,C9 | PASS | |
 | 22 | T9 | run-executor.ts | run-executor-context.test.ts:289 | C9 | PASS | |
@@ -40,7 +41,7 @@ Commit key: C1=a029fcd (T1), C3=a3f5f89 (T3), C4=585c53c (T4), C6=4c7aed8 (T6a),
 | 27 | T2 | same | project-context.test.ts:40 | C2 | PASS | |
 | 28 | T8 | for-run.ts | for-run:165 | C8 | PASS | |
 | 29 | T4,T8 | read.ts, for-run.ts | context-read.test.ts:71, :79, :86; for-run:180 | C4,C8 | PASS | |
-| 30 | T7,T14 | service.ts | routes:204, :338 (unit) | C7 | PARTIAL | spec requires integration (T14, blocked: approval) |
+| 30 | T7,T14 | service.ts, repository.ts | routes:204, :338; server/test/context.it.test.ts "AC-CTX-30 another workspace … 404" | C7,C14 | PASS | |
 | 31 | T4,T7 | read.ts | context-read.test.ts:91; routes:131 | C4,C7 | PASS | |
 | 32 | T3,T4 | helpers.ts, discovery.ts | helpers:59; discovery:151 | C3,C4 | PASS | attach/injection paths share `normalizeContextPath` |
 | 33 | T9 | run-executor.ts | run-executor-context.test.ts:332 | C9 | PASS | |
@@ -55,7 +56,7 @@ Commit key: C1=a029fcd (T1), C3=a3f5f89 (T3), C4=585c53c (T4), C6=4c7aed8 (T6a),
 | 42 | T4,T7 | discovery.ts | discovery:143; routes:106 | C4,C7 | PASS | |
 | 43 | T7,T12 | service.ts; ContextDocStatus | routes:324; AgentAttachments.test.tsx:85 | C7,C11/12 | PASS | |
 | 44 | T2 | reviewer-core prompt (unchanged) | project-context.test.ts:63 | C2 | PASS | |
-| 45 | T14 | — | — (AC-70 covers the marker path as unit) | — | MISSING | blocked: approval (T5, T6b, T14) |
+| 45 | T14 | run-executor.ts, for-run.ts, repository.ts | server/test/context.it.test.ts "AC-CTX-45 marker reaches the provider inside spec-0; persisted trace has placeholders only" | C14 | PASS | MockLLMProvider only |
 | 46 | T15a–d | — | — | — | MISSING | blocked: approval (seed, e2e.sh, flow, e2e run) |
 | 47 | T4 | discovery.ts | discovery:123 | C4 | PASS | |
 | 48 | T4 | discovery.ts | discovery:133 | C4 | PASS | |
@@ -65,10 +66,10 @@ Commit key: C1=a029fcd (T1), C3=a3f5f89 (T3), C4=585c53c (T4), C6=4c7aed8 (T6a),
 | 52 | T11 | DocPreview.tsx | ContextView.test.tsx:90 | C11/12 | PASS | |
 | 53 | T10,T11 | client/src/lib/hooks/context.ts | ContextView.test.tsx:106 | C11/12 | PASS | |
 | 54 | T8,T9 | for-run.ts | for-run:201; run-executor-context.test.ts:405, :415 | C8,C9 | PASS | |
-| 55 | T7,T12 | service.ts, types.ts | routes:237; ContextTab.test.tsx:52 | C7,C11/12 | PARTIAL | as AC-14 |
+| 55 | T5,T6b,T7,T12,T14 | service.ts, repository.ts | routes:237; ContextTab.test.tsx:52; server/test/context.it.test.ts skill attachment CRUD | C7,C10,C11/12,C14 | PASS | |
 | 56 | T8 | for-run.ts | for-run:99 | C8 | PASS | |
 | 57 | T3,T7 | helpers.ts | helpers:13; routes:257 | C3,C7 | PASS | |
-| 58 | T7 | service.ts | routes:265 | C7 | PARTIAL | unique index / `onConflictDoNothing` are T5, T6b |
+| 58 | T5,T6b,T7,T14 | unique index + onConflictDoNothing | routes:265; server/test/context.it.test.ts CRUD (re-attach 200, same id) | C5,C7,C10,C14 | PASS | |
 | 59 | T8 | for-run.ts | for-run:110 | C8 | PASS | |
 | 60 | T7,T8 | helpers.ts (`isUnderRoots`), for-run.ts | for-run:213; routes:324 | C7,C8 | PASS | |
 | 61 | T7 | service.ts | routes:303 | C7 | PASS | |
@@ -79,7 +80,7 @@ Commit key: C1=a029fcd (T1), C3=a3f5f89 (T3), C4=585c53c (T4), C6=4c7aed8 (T6a),
 | 66 | T4,T8 | read.ts, for-run.ts | context-read.test.ts:46; for-run:152 | C4,C8 | PASS | |
 | 67 | T3 | context/constants.ts | AC-67 grep (clean) | C3 | PARTIAL | manual code-review AC; human confirmation pending |
 | 68 | T16 | — | — | — | MISSING | blocked: approval (paid, manual) |
-| 69 | T6a,T7 | types.ts, service.ts | routes:310 | C6,C7 | PARTIAL | write shape on in-memory store; Drizzle repo T6b |
+| 69 | T5,T6a,T6b,T7,T14 | schema/project-context.ts (no content column) | routes:310; server/test/context.it.test.ts AC-CTX-19 rows check | C5,C6,C7,C10,C14 | PASS | |
 | 70 | T9 | run-executor.ts, for-run.ts | run-executor-context.test.ts:188 (single-pass), :202 (map-reduce) | C9 | PASS | |
 | 71 | T9 | run-executor.ts | run-executor-context.test.ts:237, :259 | C9 | PASS | |
 | 72 | T8,T9 | for-run.ts (`redactAssemblyForTrace`) | for-run:297; run-executor-context.test.ts:276 | C8,C9 | PASS | |
@@ -130,3 +131,14 @@ No `server/src/db/migrations/**`, `server/src/db/schema/*.ts`, lockfiles, `packa
 - No integration, e2e or app run. Client RTL ACs (12, 13, 37, 43, 52, 53, 55) pass on test evidence only; pages not seen in a browser.
 - Per-AC tests confirmed by title and green totals; not every assertion body read. AC-71 byte-identity and AC-29 Windows symlink coverage not independently confirmed.
 - Commit column derived from commit messages and file lists, not `git log -- <file>` per AC.
+
+## Update after T5, T6b and T14 (main agent, 2026-10-18)
+
+Rows 03, 14, 19, 30, 45, 55, 58, 69 updated from the evidence below; the remaining rows are unchanged from the plan-verifier report.
+
+- T5 migration `0014_optimal_jocasta.sql` (6f7a0cd), applied by the user to their DB; T6b Drizzle `ContextRepository` (8b38feb). Security review of the range: approve, 0 findings.
+- T14 `server/test/context.it.test.ts` (1db708b): Testcontainers `pgvector/pgvector:pg16`, migrations applied to the container only, run with the guard `DATABASE_URL=postgres://guard@127.0.0.1:1/do_not_use`, MockLLMProvider + MockGitHubClient.
+- First run: 7 passed, 1 failed — concurrent attaches got orders `[1,1,1,2,2,2,2,2]` (`insertAttachment` max+1 unserialized). Fixed in f5c2ce4 (transaction + per-owner `pg_advisory_xact_lock`).
+- Re-run (verbose, main agent): `cd server && DATABASE_URL=postgres://guard@127.0.0.1:1/do_not_use pnpm exec vitest run test/context.it.test.ts` → 1 file, **8 passed**, 0 skipped. Server typecheck pass; server unit 552 passed, 3 skipped.
+
+Remaining: AC-46 (T15a–d: seed, e2e.sh, e2e-web.yml, e2e run — approval), AC-68 (T16 paid manual — approval), AC-67 (manual code review confirmation), manual UI check.
