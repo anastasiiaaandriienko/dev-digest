@@ -31,3 +31,11 @@
 | S3 | implementation-planner (MODE: REVIEW, A1) | sonnet | a3deb8d64757fa634 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | approve with changes (2 major, 5 minor) → applied |
 | S3 | implementation-planner (MODE: REVIEW, A1) | sonnet | a3deb8d64757fa634 | UNKNOWN | 94038 | 58022 | 23 | approve with changes (2 major, 5 minor) → applied |
 | G2 | main agent | — | — | 2026-10-19 | — | — | — | plan-a1 Approved; T1–T10 incl. Q19 granted; running AC-101 not granted |
+| S4 | implementer (A1 T1–T3) | sonnet | aef1800edb719d220 | UNKNOWN | 392638 | 117417 | 50 | DONE → C1 d81e847, C2 97cf6ac, C3 677d2df; client 768 tests |
+| S4 | implementer (A1 T5–T8) | sonnet | a8e9876be2652dd39 | UNKNOWN | 118905 | 92544 | 35 | DONE → C5 940c9a2, C6 6b7fe0b, C7 780d9b6, C8 455cf1e; server 599 passed |
+| S5 | test-writer (A1 T4) | sonnet | aad5355df987d3bd5 | UNKNOWN | 93578 | 65171 | 19 | DONE → C4 a9cb05e; client 772 tests |
+| S4 | implementer (A1 T9) | sonnet | abdf8c51fe8b1a043 | UNKNOWN | 212347 | 73046 | 24 | DONE → C9 f909d85; client 777, build pass |
+| S5 | test-writer (A1 T10, written not run) | sonnet | a889088f2e13527f5 | UNKNOWN | 55273 | 56790 | 12 | DONE → C10 499a67c (not run) |
+| S6 | security-reviewer (A1) | opus | a3ca2018bbc8425a3 | UNKNOWN | 46938 | 49536 | 9 | approve (0 findings) |
+| S6 | architecture-reviewer (A1) | opus | aaaa3b7f7059721e6 | UNKNOWN | 88780 | 65618 | 15 | approve (1 suggestion: reuse MAX_ATTACHMENTS) |
+| S7 | plan-verifier (A1) | sonnet | a5eb349c9c2f6be5c | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | PASS 29 / PARTIAL 1 (AC-101 not run) / MISSING 0 |

@@ -177,3 +177,47 @@ Remaining: AC-46 e2e run (T15d — approval), AC-68 (T16 paid manual — approva
 Read-only code review: L1–L9 and `DEFAULT_ROOTS` are declared only in `server/src/modules/context/constants.ts:8-27` and referenced only by `server/src/modules/context/*` (e.g. `for-run.ts:3-12`, `read.ts:4`, `helpers.ts:2`, `service.ts:12,211-212`); `server/src/modules/reviews/run-executor.ts:19-27` imports only `for-run.js` and `types.js`; no PR Brief module exists in `server/src/modules/` and no brief code path imports context. Notes (not violations): `server/src/db/seed.ts:12` imports the `placeholderLine` formatter; `client/src/components/context-doc-attachments/constants.ts:2` mirrors `MAX_ATTACHMENTS` as a UI hint. Layering: `context/routes.ts:1-15` and `service.ts:1-16` import no `db/`; only `repository.ts:1-3` uses Drizzle. The user confirmed AC-67 → PASS.
 
 Working DB (:5432, read-only check): 15 migrations, last `created_at` = 0014 journal `when` (1792319333871); `agent_context_docs` and `skill_context_docs` columns, unique indexes and FKs match `schema/project-context.ts`.
+
+## Amendment A1 — Agent editor Context tab (plan-verifier, 2026-10-19)
+
+- **Scope:** AC-CTX-77..106 · plan `specs/project-context-folder/plan-a1.md` (Approved, G2) · range `7cc8c57..fde760f`.
+- **Commits:** C1 d81e847, C2 97cf6ac, C3 677d2df, C4 a9cb05e, C5 940c9a2, C6 6b7fe0b, C7 780d9b6, C8 455cf1e, C9 f909d85, C10 499a67c (AC-101 integration test, written, not run), review fix fde760f (shared `MAX_ATTACHMENTS`).
+- **Reviews:** architecture-reviewer — approve (1 suggestion, applied in fde760f); security-reviewer — approve (0 findings).
+- **Summary: PASS 29 / PARTIAL 1 / MISSING 0.** CT = `client/src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/`.
+
+| AC | Task | Test (green) | Commit | Status | Note |
+|---|---|---|---|---|---|
+| 77 | T3 | AgentEditor.test.tsx:74 | 677d2df | PASS | three tabs |
+| 78 | T3 | AgentEditorView.test.tsx:186 | 677d2df | PASS | |
+| 79 | T3 | AgentEditorView.test.tsx:196 | 677d2df | PASS | |
+| 80 | T3 | AgentEditor.test.tsx:82; AgentEditorView.test.tsx:203 | 677d2df | PASS | `hidden={tab !== "config"}` |
+| 81 | T3 | AgentEditorView.test.tsx:215 | 677d2df | PASS | |
+| 82 | T2 | CT ContextTab.test.tsx:99; helpers.test.ts:15,24 | 97cf6ac | PASS | |
+| 83 | T2 | ContextTab.test.tsx:110; helpers.test.ts:29 | 97cf6ac | PASS | |
+| 84 | T2 | ContextTab.test.tsx:119 | 97cf6ac | PASS | |
+| 85 | T2,T4 | ContextTab.test.tsx:125; ContextTab.sync.test.tsx:129 | 97cf6ac, a9cb05e | PASS | |
+| 86 | T2,T4 | ContextTab.test.tsx:133; ContextTab.sync.test.tsx:143 | 97cf6ac, a9cb05e | PASS | |
+| 87 | T2 | ContextTab.test.tsx:142 | 97cf6ac, fde760f | PASS | shared `MAX_ATTACHMENTS` |
+| 88 | T2 | ContextTab.test.tsx:152 | 97cf6ac | PASS | |
+| 89 | T1,T2 | ContextTab.test.tsx:161 | d81e847, 97cf6ac | PASS | DocPreview moved unchanged (R100) |
+| 90 | T2 | ContextTab.test.tsx:171; helpers.test.ts:44 | 97cf6ac | PASS | |
+| 91 | T2 | ContextTab.test.tsx:178 | 97cf6ac | PASS | |
+| 92 | T2 | ContextTab.test.tsx:184 | 97cf6ac | PASS | |
+| 93 | T2 | ContextTab.test.tsx:194 | 97cf6ac | PASS | |
+| 94 | T2,T9 | ContextTab.test.tsx:201, 249 | 97cf6ac, f909d85 | PASS | reorder kept when not cloned (A-4) |
+| 95 | T5,T9 | ContextTab.sync.test.tsx:199; helpers.test.ts:55 | 940c9a2, f909d85 | PASS | one PUT with all ids |
+| 96 | T9 | ContextTab.test.tsx:224 | f909d85 | PASS | |
+| 97 | T9 | ContextTab.sync.test.tsx:222 | f909d85 | PASS | |
+| 98 | T5–T7 | server/test/context-routes.test.ts:367 | 940c9a2, 6b7fe0b, 780d9b6 | PASS | agents + skills |
+| 99 | T6,T7 | context-routes.test.ts:382 | 6b7fe0b, 780d9b6 | PASS | 422, nothing written |
+| 100 | T7 | context-routes.test.ts:404 | 780d9b6 | PASS | 404 before any write |
+| 101 | T6,T10 | server/test/context.it.test.ts:269 | 6b7fe0b, 499a67c | PARTIAL | written, NOT run (approval); lock sharing confirmed by code reading |
+| 102 | T4 | ContextTab.sync.test.tsx:158 | a9cb05e | PASS | |
+| 103 | T8 | server/test/run-executor-context.test.ts:346 | 455cf1e | PASS | |
+| 104 | T1,T4 | ContextTab.sync.test.tsx:173 + 3 existing tests unedited in range | d81e847, a9cb05e | PASS | |
+| 105 | T2 | ContextTab.test.tsx:216; helpers.test.ts:50 | 97cf6ac | PASS | kB, no tokens |
+| 106 | T5,T7,T9 | manual diff review | 940c9a2, 780d9b6, f909d85 | PASS | one new route, one new contract, one new hook; `ContextListItem`/`ContextAttachment` unchanged |
+
+- **Checks run (sequential):** client typecheck + 88 files / 777 tests PASS; server typecheck PASS; server unit 54 files, 599 passed, 3 skipped. No integration/e2e, no DB, no paid calls. Unit suites show no regression for AC-CTX-01..76.
+- **Protected paths:** no migrations, schema, lockfiles, `package.json`; both contract copies changed identically under the Q19 approval.
+- **Gaps:** run AC-CTX-101 (`cd server && DATABASE_URL=postgres://guard@127.0.0.1:1/do_not_use pnpm exec vitest run test/context.it.test.ts`, approval); manual UI check `/agents/<id>?tab=context` (attach, reorder, preview).
