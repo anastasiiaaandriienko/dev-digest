@@ -14,7 +14,7 @@ import { useContextList, useContextRoots, useUpdateContextRoots } from "@/lib/ho
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
 import { notify } from "@/lib/toast";
 import { AgentAttachments } from "../AgentAttachments";
-import { DocPreview } from "../DocPreview";
+import { DocPreview } from "@/components/context-doc-preview";
 import { RootsEditor } from "../RootsEditor";
 import { SEARCH_DEBOUNCE_MS } from "./constants";
 import { formatKb } from "./helpers";
