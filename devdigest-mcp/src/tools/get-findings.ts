@@ -21,6 +21,8 @@ export const getFindingsOutput = {
   selection: z.enum(['latest_per_agent', 'all_runs']),
   /** More reviews matched than were returned (all_runs only). */
   truncated: z.boolean(),
+  /** Findings across ALL matching reviews, before the review and per-review caps. */
+  total_findings: z.number(),
   reviews: z.array(ReviewOut),
 };
 
@@ -58,17 +60,20 @@ export async function getFindings(deps: ToolDeps, input: PrRefArgs & { all_runs?
     const allRuns = input.all_runs === true;
     const matching = allRuns ? newestFirst(all) : latestPerAgent(all);
     const truncated = allRuns && matching.length > MAX_REVIEWS;
+    const totalFindings = matching.reduce((n, r) => n + r.findings.length, 0);
     const reviews = matching.slice(0, MAX_REVIEWS).map(toReviewOut);
 
     const lines: string[] = [];
     const resolved = resolvedLine(pr);
     if (resolved) lines.push(resolved);
+    if (reviews.length > 0) lines.push(`Total findings: ${totalFindings}`);
     lines.push(reviews.length > 0 ? reviews.map(reviewText).join('\n\n') : 'No completed reviews found for this PR.');
     if (truncated) lines.push(`Only the newest ${MAX_REVIEWS} reviews are listed.`);
     return ok(lines.join('\n'), {
       pr_id: pr.prId,
       selection: allRuns ? 'all_runs' : 'latest_per_agent',
       truncated,
+      total_findings: totalFindings,
       reviews,
     });
   } catch (err) {

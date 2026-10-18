@@ -13,9 +13,9 @@ stays in `server/`.
 
 | Tool | API it calls | Effect |
 |---|---|---|
-| `list_agents` | `GET /agents` | read-only — ids, names, model, enabled state (no system prompts) |
+| `list_agents` | `GET /agents` | read-only — each agent is exactly `id`, `name`, `description`, `model`, `enabled` (no provider, no system prompts) |
 | `run_agent_on_pr` | `POST /pulls/:id/review`, then polls `GET /pulls/:id/runs`, then `GET /pulls/:id/reviews` | **starts a review run: writes runs/reviews/findings and makes a PAID LLM call** |
-| `get_findings` | `GET /pulls/:id/reviews` | read-only — verdict + findings: the latest review of each agent, or with `all_runs` every completed review (newest first, ≤ 50) |
+| `get_findings` | `GET /pulls/:id/reviews` | read-only — verdict + findings: the latest review of each agent, or with `all_runs` every completed review (newest first, ≤ 50). `total_findings` counts the findings of every selected review, including those cut by the 50-review and 50-findings-per-review caps |
 | `get_conventions` | `GET /repos/:id/conventions` | read-only — accepted (default), pending, rejected or all rules from L02; never starts a scan |
 | `get_blast_radius` | `GET /pulls/:id/blast` | read-only — HW-04 impact map from the repo-intel index: changed symbols, direct callers (file:line, GitHub links pinned to the **indexed** commit), potentially affected endpoints / crons (file-level import graph), totals, `degraded` + `reason`, `source`. No GitHub sync, no LLM |
 
@@ -124,10 +124,50 @@ npx @modelcontextprotocol/inspector --cli npx tsx src/index.ts --method tools/ca
 Pass a different API with `-e DEVDIGEST_API_BASE=http://localhost:3001` before the command.
 Don't call `run_agent_on_pr` from the Inspector unless you mean to pay for a review.
 
+## Connect to Claude Code (project scope — default after cloning)
+
+The repo root ships a portable [`.mcp.json`](../.mcp.json), so Claude Code discovers the `devdigest`
+server without `claude mcp add`. It has no secrets and no absolute paths:
+
+```json
+"devdigest": {
+  "type": "stdio",
+  "command": "node",
+  "args": ["devdigest-mcp/node_modules/tsx/dist/cli.mjs", "devdigest-mcp/src/index.ts"],
+  "env": { "DEVDIGEST_API_BASE": "${DEVDIGEST_API_BASE:-http://localhost:3001}" }
+}
+```
+
+After cloning:
+
+```sh
+cd devdigest-mcp && npm ci      # once: installs tsx and the MCP SDK (the args point into node_modules)
+cd .. && claude                 # start Claude Code from the REPO ROOT and approve the "devdigest" project server
+claude mcp list                 # devdigest: node devdigest-mcp/… - ✔ Connected
+```
+
+- **Working directory:** the paths are relative to the repo root. Claude Code starts project-scope stdio
+  servers in the directory it was launched from, so launch it from the root, not from a sub-folder.
+- **`node`, not `npx`:** `node` is a real executable on Windows, macOS and Linux, so no `cmd /c` wrapper
+  is needed, nothing is downloaded and no npm banner reaches stdout (the MCP channel).
+- **API base:** defaults to `http://localhost:3001`. To point elsewhere, set `DEVDIGEST_API_BASE` in the
+  environment before starting `claude` (PowerShell: `$env:DEVDIGEST_API_BASE = "http://host:3001"`). An
+  invalid value makes the server exit at start-up, and `claude mcp list` shows it as failed.
+- **Approval:** project servers stay `⏸ Pending approval` until you accept them in an interactive
+  `claude` session (or via `/mcp`). `claude mcp list` alone does not approve them.
+- **Precedence:** a `local`-scope server with the same name (`devdigest`, from the manual setup below)
+  overrides this one. Remove it with `claude mcp remove devdigest -s local` to use the shared config.
+- Personal servers (IDE bridges, other tools) belong in `local` scope, not in this file.
+
+Verified on Windows 11 with Claude Code 2.1.302: from a fresh directory holding only `.mcp.json` and
+`devdigest-mcp/`, `claude mcp list` reports the server as `Project config` / pending approval, and
+`claude -p "/context" --strict-mcp-config --mcp-config .mcp.json` (a local command, no model call)
+lists all five `mcp__devdigest__*` tools both with `DEVDIGEST_API_BASE` unset and with a valid override.
+
 ## Connect to Claude Code (local scope)
 
 `local` scope stores the server in your `~/.claude.json` for this project only (nothing is committed).
-Use an absolute path:
+Use it to override the shared config, e.g. with a different API base. Use an absolute path:
 
 ```sh
 claude mcp add devdigest -s local --transport stdio \

@@ -4,15 +4,13 @@ import type { ToolDeps } from './deps.js';
 
 export const LIST_AGENTS = 'list_agents';
 
+/** Public contract: exactly these five fields; anything else the API returns is dropped. */
 const AgentOut = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string().nullable(),
-  enabled: z.boolean(),
-  provider: z.string().nullable(),
   model: z.string().nullable(),
-  strategy: z.string().nullable(),
-  skill_count: z.number().nullable(),
+  enabled: z.boolean(),
 });
 
 export const listAgentsInput = {
@@ -41,16 +39,13 @@ export async function listAgents(deps: ToolDeps, input: { enabled_only?: boolean
         id: a.id,
         name: a.name,
         description: clip(a.description, 300),
-        enabled: a.enabled,
-        provider: a.provider ?? null,
         model: a.model ?? null,
-        strategy: a.strategy ?? null,
-        skill_count: a.skill_count ?? null,
+        enabled: a.enabled,
       }));
     const text =
       agents.length === 0
         ? 'No agents found.'
-        : agents.map((a) => `- ${a.name} (${a.id}) — ${a.enabled ? 'enabled' : 'disabled'}, ${a.provider ?? '?'}/${a.model ?? '?'}`).join('\n');
+        : agents.map((a) => `- ${a.name} (${a.id}) — ${a.enabled ? 'enabled' : 'disabled'}, model ${a.model ?? '?'}`).join('\n');
     return ok(text, { count: agents.length, agents });
   } catch (err) {
     return fail(err);
