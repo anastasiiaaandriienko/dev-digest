@@ -36,3 +36,8 @@ export function parsePatch(patch: string | null | undefined): Line[] {
   }
   return out;
 }
+
+/** True when `line` is a rendered NEW-side line (added or context) of the file's patch. */
+export function hasNewSideLine(patch: string | null | undefined, line: number): boolean {
+  return parsePatch(patch).some((ln) => (ln.kind === "add" || ln.kind === "ctx") && ln.newNo === line);
+}

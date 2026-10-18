@@ -36,10 +36,13 @@ export function FileCard({
   file,
   commenting,
   findings,
+  focused = false,
 }: {
   file: PrFile;
   commenting?: DiffCommentApi;
   findings?: DiffFindingsApi;
+  /** Deep-linked file: opens regardless of size and scrolls into view. */
+  focused?: boolean;
 }) {
   const t = useTranslations("shell");
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
@@ -56,7 +59,13 @@ export function FileCard({
   // Default: open when small OR when it has findings; a manual toggle wins.
   const [userOpen, setUserOpen] = React.useState<boolean | null>(null);
   const open =
-    userOpen ?? ((file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES || hasFindings);
+    userOpen ??
+    (focused || (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES || hasFindings);
+
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (focused) cardRef.current?.scrollIntoView?.({ block: "start" });
+  }, [focused]);
 
   // Group this file's comments into threads, then split into ones we can anchor
   // to a rendered line vs. "outdated" (GitHub dropped the line / it's not here).
@@ -74,7 +83,7 @@ export function FileCard({
     : 0;
 
   return (
-    <div style={s.fileCard}>
+    <div ref={cardRef} style={s.fileCard}>
       <div onClick={() => setUserOpen(!open)} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />

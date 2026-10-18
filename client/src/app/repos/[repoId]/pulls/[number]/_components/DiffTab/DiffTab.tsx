@@ -3,7 +3,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { SectionLabel, Button } from "@devdigest/ui";
-import { DiffViewer, UnanchoredFindings, type DiffCommentApi, type DiffFindingsApi } from "@/components/diff-viewer";
+import { DiffViewer, UnanchoredFindings, hasNewSideLine, type DiffCommentApi, type DiffFindingsApi } from "@/components/diff-viewer";
 import { usePrComments, useCreatePrComment } from "@/lib/hooks/reviews";
 import { buildSmartGroups, defaultGroupOpen, type SmartGroupKey } from "@/lib/smart-diff";
 import { notify } from "@/lib/toast";
@@ -25,6 +25,9 @@ interface DiffTabProps {
   agentNames?: Record<string, string | null>;
   repoFullName?: string | null;
   headSha?: string | null;
+  /** Deep link from the PR Brief: file path (+ new-side line) to open and scroll to. */
+  focusFile?: string | null;
+  focusLine?: number | null;
 }
 
 const NO_FINDINGS: FindingRecord[] = [];
@@ -38,6 +41,8 @@ export function DiffTab({
   agentNames,
   repoFullName,
   headSha,
+  focusFile = null,
+  focusLine = null,
 }: DiffTabProps) {
   const t = useTranslations("prReview");
   const { data: comments } = usePrComments(prId);
@@ -92,6 +97,17 @@ export function DiffTab({
     return findings.filter((f) => !paths.has(f.file));
   }, [files, findings]);
 
+  // Deep-link notice: the file is not in the diff, or the line is not a rendered new-side line.
+  const focusNotice = React.useMemo(() => {
+    if (!focusFile) return null;
+    const file = files.find((f) => f.path === focusFile);
+    if (!file) return { kind: "missingFile" as const, path: focusFile };
+    if (focusLine != null && !hasNewSideLine(file.patch, focusLine)) {
+      return { kind: "missingLine" as const, path: focusFile, line: focusLine };
+    }
+    return null;
+  }, [files, focusFile, focusLine]);
+
   const groups = React.useMemo(() => buildSmartGroups(files, findings), [files, findings]);
   const totals = React.useMemo(
     () =>
@@ -134,13 +150,20 @@ export function DiffTab({
       >
         Files changed · {filesCount} files
       </SectionLabel>
+      {focusNotice && (
+        <div role="status" style={s.notice}>
+          {focusNotice.kind === "missingFile"
+            ? t("smartDiff.focusMissingFile", { path: focusNotice.path })
+            : t("smartDiff.focusMissingLine", { path: focusNotice.path, line: focusNotice.line })}
+        </div>
+      )}
       <div style={s.stats}>
         {order === "smart" && <>{t("smartDiff.groupedByRole")} · </>}
         {t("smartDiff.diffStats", { count: files.length, ...totals })}
       </div>
 
       {order === "original" ? (
-        <DiffViewer files={files} commenting={commenting} findings={findingsApi} />
+        <DiffViewer files={files} commenting={commenting} findings={findingsApi} focusPath={focusFile} />
       ) : (
         <div style={s.groups}>
           {groups.map((g) => (
@@ -149,15 +172,21 @@ export function DiffTab({
               groupKey={g.key}
               fileCount={g.files.length}
               filesWithFindings={g.filesWithFindings}
-              open={groupOpen[g.key] ?? defaultGroupOpen(g.key, g.filesWithFindings)}
+              open={
+                groupOpen[g.key] ??
+                (g.files.some((f) => f.path === focusFile) || defaultGroupOpen(g.key, g.filesWithFindings))
+              }
               onToggle={() =>
                 setGroupOpen((prev) => ({
                   ...prev,
-                  [g.key]: !(prev[g.key] ?? defaultGroupOpen(g.key, g.filesWithFindings)),
+                  [g.key]: !(
+                    prev[g.key] ??
+                    (g.files.some((f) => f.path === focusFile) || defaultGroupOpen(g.key, g.filesWithFindings))
+                  ),
                 }))
               }
             >
-              <DiffViewer files={g.files} commenting={commenting} findings={findingsApi} />
+              <DiffViewer files={g.files} commenting={commenting} findings={findingsApi} focusPath={focusFile} />
             </SmartGroup>
           ))}
         </div>

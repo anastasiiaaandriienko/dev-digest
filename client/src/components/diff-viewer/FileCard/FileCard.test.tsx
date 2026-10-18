@@ -144,3 +144,24 @@ describe("without the findings prop (Original behaviour)", () => {
     expect(screen.getByTestId("card-f1")).toBeInTheDocument();
   });
 });
+
+describe("FileCard focus (deep link)", () => {
+  it("AC-BRIEF-36 focused card opens despite size", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      const big = prFile("big.ts", { additions: 900, deletions: 0 });
+      renderIntl(<FileCard file={big} />);
+      expect(screen.queryByText("added two")).not.toBeInTheDocument();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      cleanup();
+
+      renderIntl(<DiffViewer files={[big, prFile("other.ts", { additions: 900 })]} focusPath="big.ts" />);
+      expect(screen.getAllByText("added two")).toHaveLength(1); // only the focused file opened
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+});
