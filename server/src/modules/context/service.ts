@@ -215,6 +215,27 @@ export class ContextService {
     return { attachment: await this.toDto(row, roots, cloneRoot), created };
   }
 
+  /**
+   * Set the full order of one owner's attachments for a repo. `ids` must be
+   * exactly the attached set (checked by the store under its lock). Needs no
+   * clone: statuses of a not-cloned repo come back as `missing`.
+   */
+  async reorder(
+    workspaceId: string,
+    kind: ContextOwnerKind,
+    ownerId: string,
+    repoId: string,
+    ids: readonly string[],
+  ): Promise<ContextAttachment[]> {
+    await this.requireOwner(workspaceId, kind, ownerId);
+    const repo = await this.repoOf(workspaceId, repoId);
+    const rows = await this.store().reorderAttachments({ workspaceId, owner: kind, ownerId, repoId, ids });
+    if (!rows) throw new ValidationError('ids must match the attached documents', { reason: 'reorder set mismatch' });
+    const roots = await this.rootsOf(workspaceId, repoId);
+    const cloneRoot = await this.cloneRootOf(repo);
+    return Promise.all(rows.map((r) => this.toDto(r, roots, cloneRoot)));
+  }
+
   async detach(workspaceId: string, kind: ContextOwnerKind, ownerId: string, docId: string): Promise<void> {
     await this.requireOwner(workspaceId, kind, ownerId);
     const ok = await this.store().deleteAttachment(workspaceId, kind, ownerId, docId);

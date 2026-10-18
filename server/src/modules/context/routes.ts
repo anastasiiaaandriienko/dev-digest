@@ -6,6 +6,7 @@ import {
   ContextAttachment,
   ContextFile,
   ContextList,
+  ContextReorderRequest,
   ContextRoots,
   ContextRootsUpdate,
 } from '@devdigest/shared';
@@ -26,6 +27,7 @@ const DocParams = z.object({ id: z.string().uuid(), docId: z.string().uuid() });
  *   GET     /repos/:id/context?q=            list (metadata only)
  *   GET     /repos/:id/context/file?path=    read-only preview
  *   GET|POST /agents|skills/:id/context-docs?repo_id=
+ *   PUT     /agents|skills/:id/context-docs/order?repo_id=   body { ids }
  *   DELETE  /agents|skills/:id/context-docs/:docId
  */
 export default async function contextRoutes(appBase: FastifyInstance) {
@@ -103,6 +105,22 @@ export default async function contextRoutes(appBase: FastifyInstance) {
         );
         reply.status(created ? 201 : 200);
         return attachment;
+      },
+    );
+
+    app.put(
+      `/${prefix}/:id/context-docs/order`,
+      {
+        schema: {
+          params: IdParams,
+          querystring: RepoQuery,
+          body: ContextReorderRequest,
+          response: { 200: z.array(ContextAttachment) },
+        },
+      },
+      async (req) => {
+        const { workspaceId } = await getContext(app.container, req);
+        return service.reorder(workspaceId, kind, req.params.id, req.query.repo_id, req.body.ids);
       },
     );
 

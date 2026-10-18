@@ -349,4 +349,76 @@ describe('context attachments', () => {
     });
     expect(store.rows).toHaveLength(1);
   });
+
+  describe.each([
+    { prefix: 'agents', id: AGENT, otherId: SKILL, otherPrefix: 'skills' },
+    { prefix: 'skills', id: SKILL, otherId: AGENT, otherPrefix: 'agents' },
+  ])('reorder $prefix', ({ prefix, id, otherId, otherPrefix }) => {
+    const order = (ids: unknown, repo = REPO, ownerId = id, p = prefix) =>
+      app.inject({ method: 'PUT', url: `/${p}/${ownerId}/context-docs/order?repo_id=${repo}`, payload: { ids } });
+    const snapshot = () => JSON.stringify(store.rows);
+    const seed = async () => {
+      const a = (await attach('docs/spec.md', prefix, id)).json();
+      const b = (await attach('docs/other.md', prefix, id)).json();
+      const c = (await attach('specs/a.md', prefix, id)).json();
+      return [a.id, b.id, c.id] as string[];
+    };
+
+    it('AC-CTX-98 reorder stores order 1..n and returns the new order', async () => {
+      const [a, b, c] = await seed();
+      const res = await order([c, a, b]);
+      expect(res.statusCode).toBe(200);
+      expect(res.json().map((x: { id: string }) => x.id)).toEqual([c, a, b]);
+      expect(res.json().map((x: { order: number }) => x.order)).toEqual([1, 2, 3]);
+      expect(res.json()[0]).toMatchObject({ repo_id: REPO, path: 'specs/a.md', status: 'ok' });
+      const list = await app.inject({ method: 'GET', url: docs(prefix, id) });
+      expect(list.json().map((x: { id: string }) => x.id)).toEqual([c, a, b]);
+      // an empty attachment set reorders to an empty list
+      const empty = await order([], REPO, id === AGENT ? SKILL : AGENT, id === AGENT ? 'skills' : 'agents');
+      expect(empty.statusCode).toBe(200);
+      expect(empty.json()).toEqual([]);
+    });
+
+    it('AC-CTX-99 missing/extra/duplicate/unknown/other-owner ids → 422, rows unchanged', async () => {
+      const [a, b, c] = await seed();
+      const foreign = (await attach('docs/spec.md', otherPrefix, otherId)).json().id as string;
+      const unknown = '99999999-9999-4999-8999-999999999999';
+      const before = snapshot();
+      const bodies: unknown[] = [
+        [a, b], // missing
+        [a, b, c, unknown], // extra
+        [a, a, b], // duplicate
+        [a, b, unknown], // unknown
+        [a, b, foreign], // other owner's id
+        [a, b, 'not-a-uuid'],
+        Array.from({ length: 11 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`),
+      ];
+      for (const ids of bodies) {
+        const res = await order(ids);
+        expect(res.statusCode).toBe(422);
+      }
+      expect((await order([a, b, foreign])).json().error.details.reason).toBe('reorder set mismatch');
+      expect(snapshot()).toBe(before);
+    });
+
+    it('AC-CTX-100 agent or repo of another workspace → 404, rows unchanged', async () => {
+      const [a, b, c] = await seed();
+      store.addAgent('w2', '66666666-6666-4666-8666-666666666666');
+      store.addSkill('w2', '77777777-7777-4777-8777-777777777777');
+      const before = snapshot();
+      const foreignRepo = await order([a, b, c], FOREIGN_REPO);
+      expect(foreignRepo.statusCode).toBe(404);
+      const foreignOwner = await order(
+        [a, b, c],
+        REPO,
+        prefix === 'agents' ? '66666666-6666-4666-8666-666666666666' : '77777777-7777-4777-8777-777777777777',
+      );
+      expect(foreignOwner.statusCode).toBe(404);
+      const service = new ContextService({ contextStore: store } as unknown as Container);
+      await expect(
+        service.reorder('w2', id === AGENT ? 'agent' : 'skill', id, REPO, [a, b, c]),
+      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(snapshot()).toBe(before);
+    });
+  });
 });
