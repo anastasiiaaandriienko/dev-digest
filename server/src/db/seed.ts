@@ -9,6 +9,7 @@ import {
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { seedBriefFixture } from './seed-brief.js';
 import { placeholderLine } from '../modules/context/constants.js';
 
 /** Default provider/model for the built-in reviewer agents. */
@@ -177,6 +178,9 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       },
     ]);
   }
+
+  // ---- PR Brief fixture (outside `if (!pr)` so a re-seed adds it too) ----
+  await seedBriefFixture(db, { prId: pr!.id, headSha: pr!.headSha });
 
   // ---- built-in agents (the three starter presets) ----
   // Prompt bodies live in ./seed-prompts.ts (mirrored in docs/agent-prompts/*.md).
