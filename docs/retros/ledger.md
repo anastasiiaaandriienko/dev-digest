@@ -42,3 +42,38 @@ aggregates only — no prompts, code or command output. Entry format:
 - Per-stage main-agent tokens: the main session also contains the audit, HW-04 fixes and Stage 1 work, and `run-log.md` has no start times, so main tokens cannot be split by stage.
 - Duration and tokens of the main agent's T15d e2e work (no notification; logged as UNKNOWN).
 - Deep mode not run (per-subagent tool latency and repeats).
+
+## 2026-10-18 — pr-why-risk-brief (normal)
+- Session: 239b1ab8-8ad6-4e6c-b564-3c04e01d2418 · Window: 2026-10-18T11:56:39Z (commit f8bf83b, end of the previous task) → 2026-10-18T20:11:00Z · Outcome: PASS 47 / PARTIAL 1 (AC-BRIEF-38 manual UI check) / MISSING 1 (AC-BRIEF-42, paid run not approved); 18 commits after f8bf83b
+
+| Metric | Value | Source |
+|---|---|---|
+| Processed tokens (main, per model) | claude-opus-5-5: 117 calls · in 270 · out 115,752 · cache write 1,162,174 · cache read 64,478,568 | retro-metrics |
+| Cache hit ratio | 0.982 | retro-metrics |
+| Tool calls / errors | 97 / 1 (Bash 59/1, Agent 13/0, Read 8/0, SendMessage 5/0, Edit 5/0, Write 4/0, ToolSearch 1/0, TaskStop 1/0, Skill 1/0) | retro-metrics |
+| Turn time | 5,885,433 ms over 35 turns | retro-metrics |
+| Subagents / max concurrency / nested | 13 / 3 / 0 | retro-metrics |
+| Subagent tokens (notifications) | 1,854,120 over 17 logged calls; 1 row UNKNOWN (S7 re-run) | run-log.md |
+| Rework rounds (S3 / S6) | S3: 1 review (approve with changes, 3 major + 11 minor) + 1 planner revision; S6: 0 fix loops (both approve; 1 suggestion fixed in 9feb6b4) | run-log.md |
+
+### Findings (verified)
+- The spec stage needed 5 spec-creator calls after discovery: Q1–Q15, Q16 plus fixed values, then two post-approval amendments (D18 per-attempt token limit, D19 assembly budget 4,500) raised while the plan was being finalised — evidence: run-log S1 rows; commits f28b073, eaf279d.
+- Both spec amendments came from adapter behaviour that no earlier stage read: schema-repair retries sum `tokens_in` and append the raw output + reprompt (`server/src/adapters/llm/openai.ts:96-129`) — evidence: run-log G2 row, D18/D19.
+- The UI gate took four user round-trips because the attached images were design mockups; it was closed by capturing current-state screenshots on the isolated stack — evidence: main-session tool calls (TaskStop 1 after a hung `agent-browser` wait).
+- The largest subagent by processed tokens was the client implementer for T7–T9 (6,118,283; 92 tool calls), then the planner across PLAN + revision (3,573,981; 84 tool calls) — evidence: retro-metrics subagent list.
+- spec-creator's wall-clock (25,940,271 ms) spans five resumes and user think time; its summed notification durations are far lower — evidence: retro-metrics vs run-log rows (179,533 + 129,366 + 52,787 + 88,331 + 53,026 ms).
+- Integration T6 passed first time (16/16). e2e needed one fix: flow 09 asserted the i18n string while CSS uppercases the heading — evidence: run-log T6/T11 rows, commit f269cdf.
+- Architecture and security review ran in parallel (max concurrency 3); no S6 fix loop was needed.
+
+### Optimizations (proposed)
+- In discovery, read the LLM adapter's retry/reprompt path whenever a spec puts a token budget or "one call" rule on a feature — would have avoided the two post-approval amendments (D18, D19) — evidence: Findings 1–2.
+- Ask the user for current-state screenshots with an explicit "running app, not design" note, or offer the isolated-stack capture up front — saves ~3 round-trips — evidence: UI gate finding.
+- Have e2e flow authors check `text-transform` on asserted headings (or assert on non-transformed text) — avoids a failed e2e run — evidence: f269cdf.
+- Split the client implementer batch (T7–T9) into hooks+card and deep-link calls to cap context growth — evidence: 6.1M processed tokens in one call.
+- Record `Started` timestamps in `run-log.md` so retro windows come from the log rather than a commit time — evidence: all `Started` = UNKNOWN.
+
+### UNKNOWN
+- Per-stage main-agent tokens (no start times in run-log; window derived from commit f8bf83b).
+- Duration/tokens of the main agent's T6/T11 runs and the screenshot capture (no notifications).
+- Notification metrics of the S7 plan-verifier re-run (row left UNKNOWN in run-log; notification reported 111,025 ms, 47,105 tokens, 9 tool uses).
+- Deep mode not run.
