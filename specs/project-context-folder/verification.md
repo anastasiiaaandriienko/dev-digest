@@ -183,7 +183,7 @@ Working DB (:5432, read-only check): 15 migrations, last `created_at` = 0014 jou
 - **Scope:** AC-CTX-77..106 · plan `specs/project-context-folder/plan-a1.md` (Approved, G2) · range `7cc8c57..fde760f`.
 - **Commits:** C1 d81e847, C2 97cf6ac, C3 677d2df, C4 a9cb05e, C5 940c9a2, C6 6b7fe0b, C7 780d9b6, C8 455cf1e, C9 f909d85, C10 499a67c (AC-101 integration test, written, not run), review fix fde760f (shared `MAX_ATTACHMENTS`).
 - **Reviews:** architecture-reviewer — approve (1 suggestion, applied in fde760f); security-reviewer — approve (0 findings).
-- **Summary: PASS 29 / PARTIAL 1 / MISSING 0.** CT = `client/src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/`.
+- **Summary: PASS 30 / PARTIAL 0 / MISSING 0** (initially 29/1/0 before the approved AC-101 run). CT = `client/src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/`.
 
 | AC | Task | Test (green) | Commit | Status | Note |
 |---|---|---|---|---|---|
@@ -211,7 +211,7 @@ Working DB (:5432, read-only check): 15 migrations, last `created_at` = 0014 jou
 | 98 | T5–T7 | server/test/context-routes.test.ts:367 | 940c9a2, 6b7fe0b, 780d9b6 | PASS | agents + skills |
 | 99 | T6,T7 | context-routes.test.ts:382 | 6b7fe0b, 780d9b6 | PASS | 422, nothing written |
 | 100 | T7 | context-routes.test.ts:404 | 780d9b6 | PASS | 404 before any write |
-| 101 | T6,T10 | server/test/context.it.test.ts:269 | 6b7fe0b, 499a67c | PARTIAL | written, NOT run (approval); lock sharing confirmed by code reading |
+| 101 | T6,T10 | server/test/context.it.test.ts:269 ✓ (run 2026-10-19) | 6b7fe0b, 499a67c | PASS | integration run approved; 9/9 in context.it.test.ts |
 | 102 | T4 | ContextTab.sync.test.tsx:158 | a9cb05e | PASS | |
 | 103 | T8 | server/test/run-executor-context.test.ts:346 | 455cf1e | PASS | |
 | 104 | T1,T4 | ContextTab.sync.test.tsx:173 + 3 existing tests unedited in range | d81e847, a9cb05e | PASS | |
@@ -221,3 +221,4 @@ Working DB (:5432, read-only check): 15 migrations, last `created_at` = 0014 jou
 - **Checks run (sequential):** client typecheck + 88 files / 777 tests PASS; server typecheck PASS; server unit 54 files, 599 passed, 3 skipped. No integration/e2e, no DB, no paid calls. Unit suites show no regression for AC-CTX-01..76.
 - **Protected paths:** no migrations, schema, lockfiles, `package.json`; both contract copies changed identically under the Q19 approval.
 - **Gaps:** run AC-CTX-101 (`cd server && DATABASE_URL=postgres://guard@127.0.0.1:1/do_not_use pnpm exec vitest run test/context.it.test.ts`, approval); manual UI check `/agents/<id>?tab=context` (attach, reorder, preview).
+- **AC-101 run (approved, 2026-10-19):** `cd server && DATABASE_URL=postgres://guard@127.0.0.1:1/do_not_use pnpm exec vitest run test/context.it.test.ts` — Testcontainers `pgvector/pgvector:pg16` (Docker 29.8.2) → **9 passed / 0 failed / 0 skipped**, incl. "AC-CTX-101 concurrent reorder/attach and reorder/reorder keep distinct gap-free orders under the advisory lock"; the earlier CTX integration tests (AC-03, 14 ×4, 19, 30, 45) still pass. Remaining gap: manual UI check `/agents/<id>?tab=context`.

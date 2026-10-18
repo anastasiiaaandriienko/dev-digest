@@ -39,3 +39,4 @@
 | S6 | security-reviewer (A1) | opus | a3ca2018bbc8425a3 | UNKNOWN | 46938 | 49536 | 9 | approve (0 findings) |
 | S6 | architecture-reviewer (A1) | opus | aaaa3b7f7059721e6 | UNKNOWN | 88780 | 65618 | 15 | approve (1 suggestion: reuse MAX_ATTACHMENTS) |
 | S7 | plan-verifier (A1) | sonnet | a5eb349c9c2f6be5c | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | PASS 29 / PARTIAL 1 (AC-101 not run) / MISSING 0 |
+| AC-101 run | main agent (vitest, testcontainers) | — | — | 2026-10-19 | UNKNOWN | — | — | context.it.test.ts 9/9 passed |
