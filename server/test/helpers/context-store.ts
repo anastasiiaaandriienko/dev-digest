@@ -108,6 +108,23 @@ export class InMemoryContextStore implements ContextStore {
     return { row: this.strip(row), created: true };
   }
 
+  async reorderAttachments(input: {
+    workspaceId: string;
+    owner: ContextOwnerKind;
+    ownerId: string;
+    repoId: string;
+    ids: readonly string[];
+  }): Promise<ContextAttachmentRow[] | null> {
+    const mine = this.owned(input.workspaceId, input.owner, input.ownerId, input.repoId);
+    const have = new Set(mine.map((r) => r.id));
+    if (have.size !== input.ids.length || !input.ids.every((id) => have.has(id))) return null;
+    input.ids.forEach((id, i) => {
+      const row = mine.find((r) => r.id === id)!;
+      row.order = i + 1;
+    });
+    return this.owned(input.workspaceId, input.owner, input.ownerId, input.repoId).map((r) => this.strip(r));
+  }
+
   async deleteAttachment(
     workspaceId: string,
     owner: ContextOwnerKind,

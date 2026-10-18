@@ -18,7 +18,22 @@ function target(owner: ContextOwnerKind) {
     : { table: t.skillContextDocs, ownerCol: t.skillContextDocs.skillId };
 }
 
-type DocRow = { id: string; repoId: string; path: string; order: number };
+/** Per (workspace, owner kind, owner, repo) advisory lock shared by insert and reorder. */
+function lockAttachments(
+  tx: Pick<Db, 'execute'>,
+  workspaceId: string,
+  owner: ContextOwnerKind,
+  ownerId: string,
+  repoId: string,
+) {
+  return tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey(workspaceId, owner, ownerId, repoId)}))`);
+}
+
+function lockKey(workspaceId: string, owner: ContextOwnerKind, ownerId: string, repoId: string): string {
+  return `${workspaceId}:${owner}:${ownerId}:${repoId}`;
+}
+
+type DocRow ={ id: string; repoId: string; path: string; order: number };
 
 function toRow(ownerId: string, r: DocRow): ContextAttachmentRow {
   return { id: r.id, ownerId, repoId: r.repoId, path: r.path, order: r.order };
@@ -135,9 +150,7 @@ export class ContextRepository implements ContextStore {
         : { workspaceId, skillId: ownerId, repoId, path, order: nextOrder };
     const inserted = await this.db.transaction(async (tx) => {
       // max+1 is racy without serialization; lock per (workspace, owner kind, owner, repo).
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtext(${`${workspaceId}:${owner}:${ownerId}:${repoId}`}))`,
-      );
+      await lockAttachments(tx, workspaceId, owner, ownerId, repoId);
       return tx
         .insert(table)
         .values(values as never)
@@ -162,6 +175,40 @@ export class ContextRepository implements ContextStore {
     return { row: toRow(ownerId, existing), created: false };
   }
 
+  async reorderAttachments(input: {
+    workspaceId: string;
+    owner: ContextOwnerKind;
+    ownerId: string;
+    repoId: string;
+    ids: readonly string[];
+  }): Promise<ContextAttachmentRow[] | null> {
+    const { workspaceId, owner, ownerId, repoId, ids } = input;
+    const { table, ownerCol } = target(owner);
+    const scope = and(eq(table.workspaceId, workspaceId), eq(ownerCol, ownerId), eq(table.repoId, repoId));
+    return this.db.transaction(async (tx) => {
+      // Same lock as insertAttachment, so a reorder never interleaves with an attach.
+      await lockAttachments(tx, workspaceId, owner, ownerId, repoId);
+      const current = await tx.select({ id: table.id }).from(table).where(scope);
+      const have = new Set(current.map((r) => r.id));
+      if (have.size !== ids.length || !ids.every((id) => have.has(id))) return null;
+
+      for (let i = 0; i < ids.length; i++) {
+        await tx
+          .update(table)
+          .set({ order: i + 1 })
+          .where(and(eq(table.id, ids[i]!), scope));
+      }
+      const rows = await tx
+        .select({ id: table.id, repoId: table.repoId, path: table.path, order: table.order })
+        .from(table)
+        .where(scope)
+        .orderBy(asc(table.order), asc(table.createdAt));
+      return rows.map((r) => toRow(ownerId, r));
+    });
+  }
+
+  // deleteAttachment is intentionally NOT locked: a detach racing a reorder makes
+  // the reorder's id set stale, the next reorder answers 422 and the client refetches.
   async deleteAttachment(
     workspaceId: string,
     owner: ContextOwnerKind,

@@ -73,6 +73,18 @@ export interface ContextStore extends ProjectContextSource {
   ): Promise<ContextAttachmentRow[]>;
   /** Idempotent per (owner, repo, path): an existing row is returned with `created: false`. */
   insertAttachment(input: NewContextAttachment): Promise<{ row: ContextAttachmentRow; created: boolean }>;
+  /**
+   * Rewrites `order` to 1..n following `ids`. `ids` must be exactly the set of
+   * this owner's attachments for the repo (checked under the same lock as
+   * `insertAttachment`); otherwise nothing is written and `null` is returned.
+   */
+  reorderAttachments(input: {
+    workspaceId: string;
+    owner: ContextOwnerKind;
+    ownerId: string;
+    repoId: string;
+    ids: readonly string[];
+  }): Promise<ContextAttachmentRow[] | null>;
   /** Removes one row of this owner; false when there is none. */
   deleteAttachment(
     workspaceId: string,
