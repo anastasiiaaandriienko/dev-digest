@@ -1,5 +1,6 @@
 # Spec: Project Context Folder (L05)
-- **Key:** CTX · **Status:** Approved (2026-10-18; AC-CTX-46 revised) · **Date:** 2026-10-18 · **Packages:** server | client | contracts (reviewer-core: tests only)
+- **Key:** CTX · **Status:** Approved (2026-10-18; amendment A1) · **Date:** 2026-10-18 · **Packages:** server | client | contracts (reviewer-core: tests only)
+- **Approval history:** §1–§16 (AC-CTX-01..76) Approved 2026-10-18 (AC-CTX-46 revised); implemented and verified 75 PASS / 1 MISSING. Amendment A1 (§17, AC-CTX-77..106) is Draft; the approved content is unchanged except Q8 being marked superseded.
 - **Source request:** User (Lab 05 / Stage 2): Markdown discovery with configurable roots; list, search, preview; agent and skill attachments; persist paths, not contents; runtime injection without an extra LLM call; injection guard + filesystem boundaries; trace + token accounting; degraded/missing-file behaviour; acceptance tests proving a reviewer uses an attached spec. Roadmap `README.md:88`.
 - **Requirement sources and limitations:** requirements come only from the user's Stage 2 request and the user's decisions recorded in §15. The original Lab 05 assignment text was not available; no further mandatory features are assumed from it.
 
@@ -14,6 +15,7 @@
 - Onboarding Generator; embeddings/RAG (`code_chunks` stays unused); editing docs (preview is strictly read-only); any extra LLM call to summarise or select docs; the CI runner; new MCP tools.
 - **PR head context (v1 limitation):** docs are read from the default-branch working copy only. Docs added or changed by a PR are **not** used for that PR's review (AC-CTX-63, 64).
 - **HW-05 PR Brief boundary:** the CTX limits and budget (§8) apply only to the `## Project context` section of review-agent prompts. They are not applied automatically to the HW-05 PR Brief, which defines its own budget, if any. This spec says nothing else about PR Brief behaviour (AC-CTX-67).
+- **A1 non-goals:** the Evals, Stats and CI Agent-editor tabs shown in the A1 mockup; editing docs from the Agent editor; a Context tab on any other page; changes to the skill page Context tab; README discovery outside the configured roots (§17.2).
 - **Trace persistence of other prompt parts is unchanged:** only Project Context doc text is replaced in the persisted trace (§6). Diff, skills, system prompt, PR description, intent, repo map, callers and `raw_output` are persisted exactly as today (AC-CTX-71). A model's `raw_output` that quotes a doc is not redacted (out of scope).
 
 ## 3. Actors and triggers
@@ -23,6 +25,7 @@
 | Studio user | Edits the repo's discovery roots on the Context page | `settings` row saved |
 | Studio user | Clicks "Re-index" | client refetches the list (new scan); no server-side index |
 | Studio user | Attaches/detaches a doc to an agent (Context page) or a skill (skill page) | path row stored/removed |
+| Studio user (A1) | Opens `/agents/[id]?tab=context`; toggles, reorders, previews docs | attachment rows stored/removed/re-ordered via the existing context-docs API (+ reorder, §17.4) |
 | Studio user | `POST /pulls/:id/review` (existing) | `ReviewRunExecutor` resolves the attached docs |
 | Server job `ReviewRunExecutor` | Each agent run, before the first LLM call | reads the files once, builds `specs[]`, replaces doc text with placeholders in the trace to persist, writes trace + log line |
 | reviewer-core `assemblePrompt` | Each LLM call (per chunk in map-reduce) | renders `## Project context` (unchanged code) |
@@ -80,6 +83,7 @@
 - FR-8 Degraded/missing/outside-roots/PR-head behaviour → AC-CTX-38, 40, 42, 43, 54, 60, 63, 64
 - FR-9 Acceptance tests (hermetic + manual paid) → AC-CTX-44..46, 68
 - FR-10 PR Brief boundary → AC-CTX-67
+- FR-11 (A1) Agent editor Context tab: tab wiring, list/attach/detach/preview/count, reorder, persistence, order relation, Context page unchanged → AC-CTX-77..106
 
 ## 8. Constraints
 **Limits (single source of truth; constants in the context module):**
@@ -128,6 +132,9 @@
 | Project-context section cannot be isolated in `user` when persisting | persisted `user` replaced by the fail-closed placeholder; warning in the log | 73 |
 | Attached path outside the current roots | run: `skipped`, `outside roots`; UI badge | 60, 43 |
 | Doc only in the PR head / changed by the PR | default-branch version (or `missing`) is used | 63, 64 |
+| (A1) Repo not cloned in the Agent Context tab | `notCloned` message, attachments still listed with status, no checkboxes | 94 |
+| (A1) Reorder ids ≠ current set / foreign workspace | 422 / 404, nothing changed | 99, 100 |
+| (A1) Reorder request fails in the UI | refetch server order, error shown | 97 |
 | LLM/GitHub failure, cancel | unchanged; failure trace keeps `specs: null`, `user: ''`, `specs_read: []` (no doc text) | 75 |
 
 ## 12. Acceptance criteria (EARS)
@@ -219,6 +226,41 @@
 | AC-CTX-68 | When the test agent reviews an open PR with a real diff that violates a unique rule marker in an attached spec, at least one finding shall reference that rule. This makes a paid LLM call and shall not be run without separate explicit user approval. | manual (approval, paid) |
 | **Boundary** | | |
 | AC-CTX-67 | The L1–L9 constants shall be referenced only by the context module, its routes and the review executor's context step; no PR Brief code path shall import them. | manual (code review) |
+| **A1 — Agent editor Context tab: wiring & tab state** | | |
+| AC-CTX-77 | The Agent editor shall render exactly three tabs, in this order: Config, Skills, Context (no Evals/Stats/CI). | unit (RTL) |
+| AC-CTX-78 | When `/agents/[id]?tab=context` is opened, the page shall show the Context tab as active; an unknown `?tab=` value shall still fall back to Config. | unit (RTL) |
+| AC-CTX-79 | When the user clicks the Context tab, the page shall replace the URL with `?tab=context` (other query params kept). | unit (RTL) |
+| AC-CTX-80 | While the Skills or the Context tab is shown, the Config tab shall stay mounted and hidden (no "Save agent" button visible), and edits made in Config shall still be present after Config → Context → Config. | unit (RTL) |
+| AC-CTX-81 | If Config has unsaved edits and the user opens another agent while the Context tab is shown, then the UnsavedChangesModal shall appear, and after Discard the target URL shall keep `tab=context`. | unit (RTL) |
+| **A1 — list, attach/detach, count, preview** | | |
+| AC-CTX-82 | While the tab shows repo R, it shall list every doc of `GET /repos/R/context` (no `q`), each row with filename, folder path and a root badge = the longest root of `ContextList.roots` that prefixes the path. | unit (RTL) |
+| AC-CTX-83 | The tab shall list the agent's attachments for R first, in the order returned by `GET /agents/:id/context-docs?repo_id=R`, with a checked checkbox, then the unattached discovered docs in discovery order, unchecked. | unit (RTL) |
+| AC-CTX-84 | The header badge shall read "`<a>` of `<d>` attached", where a = number of attachment rows for (agent, R) and d = number of discovered docs. | unit (RTL) |
+| AC-CTX-85 | When the user checks an unattached doc, the tab shall send exactly one `POST /agents/:id/context-docs?repo_id=R` with `{ path }` and then show it as attached at the end of the attached block. | unit (RTL) |
+| AC-CTX-86 | When the user unchecks an attached doc, the tab shall send exactly one `DELETE /agents/:id/context-docs/:docId` for that row. | unit (RTL) |
+| AC-CTX-87 | While the agent has 10 attachments for R, the unchecked checkboxes shall be disabled and the `attach.limit` message shown. | unit (RTL) |
+| AC-CTX-88 | If an attachment has status `missing` or `outside_roots` (not in the discovered list), then the tab shall still show it in the attached block with `ContextDocStatus` and allow unchecking it. | unit (RTL) |
+| AC-CTX-89 | When the user clicks a row's "Preview", the tab shall show the read-only `DocPreview` for that path in a side panel (`GET /repos/R/context/file?path=`), with no editable control and no save action. | unit (RTL) |
+| AC-CTX-90 | When the user types in "Filter documents…", the tab shall show only rows whose path contains the text case-insensitively and shall send no request (Q23: A10). | unit (RTL) |
+| AC-CTX-91 | The tab shall show the helper text about order and the footer stating the docs are injected as an untrusted `## Project context` block into review runs of this agent on PRs of this repo (Q23: A12). | unit (RTL) |
+| **A1 — repo selection and degraded states** | | |
+| AC-CTX-92 | When the tab opens, it shall show a repo picker listing the workspace repos with the active repo (`useActiveRepo().repoId`, else the first repo) selected; when the user picks another repo, the list and attachments shall switch to that repo (Q20). | unit (RTL) |
+| AC-CTX-93 | If the workspace has no repo, then the tab shall show `context.tab.noRepo` and no list. | unit (RTL) |
+| AC-CTX-94 | If `GET /repos/R/context` answers 409 `REPO_NOT_CLONED`, then the tab shall show `context.notCloned`, render no checkbox and still list existing attachments with their status. | unit (RTL) |
+| **A1 — reorder (Q19)** | | |
+| AC-CTX-95 | When the user moves an attached doc (drag-and-drop or ↑/↓ buttons), the tab shall send exactly one `PUT /agents/:id/context-docs/order?repo_id=R` whose `ids` are all attachment ids of (agent, R) in the new order. | unit (RTL) |
+| AC-CTX-96 | While the filter is non-empty or a mutation is pending, the reorder controls shall be disabled. | unit (RTL) |
+| AC-CTX-97 | If the reorder request fails, then the tab shall show the server order again (refetch) and an error message. | unit (RTL) |
+| AC-CTX-98 | When `PUT /agents\|skills/:id/context-docs/order?repo_id=R` lists exactly the current attachment ids of (agent, R), the server shall store `order` = 1..n in that sequence and return the list in that order. | unit (route + in-memory store) |
+| AC-CTX-99 | If the reorder ids are not exactly the current set (missing, extra, duplicate, unknown or another owner's id), then the server shall answer 422 and change nothing. | unit (route + in-memory store) |
+| AC-CTX-100 | If the reorder request references an agent or repo of another workspace, then the server shall answer 404 and change nothing. | unit (route + in-memory store) |
+| AC-CTX-101 | When two reorder/attach requests for the same (agent, R) run concurrently, the Postgres store shall serialize them under the existing advisory lock key `<workspace>:<owner>:<ownerId>:<repo>` and leave distinct, gap-free orders. | integration (approval) |
+| **A1 — persistence, order relation, compatibility** | | |
+| AC-CTX-102 | When the Agent editor is mounted again at `?tab=context` (page reload), the attached set and order shown shall equal the server's `GET …/context-docs` response; the tab keeps no client-only attachment state. | unit (RTL) |
+| AC-CTX-103 | After a reorder of the agent's docs to [b, a], the next run's `specs[]` and `specs_read` shall contain b before a (relation to AC-CTX-21); the order shown in the tab equals the injected order of the agent's own read docs. | unit (executor / `buildProjectContext`, in-memory store) |
+| AC-CTX-104 | When a doc is attached or detached on the Context page (`AgentAttachments`), the Agent editor Context tab for the same agent and repo shall show the change without reload (shared key `contextDocsKey`), and the existing Context page and skill Context tab tests shall pass unchanged. | unit (RTL) |
+| AC-CTX-105 | The tab shall show each doc's size via `context.kb` and shall show no per-doc token count and no token total (Q21). | unit (RTL) |
+| AC-CTX-106 | The A1 change shall add exactly one server endpoint, the reorder endpoint (Q19), no new contract field on `ContextListItem` or `ContextAttachment`, and shall otherwise reuse the hooks of `client/src/lib/hooks/context.ts`. | manual (code review) |
 
 ## 13. Test scenarios
 - T1 reviewer-core unit, fake provider: marker spec, escaped wrapper text, two specs keep order → AC-CTX-26, 27, 44.
@@ -233,6 +275,8 @@
   - P3 The seed inserts one `agent_runs` row plus its `run_traces` row whose trace carries `specs_read: ['docs/spec.md']`, a matching `spec_blocks` entry and the placeholder `specs` (no doc text).
   - The attach step is the flow's only write (an attachment row); the flow never clicks "Run review".
 - T8 manual paid run, separate approval → AC-CTX-68. T9 code review → AC-CTX-67.
+- T10 (A1) client RTL, hooks mocked like `AgentEditor.test.tsx:9-17`: tab list/order, `?tab=context` deep link + fallback, Config hidden-but-mounted, unsaved guard with `tab=context`, list/badge/count, check/uncheck requests, limit, missing rows, preview, filter, copy, repo selection, no repo, not cloned, reorder request/disabled/failure, remount shows server order, shared cache with the Context page → AC-CTX-77..97, 102, 104, 105.
+- T11 (A1) server unit, `buildApp` + in-memory `ContextStore`: reorder happy path, set mismatch, workspace scoping, then `buildProjectContext` order after reorder → AC-CTX-98..100, 103. T12 (A1) `.it.test.ts`, approval-gated: concurrent reorder/attach on Postgres → AC-CTX-101. T13 code review → AC-CTX-106.
 
 ## 14. Assumptions (to be confirmed)
 - A1 The scan reads the clone worktree directly; no DB index, no embeddings.
@@ -240,6 +284,7 @@
 - A3 Attachment order = insertion order, kept in an `order` column like `agent_skills.order`.
 - A6 Trace additions are optional fields, so old traces stay valid.
 - (A4, A5, A7, A8 confirmed by the user → §15 Q17.)
+- (A9–A15 of amendment A1 confirmed by the user → §15 Q23.) No open assumptions remain.
 
 ## 15. Decisions (user, 2026-10-18)
 - Q1 Roots stored as a `settings` row per repo (no migration for roots).
@@ -249,7 +294,7 @@
 - Q5 Case-insensitive substring search over path and content.
 - Q6 Preview strictly read-only (no write endpoint, no edit UI); unused `editor.*` strings removed.
 - Q7 Scan per list request; "Re-index" only refetches.
-- Q8 Attach controls on the Context page (agents) and the skill page (skills); no third Agent-editor tab.
+- Q8 Attach controls on the Context page (agents) and the skill page (skills); no third Agent-editor tab. — *Superseded by Q18 (amendment A1, 2026-10-18); kept as history.*
 - Q9 Option A: first line `path: <p>` inside the existing wrapper; no reviewer-core change.
 - Q10 Default-branch working copy; PR-head context not read (§2, AC-CTX-63, 64).
 - Q11 Outside current roots → `skipped`, `outside roots`, visible in the trace.
@@ -259,6 +304,19 @@
 - Q15 Lab 05 text unavailable; requirements limited to the Stage 2 request and these decisions.
 - Q16 = B. Persisted `run_traces` never hold Project Context doc text. The executor (not reviewer-core) replaces it in `prompt_assembly.specs`/`user` with deterministic placeholders and persists per-doc metadata (path, source, skill_id, tokens, truncated, status/reason). The prompt sent to the LLM is unchanged. Trace persistence of diff, skills and other parts is unchanged (§2, §6, AC-CTX-70..73, 75).
 - Q17 Confirmed former assumptions: A4 `redactSecrets` reused for preview, search and injection; A5 query ≤ 200 chars (L8); A7 ≤ 10 roots per repo (L9); A8 case-sensitive path comparison/dedup, backslashes rejected not converted. Also confirmed: duplicates traced as `skipped`, `duplicate` (AC-CTX-56); re-attach is idempotent (AC-CTX-58).
+- Q18 (A1, user 2026-10-18) **Supersedes Q8.** The Agent editor gets a third tab, Context, next to Config and Skills (Config | Skills | Context). It lists the discovered docs of the selected repo and offers attach/detach, order, preview and the attached count, using the existing Project Context APIs. The Context page attach control (`AgentAttachments`) and the skill page Context tab stay as they are. The HW2 #35 "exactly two tabs" rule is replaced by "exactly Config, Skills, Context" (§17.6). Evals/Stats/CI stay out of scope.
+- Q19 (A1, = Q-A1-1 option A) Reorder via a new `PUT /agents|skills/:id/context-docs/order?repo_id=` with body `{ ids: string[] }` and a new `ContextStore.reorderAttachments` method, run under the same advisory lock as `insertAttachment`. No migration; the request contract is added to both vendored `@devdigest/shared` copies (approval in §16).
+- Q20 (A1, = Q-A1-2 option A) The tab has a repo picker that defaults to the active repo, like the skill ContextTab.
+- Q21 (A1, = Q-A1-3 option A) No per-doc token counts and no token total in A1; rows show the size in kB. Possible follow-up (not a requirement): optional `tokens` on `ContextAttachment` for attached docs only (option B).
+- Q22 (A1, = Q-A1-4 option A) No new e2e flow; A1 is verified by RTL/unit tests plus the approval-gated integration AC-CTX-101.
+- Q23 (A1) Confirmed former assumptions:
+  - A9 Attach, detach and reorder in the Context tab are saved immediately (one request per action, like the Skills tab); they are not part of the Config unsaved-edits guard.
+  - A10 "Filter documents…" filters the loaded list client-side by path (case-insensitive); it does not call `?q=`.
+  - A11 Root badge colours: fixed tokens for `specs`, `docs`, `insights`; any other root gets a neutral badge. A `readme` badge appears only if a configured root has that name; README discovery outside roots is a non-goal.
+  - A12 Footer copy states the real scope: injected into review runs of this agent on PRs of this repo (narrower than the mockup's "every run").
+  - A13 `DocPreview` moves from `client/src/app/repos/[repoId]/context/_components/DocPreview/` to the shared `client/src/components/context-doc-preview/` with unchanged behaviour; the Context page imports it from there.
+  - A14 The reorder route is registered for both owner prefixes by the existing loop (`routes.ts:71-75`); only the agent UI uses it in A1.
+  - A15 The reorder UI reuses the Skills tab pattern (drag-and-drop + ↑/↓, pure helpers like `SkillsTab/helpers.ts:84-104`); no new dependency.
 
 ## 16. Approvals required
 - **Migration:** new attachment table(s) for agent/skill → repo-path rows (`server/src/db/schema/*` + `pnpm db:generate`). Roots need no migration (settings row).
@@ -269,3 +327,67 @@
 - **e2e fixtures for AC-CTX-46 (T7 P1–P3):** edits to `server/src/db/seed.ts` (repo `clonePath`, seeded `agent_runs` + `run_traces`) and to `scripts/e2e.sh` (or the equivalent setup, incl. `.github/workflows/e2e-web.yml` if CI must run the flow) each need explicit user approval (`e2e/CLAUDE.md:58-59`).
 - **Paid LLM call:** AC-CTX-68 only, test agent + open PR with a real diff, separate explicit approval; never from automated tests.
 - No new dependencies.
+- **A1 — migration:** none. The `order` column exists and has no unique constraint (`server/src/db/schema/project-context.ts:26-31,48-53`), so a reorder is an UPDATE. No `server/src/db/schema/*` change.
+- **A1 — APPROVAL REQUIRED (Q19):** new server endpoint `PUT /agents|skills/:id/context-docs/order?repo_id=`, `ContextService.reorder`, `ContextStore.reorderAttachments` and its `ContextRepository` implementation, plus a new request contract (`ContextReorderRequest { ids }`) in **both** `server/src/vendor/shared/contracts/platform.ts` and `client/src/vendor/shared/contracts/platform.ts`, in one change.
+- **A1 — integration test:** AC-CTX-101 (`.it.test.ts`, Docker/testcontainers) needs explicit approval to run.
+- **A1 — e2e:** no new flow (Q22); existing flows stay unchanged.
+- **A1 — tab-count rule:** HW2 #35 changes from two to three tabs (comment and test edits, §17.6); the user confirms this by approving A1.
+- **A1 — no paid LLM call, no new dependency, no reviewer-core change.**
+
+## 17. Amendment A1 — Agent editor Context tab (Draft, 2026-10-18)
+### 17.1 Goals
+- G-A1-1 From Agents → agent → Context, see the discovered docs of a repo, attach/detach them by checkbox, set their order, preview one, and see "`a` of `d` attached".
+- G-A1-2 Reuse the existing context API, hooks and components; add exactly one backend capability, reorder (Q19).
+- G-A1-3 Keep the Context page and skill-page flows, the `?tab=` behaviour and the Config unsaved-edits guard working unchanged.
+
+### 17.2 Non-goals
+- Evals / Stats / CI tabs; editing docs; changing discovery, limits, injection or trace behaviour (§1–§16 stay as approved); showing skill-attached docs in the agent tab; README discovery outside roots.
+
+### 17.3 Current state (verified)
+- Tabs: `TABS` = config, skills with the comment "exactly Config and Skills (HW2 #35)" (`client/src/app/agents/[id]/_components/AgentEditor/constants.ts:10-14`); `TAB_KEYS` derived (`:17`). Header comment `AgentEditor.tsx:1-5`. Config is hidden with `hidden={tab === "skills"}` (`AgentEditor.tsx:38`) — with a third tab this would leave Config **visible** under Context; it must become `tab !== "config"`.
+- `?tab=` owned by the page: valid keys from `TAB_KEYS`, else `config` (`AgentEditorView.tsx:37`); `setTab` uses `router.replace` (`:38-42`); agent switch keeps the tab and is guarded (`:45-51`); failed save falls back to Config (`:59`).
+- Tests pinning two tabs: `AgentEditor.test.tsx:55-60` ("has exactly two tabs: Config and Skills", expects `["Config","Skills"]`); `AgentEditorView.test.tsx:157-163` (edits survive Skills switch) — still valid. No e2e flow opens the Agent editor (`e2e/specs/03-agents.flow.json:4-9` checks the list only; flow 08 uses the Context page, `08-project-context.flow.json:8-22`). i18n `client/messages/en/agents.json:53-59` has `editor.tabs` config/skills/evals/stats/ci, no `context`.
+- API (`server/src/modules/context/routes.ts`): `GET /repos/:id/context?q=` (`:53-60`), `GET …/context/file?path=` (`:62-69`), roots `GET|PUT` (`:35-51`), `GET|POST /agents|skills/:id/context-docs?repo_id=` (`:76-107`), `DELETE …/context-docs/:docId` (`:109-113`). **No endpoint changes the order of existing rows.** `insertAttachment` assigns `max(order)+1` under `pg_advisory_xact_lock(hashtext('<ws>:<owner>:<ownerId>:<repo>'))` (`repository.ts:126-146`); `ContextStore` has no reorder method (`types.ts:57-83`). List order: `order, created_at` (`repository.ts:122`); run order: rows sorted by `order` (`for-run.ts:110`).
+- DTOs: `ContextListItem` = path, size, updated_at only — **no tokens, no root** (`server/src/vendor/shared/contracts/platform.ts:323-327`, same in the client copy); `ContextList.roots` exists (`:331-336`); `ContextAttachment` = id, repo_id, path, order, status (`:361-367`).
+- Client: hooks `useContextList`, `useContextFile`, `useContextDocs`, `useAttachContextDoc`, `useDetachContextDoc`; shared key `contextDocsKey(kind, ownerId, repoId)` (`client/src/lib/hooks/context.ts:20-21,49-96`); no reorder hook. `ContextDocAttachments` = select + Attach + list with Detach, no order control (`client/src/components/context-doc-attachments/ContextDocAttachments.tsx:46-89`); `MAX_ATTACHMENTS = 10` (`constants.ts:2`). `ContextDocStatus` badge (`client/src/components/context-doc-status/ContextDocStatus.tsx:11-20`). `DocPreview({repoId, path})` read-only (`client/src/app/repos/[repoId]/context/_components/DocPreview/DocPreview.tsx:12-51`) is route-private. Skill `ContextTab` uses a repo picker defaulting to the active repo (`client/src/app/skills/[id]/_components/SkillDetailView/_components/ContextTab/ContextTab.tsx:17-35`). Active repo: URL > localStorage > first repo (`client/src/lib/repo-context.tsx:1-2,47-48`). Precedent for ordered replace: `PUT /agents/:id/skills` (`server/src/modules/agents/routes.ts:169-178`) and Skills tab drag/↑↓ helpers (`SkillsTab/helpers.ts:84-104`).
+
+### 17.4 UI contract and API usage
+- Tab key `context`, label `agents.editor.tabs.context` = "Context", inserted after `skills`. New component `AgentEditor/_components/ContextTab/` (`ContextTab.tsx`, `index.ts`, `helpers.ts` (row merge, root-of-path, move), `styles.ts`, `ContextTab.test.tsx`); rendered only while `tab === "context"`.
+- Data: `useContextList(R, "")`, `useContextDocs("agents", agent.id, R)`, `useAttachContextDoc`, `useDetachContextDoc`, `useContextFile` via `DocPreview`; `useActiveRepo` for the picker's default R (Q20). New hook `useReorderContextDocs(kind, ownerId, repoId)` that invalidates `contextDocsKey` (Q19).
+- Reorder endpoint (Q19): `PUT /agents|skills/:id/context-docs/order?repo_id=` body `ContextReorderRequest { ids: string[] }` (uuid, ≤ 10, unique) → 200 `ContextAttachment[]` in the new order; set mismatch → 422; owner or repo of another workspace → 404. Service: `requireOwner` + `repoOf` (existing), then `store.reorderAttachments(...)` in one transaction under the same advisory lock key as `insertAttachment`, writing `order` 1..n. No discovery walk, no file read.
+- Layout (mockup): header "Project context" + badge; helper text; repo picker (Q20); filter box; rows (drag handle, ↑/↓, checkbox, filename, folder, root badge, size in kB (Q21), status badge for non-ok, Preview); right-hand `DocPreview` panel; footer without a token total. New strings in `client/messages/en/context.json` under a new `agentTab` key (existing keys unchanged).
+
+### 17.5 Mockup comparison
+| Mockup element | Status |
+|---|---|
+| Tabs Config \| Skills \| Context | needs client change (`constants.ts:11-14`, `AgentEditor.tsx:38-41`, `agents.json:53-59`) |
+| Evals / Stats / CI tabs | out of scope (non-goal) |
+| "Project context" header | string exists `context.json` `tab.title` (`:71`) |
+| Badge "2 of 7 attached" | new client logic; data exists (`ContextList.files`, `GET …/context-docs`) |
+| Helper "Order matters …" | new string; behaviour supported (injection by `order`, `for-run.ts:110`) |
+| "Filter documents…" | new client component (Q23 A10); server `?q=` exists but searches content (`service.ts:94-110`) |
+| Drag handle / reorder | **backend change (Q19)** — no order-changing endpoint today (`routes.ts:76-113`, `types.ts:57-83`); new `PUT …/context-docs/order` + store method + new client component |
+| Checkbox toggle attach | new client component; API exists (POST/DELETE, `routes.ts:85-113`) |
+| Filename + folder path | client split of `path` (`platform.ts:324`) |
+| Root badge (specs/docs/insights/readme) | client-derived from `ContextList.roots` (`platform.ts:333`); no root field on items; `readme` per Q23 A11 |
+| Per-doc tokens "559t" | **not in A1 (Q21)** — `ContextListItem` has no tokens (`platform.ts:323-327`); rows show size in kB (`context.json` `kb`, `:11`) |
+| Footer "≈ 317 tokens" | **not in A1 (Q21)**; only the injection note is shown, copy per Q23 A12 |
+| "Preview" + right-hand panel | `DocPreview` exists (`DocPreview.tsx:12-51`); moved to shared (Q23 A13) + new panel layout |
+| Status of missing/outside-roots docs | `ContextDocStatus` exists (`ContextDocStatus.tsx:11-20`) |
+
+### 17.6 Impact analysis — affected files
+- **client (new):** `client/src/app/agents/[id]/_components/AgentEditor/_components/ContextTab/*`; `client/src/components/context-doc-preview/*` (moved `DocPreview`, Q23 A13).
+- **client (changed):** `AgentEditor/constants.ts` (add `context`; comment → "exactly Config, Skills and Context (HW2 #35 as amended by CTX A1)"); `AgentEditor.tsx` (header comment `:1-5`; `hidden={tab !== "config"}`; render ContextTab); `AgentEditor.test.tsx` (`:55-60` → expect `["Config","Skills","Context"]` and add Context to the probe list; mock `@/lib/hooks/context` and `@/lib/repo-context`); `AgentEditorView.tsx` (comment `:1-4` only); `AgentEditorView.test.tsx` (add hook mocks; new cases AC-CTX-78, 80, 81); `client/messages/en/agents.json` (`editor.tabs.context`); `client/messages/en/context.json` (`agentTab.*`); `client/src/app/repos/[repoId]/context/_components/ContextView/ContextView.tsx` + its test (import path of DocPreview only); `client/src/lib/hooks/context.ts` (new `useReorderContextDocs`, Q19).
+- **server (Q19):** `server/src/modules/context/routes.ts` (reorder route in the owner loop), `service.ts` (`reorder`), `types.ts` (`ContextStore.reorderAttachments`), `repository.ts` (UPDATE under the advisory lock), test in-memory store(s) under `server/test/`, a new route unit test and a `.it.test.ts` for AC-CTX-101.
+- **contracts (Q19, both copies, one change):** `ContextReorderRequest` in `server/src/vendor/shared/contracts/platform.ts` **and** `client/src/vendor/shared/contracts/platform.ts`; `ContextListItem` and `ContextAttachment` unchanged (Q21).
+- **Unchanged:** `AgentAttachments`, `ContextDocAttachments`, skill `ContextTab`, `for-run.ts`, run executor, reviewer-core, migrations, seed, e2e flows (no flow pins two tabs; no new flow, Q22).
+- **Risks:**
+  - Config would show under Context if `hidden` (`AgentEditor.tsx:38`) is not changed to `tab !== "config"`.
+  - Tests rendering `AgentEditor` / `AgentEditorView` crash without mocks for `@/lib/hooks/context` and `@/lib/repo-context`.
+  - Reorder racing an attach/detach can send a stale id set; the server answers 422 (AC-CTX-99) and the UI refetches (AC-CTX-97).
+  - The reorder must use the same lock key as `insertAttachment` (`repository.ts:138-140`), otherwise a concurrent attach can get a duplicate `order`; covered only by the approval-gated AC-CTX-101.
+  - Client/server contract drift if only one vendored copy gets `ContextReorderRequest`.
+  - Users may expect the mockup's token figures; A1 shows size only (Q21).
+
+### 17.7 Resolved questions (A1)
+- Q-A1-1 → option A (Q19). Q-A1-2 → option A (Q20). Q-A1-3 → option A (Q21; option B is a possible follow-up). Q-A1-4 → option A (Q22). Assumptions A9–A15 → confirmed (Q23). No open questions remain.

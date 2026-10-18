@@ -24,3 +24,6 @@
 | S4 | implementer (T15a–c + T15d file) | sonnet | a80a9ff337bcc798e | UNKNOWN | 235781 | 135458 | 75 | DONE (not run) → C15, C16 |
 | T15d | main agent (e2e.sh ×3 + debug stack) | — | — | 2026-10-18 | UNKNOWN | — | — | migrate CLI fix c606811; flow 08 fix 2a6de14; final 5/8 flows (08: 33/33), 02/04/05 pre-existing covered-click |
 | S7 | plan-verifier (re-run after T15d) | sonnet | a77091b9efb3f7862 | UNKNOWN | 137934 | 72568 | 16 | PASS 71 / PARTIAL 4 / MISSING 1 (74/1/1 with reported runs) |
+| A1 | spec-creator (amendment A1: agent Context tab) | opus | adf88b3c347c29ee4 | UNKNOWN | 313615 | 107857 | 55 | NEEDS_CLARIFICATION (Q-A1-1..4), 30 new ACs 77–106 |
+| A1 | spec-creator (A1 decisions Q19–Q23) | opus | adf88b3c347c29ee4 | UNKNOWN | 114609 | 135664 | 22 | DONE, 0 markers, 106 ACs |
+| G1 | main agent | — | — | 2026-10-19 | — | — | — | amendment A1 approved (Q18–Q23, AC-CTX-77..106) |
