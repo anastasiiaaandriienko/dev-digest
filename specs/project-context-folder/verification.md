@@ -1,9 +1,10 @@
 # Verification — Project Context Folder (Key CTX)
 
-- **Verifier:** plan-verifier (S7), 2026-10-18 · **Status:** gaps to close (T15a–d, T16 approval-gated; AC-67 manual)
+- **Verifier:** plan-verifier (S7), 2026-10-18 · **Status:** 75/76 PASS; only AC-68 (T16, approval-gated) open
 - **Scope:** spec `specs/project-context-folder/spec.md` (76 ACs) · tasks T1, T2, T3, T4, T6a, T7, T8, T9, T10, T11, T12, T13 · base `dc893e0..d35321e`. No uncommitted source changes.
 - **Reviews (S6):** architecture-reviewer — approve (1 suggestion: client `MAX_ATTACHMENTS = 10` mirrors server L7); security-reviewer — approve (0 findings).
-- **Summary (plan-verifier re-run after T15d):** PASS 71 / PARTIAL 4 / MISSING 1 strictly observed; PASS 74 / PARTIAL 1 / MISSING 1 when the reported integration/e2e runs are accepted.
+- **Summary:** PASS 75 / PARTIAL 0 / MISSING 1 (AC-68, T16 paid manual run not approved). Integration (T14) and e2e (T15d) runs accepted as reported evidence; AC-67 confirmed by the user after code review.
+- **Plan-verifier re-run after T15d:** PASS 71 / PARTIAL 4 / MISSING 1 strictly observed (74/1/1 with reported runs).
 - **Initial S7 summary:** PASS 65 / PARTIAL 7 / MISSING 4.
 
 ## Matrix
@@ -78,7 +79,7 @@ Commit key: C1=a029fcd (T1), C3=a3f5f89 (T3), C4=585c53c (T4), C6=4c7aed8 (T6a),
 | 64 | T4,T8,T9 | read.ts, for-run.ts | context-read.test.ts:118; for-run:234; run-executor-context.test.ts:398 | C4,C8,C9 | PASS | |
 | 65 | T1,T8 | for-run.ts | for-run:264 | C1,C8 | PASS | |
 | 66 | T4,T8 | read.ts, for-run.ts | context-read.test.ts:46; for-run:152 | C4,C8 | PASS | |
-| 67 | T3 | context/constants.ts | AC-67 grep (clean) | C3 | PARTIAL | manual code-review AC; human confirmation pending |
+| 67 | T3 | context/constants.ts | AC-67 grep + code review (main agent), confirmed by the user 2026-10-18 | C3 | PASS | L1–L9 only under server/src/modules/context/ (constants.ts:8-27); executor uses context via for-run.js/types.js (run-executor.ts:19-27); no PR Brief module imports them |
 | 68 | T16 | — | — | — | MISSING | blocked: approval (paid, manual) |
 | 69 | T5,T6a,T6b,T7,T14 | schema/project-context.ts (no content column) | routes:310; server/test/context.it.test.ts AC-CTX-19 rows check | C5,C6,C7,C10,C14 | PASS | |
 | 70 | T9 | run-executor.ts, for-run.ts | run-executor-context.test.ts:188 (single-pass), :202 (map-reduce) | C9 | PASS | |
@@ -170,3 +171,9 @@ Remaining: AC-46 e2e run (T15d — approval), AC-68 (T16 paid manual — approva
 - Out-of-plan: c606811 (migrate CLI guard, user-approved, outside CTX scope); 2a6de14 (flow 08: networkidle wait, open PR by `#482`; no assertion removed); flow 08 uses `select`, detaches after attaching, and cannot assert marker absence (runner has positive checks only); client support files and the shared `context-doc-attachments` panel; C11+C12 combined (d35321e).
 - Protected paths: only the new `0014_optimal_jocasta.sql`, `meta/0014_snapshot.json` and the generated `_journal.json` entry under migrations; no lockfile/`package.json`/workspace changes.
 - Gaps: AC-68 (T16, approval), AC-67 (human confirmation), flows 02/04/05 fail on the pre-existing covered PR-title click (outside CTX), manual UI check.
+
+## AC-67 closed (user confirmation, 2026-10-18)
+
+Read-only code review: L1–L9 and `DEFAULT_ROOTS` are declared only in `server/src/modules/context/constants.ts:8-27` and referenced only by `server/src/modules/context/*` (e.g. `for-run.ts:3-12`, `read.ts:4`, `helpers.ts:2`, `service.ts:12,211-212`); `server/src/modules/reviews/run-executor.ts:19-27` imports only `for-run.js` and `types.js`; no PR Brief module exists in `server/src/modules/` and no brief code path imports context. Notes (not violations): `server/src/db/seed.ts:12` imports the `placeholderLine` formatter; `client/src/components/context-doc-attachments/constants.ts:2` mirrors `MAX_ATTACHMENTS` as a UI hint. Layering: `context/routes.ts:1-15` and `service.ts:1-16` import no `db/`; only `repository.ts:1-3` uses Drizzle. The user confirmed AC-67 → PASS.
+
+Working DB (:5432, read-only check): 15 migrations, last `created_at` = 0014 journal `when` (1792319333871); `agent_context_docs` and `skill_context_docs` columns, unique indexes and FKs match `schema/project-context.ts`.
