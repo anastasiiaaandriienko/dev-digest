@@ -27,8 +27,12 @@ export type {
   PrCommit,
   PrReviewComment,
   PrStatus,
-  SpecFile,
-  IndexStatus,
+  ContextAttachment,
+  ContextAttachmentStatus,
+  ContextFile,
+  ContextList,
+  ContextListItem,
+  ContextRoots,
 } from "@devdigest/shared";
 
 export type { Review, Finding, Severity, Verdict } from "@devdigest/shared";
