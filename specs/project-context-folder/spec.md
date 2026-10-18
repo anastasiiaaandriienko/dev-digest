@@ -1,5 +1,5 @@
 # Spec: Project Context Folder (L05)
-- **Key:** CTX · **Status:** Approved (2026-10-18) · **Date:** 2026-10-18 · **Packages:** server | client | contracts (reviewer-core: tests only)
+- **Key:** CTX · **Status:** Approved (2026-10-18; AC-CTX-46 revised) · **Date:** 2026-10-18 · **Packages:** server | client | contracts (reviewer-core: tests only)
 - **Source request:** User (Lab 05 / Stage 2): Markdown discovery with configurable roots; list, search, preview; agent and skill attachments; persist paths, not contents; runtime injection without an extra LLM call; injection guard + filesystem boundaries; trace + token accounting; degraded/missing-file behaviour; acceptance tests proving a reviewer uses an attached spec. Roadmap `README.md:88`.
 - **Requirement sources and limitations:** requirements come only from the user's Stage 2 request and the user's decisions recorded in §15. The original Lab 05 assignment text was not available; no further mandatory features are assumed from it.
 
@@ -215,7 +215,7 @@
 | **Acceptance tests (reviewer uses the spec)** | | |
 | AC-CTX-44 | Given `specs: ['path: docs/spec.md\n\nRULE-CTX-7f3a: forbid console.log']`, `reviewPullRequest` with a fake provider shall send a user message containing the marker inside `<untrusted source="spec-0">` under `## Project context`, and the system message shall not contain it. | unit (reviewer-core) |
 | AC-CTX-45 | Given a temp clone with `docs/spec.md` (marker) attached to an agent, a review with `MockLLMProvider` shall capture a request containing the marker, and the stored trace shall have `specs_read: ['docs/spec.md']`, `spec_blocks[0].tokens > 0` and no occurrence of the marker. | integration (approval) |
-| AC-CTX-46 | A seeded e2e flow shall open the Context page, attach the seeded spec, and see its path in the Trace drawer after a mock review. | e2e (approval) |
+| AC-CTX-46 | While the hermetic e2e stack runs with the CTX fixtures (prerequisites P1–P3, §13 T7), a seeded e2e flow with no review run, no import and no LLM call shall: open the Context page of the seeded repo; see the effective roots, the `docs/spec.md` list entry and its read-only preview; attach it to a seeded agent and see it listed; and open the Trace drawer of the seeded run and see `docs/spec.md` in `specs_read`/`spec_blocks` and the placeholder line (AC-CTX-72 format), not the doc text. | e2e (approval) |
 | AC-CTX-68 | When the test agent reviews an open PR with a real diff that violates a unique rule marker in an attached spec, at least one finding shall reference that rule. This makes a paid LLM call and shall not be run without separate explicit user approval. | manual (approval, paid) |
 | **Boundary** | | |
 | AC-CTX-67 | The L1–L9 constants shall be referenced only by the context module, its routes and the review executor's context step; no PR Brief code path shall import them. | manual (code review) |
@@ -227,7 +227,12 @@
 - T4 executor unit, mocked repos/adapters + `MockLLMProvider` + temp clone: injection order, skills, dedup, call count, baseline equality, read-once, fresh content, caps, budget, run-time limits, trace fields, log line, missing/outside roots/no clone/PR-head; trace redaction (provider got the marker, persisted trace has placeholder + metadata and no marker, diff/skills unchanged, fail-closed, failure trace) → AC-CTX-16, 20..25, 28, 29, 33..36, 38, 40, 41, 54, 56, 59, 60, 62..66, 70..75.
 - T5 client RTL: page, read-only preview, Re-index refetch, empty state, status badges, Trace drawer rows → AC-CTX-12, 13, 37, 43, 52, 53.
 - T6 `.it.test.ts`, approval-gated (Docker): real persistence, workspace scoping, end-to-end marker → AC-CTX-19, 30, 45.
-- T7 e2e, approval-gated → AC-CTX-46. T8 manual paid run, separate approval → AC-CTX-68. T9 code review → AC-CTX-67.
+- T7 e2e, approval-gated, seeded data only → AC-CTX-46. Today the seeded repo has `clonePath: null` (`server/src/db/seed.ts:89`), the seed has no `agent_runs`/`run_traces` rows, the running API has no mock-LLM mode (`ContainerOverrides` are in-process only, `server/src/platform/container.ts:40-54`), and flows must not trigger reviews or imports (`e2e/CLAUDE.md:15-16,56-57`). So the flow needs these prerequisites:
+  - P1 `scripts/e2e.sh` (or an equivalent setup step) creates a fixture clone directory containing `docs/spec.md` with a unique marker.
+  - P2 The seed sets the seeded repo's `clonePath` to that directory.
+  - P3 The seed inserts one `agent_runs` row plus its `run_traces` row whose trace carries `specs_read: ['docs/spec.md']`, a matching `spec_blocks` entry and the placeholder `specs` (no doc text).
+  - The attach step is the flow's only write (an attachment row); the flow never clicks "Run review".
+- T8 manual paid run, separate approval → AC-CTX-68. T9 code review → AC-CTX-67.
 
 ## 14. Assumptions (to be confirmed)
 - A1 The scan reads the clone worktree directly; no DB index, no embeddings.
@@ -261,5 +266,6 @@
 - **reviewer-core:** no source change (Q9=A, Q16=B redaction lives in the server executor); tests only.
 - **Client:** new page, skill-page control, Trace drawer rows, `context.json` copy change and removal of `editor.*`; repoint/remove `useReindexContext`.
 - **Integration tests** (Docker/testcontainers: AC-CTX-19, 30, 45) and the **e2e flow** (AC-CTX-46): explicit approval to run.
+- **e2e fixtures for AC-CTX-46 (T7 P1–P3):** edits to `server/src/db/seed.ts` (repo `clonePath`, seeded `agent_runs` + `run_traces`) and to `scripts/e2e.sh` (or the equivalent setup, incl. `.github/workflows/e2e-web.yml` if CI must run the flow) each need explicit user approval (`e2e/CLAUDE.md:58-59`).
 - **Paid LLM call:** AC-CTX-68 only, test agent + open PR with a real diff, separate explicit approval; never from automated tests.
 - No new dependencies.
