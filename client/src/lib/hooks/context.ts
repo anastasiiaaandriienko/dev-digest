@@ -86,6 +86,22 @@ export function useAttachContextDoc(kind: ContextOwnerKind, ownerId: string, rep
   });
 }
 
+/** PUT /agents|skills/:id/context-docs/order — all attachment ids in the new order.
+    Not optimistic (A-1): the response is the cache; a failure refetches server truth. */
+export function useReorderContextDocs(kind: ContextOwnerKind, ownerId: string, repoId: string) {
+  const qc = useQueryClient();
+  const key = contextDocsKey(kind, ownerId, repoId);
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      api.put<ContextAttachment[]>(`/${kind}/${ownerId}/context-docs/order?repo_id=${repoId}`, { ids }),
+    onSuccess: (ordered) => {
+      qc.setQueryData(key, ordered);
+      return qc.invalidateQueries({ queryKey: key });
+    },
+    onError: () => qc.invalidateQueries({ queryKey: key }),
+  });
+}
+
 /** DELETE /agents|skills/:id/context-docs/:docId — detach one row. */
 export function useDetachContextDoc(kind: ContextOwnerKind, ownerId: string, repoId: string) {
   const qc = useQueryClient();

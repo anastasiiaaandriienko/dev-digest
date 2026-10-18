@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { ContextAttachment, ContextListItem } from "@devdigest/shared";
-import { buildRows, filterRows, formatKb, rootOf, splitPath } from "./helpers";
+import { buildRows, dropOn, filterRows, formatKb, moveBy, rootOf, splitPath } from "./helpers";
 
 const file = (path: string, size = 100): ContextListItem => ({ path, size, updated_at: "x" });
 const att = (id: string, path: string, order: number): ContextAttachment => ({
@@ -50,5 +50,18 @@ describe("ContextTab helpers", () => {
   it("AC-CTX-105 formatKb shows kilobytes", () => {
     expect(formatKb(512)).toBe("0.5");
     expect(formatKb(20 * 1024)).toBe("20");
+  });
+
+  it("AC-CTX-95 moveBy/dropOn return all ids in the new order", () => {
+    const ids = ["a", "b", "c", "d"];
+    expect(moveBy(ids, "b", -1)).toEqual(["b", "a", "c", "d"]);
+    expect(moveBy(ids, "b", 1)).toEqual(["a", "c", "b", "d"]);
+    expect(moveBy(ids, "a", -1)).toEqual(ids);
+    expect(moveBy(ids, "d", 1)).toEqual(ids);
+    expect(dropOn(ids, "a", "c")).toEqual(["b", "c", "a", "d"]);
+    expect(dropOn(ids, "d", "a")).toEqual(["d", "a", "b", "c"]);
+    expect(dropOn(ids, "a", "a")).toEqual(ids);
+    expect(dropOn(ids, "a", "zz")).toEqual(ids);
+    expect(ids).toEqual(["a", "b", "c", "d"]);
   });
 });

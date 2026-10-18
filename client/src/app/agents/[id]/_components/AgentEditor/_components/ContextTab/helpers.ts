@@ -61,6 +61,33 @@ export function filterRows(rows: readonly DocRow[], text: string): DocRow[] {
   return needle ? rows.filter((r) => r.path.toLowerCase().includes(needle)) : [...rows];
 }
 
+/** Move one attachment id by `delta` positions (↑ / ↓); clamped, always the full id list. */
+export function moveBy(ids: readonly string[], id: string, delta: number): string[] {
+  const from = ids.indexOf(id);
+  if (from < 0) return [...ids];
+  return moveTo(ids, from, Math.max(0, Math.min(ids.length - 1, from + delta)));
+}
+
+/** Drag & drop: put the dragged id where the target is. */
+export function dropOn(ids: readonly string[], draggedId: string, targetId: string): string[] {
+  const from = ids.indexOf(draggedId);
+  const to = ids.indexOf(targetId);
+  if (from < 0 || to < 0 || from === to) return [...ids];
+  return moveTo(ids, from, to);
+}
+
+function moveTo(ids: readonly string[], from: number, to: number): string[] {
+  const next = [...ids];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved!);
+  return next;
+}
+
+/** Same order? (skip a PUT that would change nothing) */
+export function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
 /** Size in kB with one decimal below 10 kB (e.g. 0.4, 12). */
 export function formatKb(bytes: number): string {
   const kb = bytes / 1024;

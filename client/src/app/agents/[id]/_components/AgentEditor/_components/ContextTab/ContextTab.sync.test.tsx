@@ -17,6 +17,7 @@ import { ToastProvider } from "../../../../../../../lib/toast";
 const get = vi.fn();
 const post = vi.fn();
 const del = vi.fn();
+const put = vi.fn();
 vi.mock("@/lib/api", async (orig) => {
   const actual = await orig<typeof import("@/lib/api")>();
   return {
@@ -26,6 +27,7 @@ vi.mock("@/lib/api", async (orig) => {
       get: (p: string) => get(p),
       post: (p: string, b: unknown) => post(p, b),
       del: (p: string) => del(p),
+      put: (p: string, b: unknown) => put(p, b),
     },
   };
 });
@@ -120,6 +122,7 @@ afterEach(() => {
   get.mockReset();
   post.mockReset();
   del.mockReset();
+  put.mockReset();
 });
 
 describe("Agent ContextTab server truth", () => {
@@ -182,5 +185,53 @@ describe("Agent ContextTab server truth", () => {
     expect(paths()[0]).toBe("docs/adr/0001.md");
     // No reload: the docs list was fetched by invalidation, the repo list stayed cached.
     expect(get.mock.calls.filter(([p]) => p === "/repos/r1/context")).toHaveLength(1);
+  });
+
+  describe("reorder", () => {
+    const ORDER_URL = "/agents/ag1/context-docs/order?repo_id=r1";
+    const reorderOk = () =>
+      put.mockImplementation(async (p: string, b: { ids: string[] }) => {
+        if (p !== ORDER_URL) throw new Error(`unexpected PUT ${p}`);
+        server = b.ids.map((id, i) => ({ ...server.find((x) => x.id === id)!, order: i + 1 }));
+        return server.map((x) => ({ ...x }));
+      });
+
+    it("AC-CTX-95 ↑/↓ and drop send one PUT with all ids in the new order", async () => {
+      server = [att("a1", "docs/spec.md", 1), att("a2", "notes/misc.md", 2), att("a3", "docs/adr/0001.md", 3)];
+      reorderOk();
+      render(tree(newClient()));
+      await waitFor(() => expect(paths()).toEqual(["docs/spec.md", "notes/misc.md", "docs/adr/0001.md"]));
+      const row = (p: string) => document.querySelector(`li[data-path="${p}"]`) as HTMLElement;
+
+      fireEvent.click(within(row("docs/adr/0001.md")).getByRole("button", { name: "Move docs/adr/0001.md up" }));
+      await waitFor(() => expect(paths()).toEqual(["docs/spec.md", "docs/adr/0001.md", "notes/misc.md"]));
+      expect(put).toHaveBeenCalledTimes(1);
+      expect(put).toHaveBeenLastCalledWith(ORDER_URL, { ids: ["a1", "a3", "a2"] });
+
+      const dt = () => ({ setData: vi.fn(), getData: vi.fn(), effectAllowed: "", dropEffect: "" });
+      fireEvent.dragStart(row("docs/spec.md"), { dataTransfer: dt() });
+      // Drop handlers are attached only after the dragId re-render.
+      await waitFor(() => expect(row("docs/spec.md").getAttribute("style")).toContain("opacity"));
+      fireEvent.dragOver(row("notes/misc.md"), { dataTransfer: dt() });
+      fireEvent.drop(row("notes/misc.md"), { dataTransfer: dt() });
+      await waitFor(() => expect(paths()).toEqual(["docs/adr/0001.md", "notes/misc.md", "docs/spec.md"]));
+      expect(put).toHaveBeenCalledTimes(2);
+      expect(put).toHaveBeenLastCalledWith(ORDER_URL, { ids: ["a3", "a2", "a1"] });
+    });
+
+    it("AC-CTX-97 failed reorder refetches the server order and shows an error", async () => {
+      server = [att("a1", "docs/spec.md", 1), att("a2", "notes/misc.md", 2)];
+      put.mockRejectedValue(new Error("boom"));
+      render(tree(newClient()));
+      await waitFor(() => expect(paths()).toEqual(["docs/spec.md", "notes/misc.md", "docs/adr/0001.md"]));
+      const docsGets = () => get.mock.calls.filter(([p]) => p === DOCS_URL).length;
+      const before = docsGets();
+
+      fireEvent.click(screen.getByRole("button", { name: "Move docs/spec.md down" }));
+
+      expect(await screen.findByText(messages.agentTab.reorderError)).toBeInTheDocument();
+      await waitFor(() => expect(docsGets()).toBeGreaterThan(before));
+      expect(paths()).toEqual(["docs/spec.md", "notes/misc.md", "docs/adr/0001.md"]);
+    });
   });
 });

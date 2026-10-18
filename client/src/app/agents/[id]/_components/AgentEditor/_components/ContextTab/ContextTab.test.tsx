@@ -13,6 +13,8 @@ import messages from "../../../../../../../../messages/en/context.json";
 
 const attach = vi.fn();
 const detach = vi.fn();
+const reorder = vi.fn();
+let reorderPending = false;
 const docsArgs = vi.fn();
 const listArgs = vi.fn();
 const fileArgs = vi.fn();
@@ -35,6 +37,7 @@ vi.mock("@/lib/hooks/context", () => ({
   },
   useAttachContextDoc: () => ({ mutate: attach, isPending: false }),
   useDetachContextDoc: () => ({ mutate: detach, isPending: false }),
+  useReorderContextDocs: () => ({ mutate: reorder, isPending: reorderPending, isError: false }),
 }));
 vi.mock("@/lib/repo-context", () => ({
   useActiveRepo: () => ({ repoId: "r1", repos }),
@@ -85,6 +88,8 @@ afterEach(() => {
   cleanup();
   attach.mockReset();
   detach.mockReset();
+  reorder.mockReset();
+  reorderPending = false;
   docsArgs.mockReset();
   listArgs.mockReset();
   fileArgs.mockReset();
@@ -214,5 +219,46 @@ describe("Agent ContextTab", () => {
     expect(within(rowOf("docs/adr/0001.md")).getByText("0.5 kB")).toBeInTheDocument();
     expect(within(rowOf(".devdigest/specs/api.md")).getByText("30 kB")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/token/i);
+  });
+
+  it("AC-CTX-96 reorder controls are disabled while filtering or pending", () => {
+    docs.r1 = [att("a1", "docs/spec.md", 1), att("a2", "notes/misc.md", 2)];
+    const view = renderTab();
+    const down = () => within(rowOf("docs/spec.md")).getByRole("button", { name: "Move docs/spec.md down" }) as HTMLButtonElement;
+    expect(down().disabled).toBe(false);
+    expect(rowOf("docs/spec.md").getAttribute("draggable")).toBe("true");
+    // Not attached rows have no reorder controls.
+    expect(within(rowOf("docs/adr/0001.md")).queryByRole("button", { name: /Move/ })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(messages.agentTab.filterLabel), { target: { value: "docs" } });
+    expect(down().disabled).toBe(true);
+    expect(rowOf("docs/spec.md").getAttribute("draggable")).toBe("false");
+
+    fireEvent.change(screen.getByLabelText(messages.agentTab.filterLabel), { target: { value: "" } });
+    expect(down().disabled).toBe(false);
+    reorderPending = true;
+    view.rerender(
+      <NextIntlClientProvider locale="en" messages={{ context: messages }}>
+        <ContextTab agent={AGENT} />
+      </NextIntlClientProvider>,
+    );
+    expect(down().disabled).toBe(true);
+    expect(rowOf("docs/spec.md").getAttribute("draggable")).toBe("false");
+  });
+
+  it("AC-CTX-94 not-cloned: attached rows keep reorder controls", () => {
+    list = {
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new ApiError("not cloned", 409, "REPO_NOT_CLONED"),
+      refetch: vi.fn(),
+    };
+    docs.r1 = [att("a1", "docs/spec.md", 1, "missing"), att("a2", "notes/misc.md", 2)];
+    renderTab();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    fireEvent.click(within(rowOf("docs/spec.md")).getByRole("button", { name: "Move docs/spec.md down" }));
+    expect(reorder).toHaveBeenCalledWith(["a2", "a1"]);
+    expect((within(rowOf("docs/spec.md")).getByRole("button", { name: "Move docs/spec.md up" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

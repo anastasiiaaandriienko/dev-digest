@@ -81,6 +81,10 @@
     "noMatches": "No docs match “{q}”.",
     "preview": "Preview",
     "previewLabel": "Preview {path}",
+    "moveUp": "Move {path} up",
+    "moveDown": "Move {path} down",
+    "drag": "Drag {path} to reorder",
+    "reorderError": "Could not save the new order. The list shows the saved order.",
     "footer": "Attached docs are injected as an untrusted “## Project context” block into review runs of this agent on pull requests of this repository."
   }
 }

@@ -71,6 +71,7 @@ vi.mock("@/lib/hooks/context", () => ({
   useContextFile: () => ({ data: undefined, isLoading: false, isError: false }),
   useAttachContextDoc: () => ({ mutate: vi.fn(), isPending: false }),
   useDetachContextDoc: () => ({ mutate: vi.fn(), isPending: false }),
+  useReorderContextDocs: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 // Repo fixture so the Context tab does not take the no-repo branch (AC-CTX-93).
 vi.mock("@/lib/repo-context", () => ({
