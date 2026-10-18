@@ -70,5 +70,17 @@
     "noRepo": "Select a repository to attach project context docs.",
     "title": "Project context",
     "repoLabel": "Repository"
+  },
+  "agentTab": {
+    "title": "Project context",
+    "badge": "{attached} of {total} attached",
+    "helper": "Checked docs are attached to this agent. Attached docs are listed first, in the order they are injected.",
+    "filterLabel": "Filter documents",
+    "filterPlaceholder": "Filter documents…",
+    "empty": "No docs found for this repository.",
+    "noMatches": "No docs match “{q}”.",
+    "preview": "Preview",
+    "previewLabel": "Preview {path}",
+    "footer": "Attached docs are injected as an untrusted “## Project context” block into review runs of this agent on pull requests of this repository."
   }
 }
