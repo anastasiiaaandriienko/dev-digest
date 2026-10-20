@@ -8,6 +8,7 @@
     { "cmd": ["find", "text", "Project Context", "click"], "label": "open Project Context from the sidebar" },
     { "cmd": ["wait", "--url", "/context"], "label": "context route reached" },
     { "cmd": ["wait", "--load", "networkidle"], "label": "roots and doc list settle" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Roots"], "label": "expand the Roots panel" },
     { "cmd": ["wait", "--text", "One folder per line"], "label": "the Roots editor is shown" },
     { "cmd": ["wait", "--text", "docs/spec.md"], "label": "the fixture doc is listed" },
     { "cmd": ["find", "role", "button", "click", "--name", "docs/spec.md"], "label": "select docs/spec.md" },
