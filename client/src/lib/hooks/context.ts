@@ -1,13 +1,13 @@
 /* hooks/context.ts — React Query hooks for the Project Context folder
    (specs/project-context-folder): effective roots, the discovered-doc list
    (metadata only), the read-only preview, and the agent / skill attachments.
-   Keys: ["context", repoId, "roots" | "list" | "file", …] and
+   Keys: ["context", repoId, "roots" | "list" | "file" | "usage", …] and
    ["context-docs", kind, ownerId, repoId]. There is no write, edit or re-index
    endpoint: "Re-index" in the UI is just a refetch of the list query. */
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ContextAttachment, ContextFile, ContextList, ContextRoots } from "@devdigest/shared";
+import type { ContextAttachment, ContextFile, ContextList, ContextRoots, ContextUsage } from "@devdigest/shared";
 import { api } from "../api";
 
 /** Which owner an attachment belongs to (the route prefix). */
@@ -17,6 +17,7 @@ export const contextRepoKey = (repoId: string) => ["context", repoId] as const;
 export const contextRootsKey = (repoId: string) => ["context", repoId, "roots"] as const;
 export const contextListKey = (repoId: string, q: string) => ["context", repoId, "list", q] as const;
 export const contextFileKey = (repoId: string, path: string) => ["context", repoId, "file", path] as const;
+export const contextUsageKey = (repoId: string) => ["context", repoId, "usage"] as const;
 export const contextDocsKey = (kind: ContextOwnerKind, ownerId: string, repoId: string) =>
   ["context-docs", kind, ownerId, repoId] as const;
 
@@ -67,6 +68,16 @@ export function useContextFile(repoId: string | null | undefined, path: string |
   });
 }
 
+/** GET /repos/:id/context/usage — how many agents use each doc path (DB only). Not refetched by Re-index. */
+export function useContextUsage(repoId: string | null | undefined) {
+  return useQuery({
+    queryKey: contextUsageKey(repoId ?? ""),
+    queryFn: () => api.get<ContextUsage>(`/repos/${repoId}/context/usage`),
+    enabled: !!repoId,
+    retry: false,
+  });
+}
+
 /** GET /agents|skills/:id/context-docs?repo_id= */
 export function useContextDocs(kind: ContextOwnerKind, ownerId: string | null | undefined, repoId: string | null | undefined) {
   return useQuery({
@@ -82,7 +93,12 @@ export function useAttachContextDoc(kind: ContextOwnerKind, ownerId: string, rep
   return useMutation({
     mutationFn: (path: string) =>
       api.post<ContextAttachment>(`/${kind}/${ownerId}/context-docs?repo_id=${repoId}`, { path }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: contextDocsKey(kind, ownerId, repoId) }),
+    // The "Used by N agents" counts change with every attach / detach.
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: contextDocsKey(kind, ownerId, repoId) }),
+        qc.invalidateQueries({ queryKey: contextUsageKey(repoId) }),
+      ]),
   });
 }
 
@@ -107,6 +123,11 @@ export function useDetachContextDoc(kind: ContextOwnerKind, ownerId: string, rep
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (docId: string) => api.del<{ ok: boolean }>(`/${kind}/${ownerId}/context-docs/${docId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: contextDocsKey(kind, ownerId, repoId) }),
+    // The "Used by N agents" counts change with every attach / detach.
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: contextDocsKey(kind, ownerId, repoId) }),
+        qc.invalidateQueries({ queryKey: contextUsageKey(repoId) }),
+      ]),
   });
 }
