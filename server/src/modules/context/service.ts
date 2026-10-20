@@ -6,6 +6,7 @@ import type {
   ContextFile,
   ContextList,
   ContextRoots,
+  ContextUsage,
 } from '@devdigest/shared';
 import type { Container } from '../../platform/container.js';
 import { AppError, NotFoundError, ValidationError } from '../../platform/errors.js';
@@ -127,6 +128,21 @@ export class ContextService {
     if (doc.kind === 'missing') throw new NotFoundError('Document not found');
     if (doc.kind === 'skip') throw new ValidationError('Document cannot be previewed', { reason: doc.reason });
     return { path: rel, content: doc.text, size: doc.size, updated_at: doc.updatedAt, truncated: doc.truncated };
+  }
+
+  // ---- usage ----
+
+  /**
+   * How many agents use each stored doc path in this repo. DB only: no clone,
+   * no file read, no write. 404 for a foreign repo before any usage query.
+   */
+  async usage(workspaceId: string, repoId: string): Promise<ContextUsage> {
+    await this.repoOf(workspaceId, repoId);
+    const rows = await this.store().usageByPath(workspaceId, repoId);
+    const items = rows
+      .map((r) => ({ path: r.path, agent_count: r.agentCount }))
+      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    return { repo_id: repoId, items };
   }
 
   // ---- attachments ----

@@ -28,17 +28,30 @@ export class InMemoryContextStore implements ContextStore {
   /** Number of `saveRoots` calls. */
   rootsSaves = 0;
   failLoad = false;
+  /** Number of usageByPath calls. */
+  usageCalls = 0;
+  /** Agents / skills registered as disabled (only via the optional enabled argument). */
+  disabledAgents = new Set<string>();
+  disabledSkills = new Set<string>();
+  /** agent_skills links; the agent and the skill are matched per workspace at query time. */
+  links: { agentId: string; skillId: string; enabled: boolean }[] = [];
 
   private key = (workspaceId: string, id: string) => `${workspaceId}:${id}`;
 
   addRepo(workspaceId: string, id: string, clonePath: string | null): void {
     this.repos.set(this.key(workspaceId, id), { id, clonePath, workspaceId });
   }
-  addAgent(workspaceId: string, id: string): void {
+  addAgent(workspaceId: string, id: string, enabled = true): void {
     this.agents.add(this.key(workspaceId, id));
+    if (!enabled) this.disabledAgents.add(this.key(workspaceId, id));
   }
-  addSkill(workspaceId: string, id: string): void {
+  addSkill(workspaceId: string, id: string, enabled = true): void {
     this.skills.add(this.key(workspaceId, id));
+    if (!enabled) this.disabledSkills.add(this.key(workspaceId, id));
+  }
+  /** agent_skills row (no workspace column, like the table). */
+  linkSkill(agentId: string, skillId: string, enabled = true): void {
+    this.links.push({ agentId, skillId, enabled });
   }
   setRoots(workspaceId: string, repoId: string, roots: string[]): void {
     this.roots.set(this.key(workspaceId, repoId), roots);
@@ -135,6 +148,31 @@ export class InMemoryContextStore implements ContextStore {
     if (!hit) return false;
     this.rows = this.rows.filter((r) => r !== hit);
     return true;
+  }
+
+  /** Same rules as ContextRepository.usageByPath; rows come back unsorted on purpose. */
+  async usageByPath(workspaceId: string, repoId: string): Promise<{ path: string; agentCount: number }[]> {
+    this.usageCalls += 1;
+    const agentsByPath = new Map<string, Set<string>>();
+    const add = (path: string, agentId: string) => {
+      const set = agentsByPath.get(path) ?? new Set<string>();
+      set.add(agentId);
+      agentsByPath.set(path, set);
+    };
+    for (const r of this.rows) {
+      if (r.workspaceId !== workspaceId || r.repoId !== repoId) continue;
+      if (r.owner === 'agent') {
+        if (this.agents.has(this.key(workspaceId, r.ownerId))) add(r.path, r.ownerId);
+        continue;
+      }
+      if (!this.skills.has(this.key(workspaceId, r.ownerId))) continue;
+      if (this.disabledSkills.has(this.key(workspaceId, r.ownerId))) continue;
+      for (const link of this.links) {
+        if (link.skillId !== r.ownerId || !link.enabled) continue;
+        if (this.agents.has(this.key(workspaceId, link.agentId))) add(r.path, link.agentId);
+      }
+    }
+    return [...agentsByPath].map(([path, set]) => ({ path, agentCount: set.size })).reverse();
   }
 
   async loadForRun(args: {

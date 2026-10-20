@@ -223,6 +223,46 @@ export class ContextRepository implements ContextStore {
     return deleted.length > 0;
   }
 
+  async usageByPath(workspaceId: string, repoId: string): Promise<{ path: string; agentCount: number }[]> {
+    // ONE statement: direct attachments UNION ALL attachments reached through
+    // skills (mirrors AgentsRepository.effectiveSkills), then count distinct agents
+    // per path. agent_skills has no workspace_id: it is scoped by the joined skill and agent.
+    const direct = this.db
+      .select({ path: t.agentContextDocs.path, agentId: t.agentContextDocs.agentId })
+      .from(t.agentContextDocs)
+      .innerJoin(
+        t.agents,
+        and(eq(t.agents.id, t.agentContextDocs.agentId), eq(t.agents.workspaceId, workspaceId)),
+      )
+      .where(and(eq(t.agentContextDocs.workspaceId, workspaceId), eq(t.agentContextDocs.repoId, repoId)));
+    const viaSkills = this.db
+      .select({ path: t.skillContextDocs.path, agentId: sql<string>`${t.agents.id}`.as('agent_id') })
+      .from(t.skillContextDocs)
+      .innerJoin(
+        t.skills,
+        and(
+          eq(t.skills.id, t.skillContextDocs.skillId),
+          eq(t.skills.workspaceId, workspaceId),
+          eq(t.skills.enabled, true),
+        ),
+      )
+      .innerJoin(
+        t.agentSkills,
+        and(eq(t.agentSkills.skillId, t.skills.id), eq(t.agentSkills.enabled, true)),
+      )
+      .innerJoin(
+        t.agents,
+        and(eq(t.agents.id, t.agentSkills.agentId), eq(t.agents.workspaceId, workspaceId)),
+      )
+      .where(and(eq(t.skillContextDocs.workspaceId, workspaceId), eq(t.skillContextDocs.repoId, repoId)));
+
+    const u = direct.unionAll(viaSkills).as('u');
+    return this.db
+      .select({ path: u.path, agentCount: sql<number>`count(distinct ${u.agentId})::int` })
+      .from(u)
+      .groupBy(u.path);
+  }
+
   async loadForRun(args: {
     workspaceId: string;
     repoId: string;

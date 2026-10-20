@@ -9,6 +9,7 @@ import {
   ContextReorderRequest,
   ContextRoots,
   ContextRootsUpdate,
+  ContextUsage,
 } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
@@ -26,6 +27,7 @@ const DocParams = z.object({ id: z.string().uuid(), docId: z.string().uuid() });
  *   GET|PUT /repos/:id/context/roots
  *   GET     /repos/:id/context?q=            list (metadata only)
  *   GET     /repos/:id/context/file?path=    read-only preview
+ *   GET     /repos/:id/context/usage         agents per doc path (DB only, read-only)
  *   GET|POST /agents|skills/:id/context-docs?repo_id=
  *   PUT     /agents|skills/:id/context-docs/order?repo_id=   body { ids }
  *   DELETE  /agents|skills/:id/context-docs/:docId
@@ -67,6 +69,15 @@ export default async function contextRoutes(appBase: FastifyInstance) {
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
       return service.preview(workspaceId, req.params.id, req.query.path);
+    },
+  );
+
+  app.get(
+    '/repos/:id/context/usage',
+    { schema: { params: IdParams, response: { 200: ContextUsage } } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      return service.usage(workspaceId, req.params.id);
     },
   );
 

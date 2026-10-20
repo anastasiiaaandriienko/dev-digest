@@ -85,6 +85,12 @@ export interface ContextStore extends ProjectContextSource {
     repoId: string;
     ids: readonly string[];
   }): Promise<ContextAttachmentRow[] | null>;
+  /**
+   * Distinct agents per stored path for the repo (direct attachments plus those
+   * reached through enabled skills); status, roots and clone state are ignored.
+   * Rows are not sorted; paths nobody uses are absent.
+   */
+  usageByPath(workspaceId: string, repoId: string): Promise<{ path: string; agentCount: number }[]>;
   /** Removes one row of this owner; false when there is none. */
   deleteAttachment(
     workspaceId: string,
