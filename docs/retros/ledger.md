@@ -77,3 +77,34 @@ aggregates only — no prompts, code or command output. Entry format:
 - Duration/tokens of the main agent's T6/T11 runs and the screenshot capture (no notifications).
 - Notification metrics of the S7 plan-verifier re-run (row left UNKNOWN in run-log; notification reported 111,025 ms, 47,105 tokens, 9 tool uses).
 - Deep mode not run.
+
+## 2026-10-20 — project-context-folder, amendment A2 (normal)
+- Session: 239b1ab8-8ad6-4e6c-b564-3c04e01d2418 · Window: 2026-10-18T21:42:06Z (commit 88b9e35, end of A1) → 2026-10-20T12:11:39Z · Outcome: A2 PASS 38 / PARTIAL 3 (AC-CTX-108 manual 1280×720 scroll; AC-CTX-138/140 manual review by design) / MISSING 0; 13 commits after 88b9e35
+| Metric | Value | Source |
+|---|---|---|
+| Processed tokens (main, per model) | claude-opus-5-5: 58 calls · in 134 · out 56,447 · cache write 992,209 · cache read 13,131,282 | retro-metrics |
+| Cache hit ratio | 0.93 | retro-metrics |
+| Tool calls / errors | Bash 31/0 · Agent 9/0 · AskUserQuestion 2/0 · Write 1/0 | retro-metrics |
+| Turn time | 58,368,856 ms over 20 turns (2 AskUserQuestion waits = 55,582,222 ms of it) | retro-metrics |
+| Subagents / max concurrency / nested | 9 / 2 / 0 | retro-metrics |
+| Subagent processed tokens (script) | implementer 7,564,804 · planner 2,320,311 · spec-creator 1,626,853 + 244,030 · plan review 516,860 · arch review 426,859 · researcher 317,024 · plan-verifier 278,694 · security review 134,891 | retro-metrics |
+| Subagent tokens (notifications) | 768,151 over 8 logged calls (spec-creator 130,678 + 48,498 · planner 132,668 · review 80,794 · implementer 193,713 · security 46,264 · arch 76,126 · verifier 59,410); researcher gap analysis UNKNOWN (no run-log row) | run-log.md |
+| Rework rounds (S3 / S6) | S3: 1 review, approve-with-changes, 10 findings folded by the main agent, no second planner round · S6: 0 (both reviewers approve, 0 findings) | run-log.md |
+### Findings (verified)
+- The implementer dominated cost: 7,564,804 processed tokens and 711,377 ms (90 tool calls) — 56% of subagent processed tokens — evidence: retro-metrics subagent rows.
+- Integration and e2e passed on the first run (10/10, 9/9), unlike the base feature's T15d (three e2e runs). The Windows pre-flight knowledge (`AGENT_BROWSER_BIN`, blanked keys, scratchpad clone dir, `secrets.json` absent) was applied up front — evidence: run-log A2 G3 rows vs 2026-10-18 entry.
+- The cross-model plan review caught 3 major issues that unit tests alone would have missed or that would have broken existing tests (unedited AC-13 `{roots}` regex, cross-workspace rows not exercising `workspace_id` filters, unlisted test-mock edits) — evidence: run-log A2 S3 row; all three were later green in S4/S7.
+- The first clarification AskUserQuestion (4 questions) came back with only 2 answers; a second call was needed for Q33/Q36 — evidence: AskUserQuestion 2 calls.
+- plan-verifier's summary tally (37/7) contradicted its own matrix (35/6); the main agent recorded the matrix figure — evidence: verification.md A2 section note.
+- No nested spawns; the two S6 reviewers ran in parallel (max concurrency 2) — evidence: retro-metrics.
+### Optimizations (proposed)
+- Ask at most 2–3 questions per AskUserQuestion call, or one question per decision with the assumptions as a separate call — avoids a re-ask round — evidence: 2 AskUserQuestion calls for one clarification step.
+- Let the S2 planner write its draft to a scratchpad path given in the prompt (or hand it back as a file) instead of the main agent re-typing the plan for S3 — saves one large main-agent Write and output tokens — evidence: Write 1 call carrying the full draft plan.
+- Give the implementer per-batch task lists (e.g. client T1/T2/T8/T9, then server T3–T6, then T7/T10/T11) so each run reloads less context — expected to cut the 7.56M processed tokens of a single 90-call run — evidence: implementer row.
+- Add a self-check line to the plan-verifier prompt: "summary counts must equal the matrix rows" — evidence: 37/7 vs 35/6 mismatch.
+- Log a run-log row for every subagent call, including pre-S1 researchers — evidence: researcher a5e55f8723fe118d0 has no row, notification tokens UNKNOWN.
+### UNKNOWN
+- Duration of the hermetic e2e run (not timed; run-log UNKNOWN).
+- Model for security-reviewer, architecture-reviewer and plan-verifier (not reported in notifications).
+- Researcher subagent notification tokens (no run-log row).
+- Deep mode not run (not requested).
