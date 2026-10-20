@@ -1,27 +1,36 @@
-/* /repos/:repoId/context — Project Context folder (spec: project-context-folder).
-   Shows the effective roots (editable), a searchable list of the repo's
-   discovered Markdown docs and a READ-ONLY preview. There is no write, edit or
-   re-index endpoint: "Re-index" only refetches the list (GET). */
+/* /repos/:repoId/context — Project Context folder (spec: project-context-folder, A2).
+   Three-panel page: sidebar | docs panel (search, list, collapsible Roots,
+   footer) | preview panel (read-only preview + attach section). There is no
+   write, edit or re-index endpoint: "Re-index" only refetches the list (GET)
+   and Download saves the already-cached preview text. */
 "use client";
 
 import React from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useNow, useTranslations } from "next-intl";
 import { Button, EmptyState, ErrorState, Icon, Skeleton, TextInput } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
 import { RepoNotFound } from "@/components/repo-not-found";
 import { ApiError } from "@/lib/api";
-import { useContextList, useContextRoots, useUpdateContextRoots } from "@/lib/hooks/context";
+import {
+  useContextFile,
+  useContextList,
+  useContextRoots,
+  useContextUsage,
+  useUpdateContextRoots,
+} from "@/lib/hooks/context";
 import { useActiveRepo, useRepoNotFound } from "@/lib/repo-context";
 import { notify } from "@/lib/toast";
 import { AgentAttachments } from "../AgentAttachments";
 import { DocPreview } from "@/components/context-doc-preview";
-import { RootsEditor } from "../RootsEditor";
-import { SEARCH_DEBOUNCE_MS } from "./constants";
-import { formatKb } from "./helpers";
+import { RootsPanel } from "../RootsPanel";
+import { NOW_UPDATE_MS, SEARCH_DEBOUNCE_MS } from "./constants";
+import { downloadMarkdown, fileName, formatKb, totalSize } from "./helpers";
 import { s } from "./styles";
 
 export function ContextView({ repoId }: { repoId: string }) {
   const t = useTranslations("context");
+  const format = useFormatter();
+  const now = useNow({ updateInterval: NOW_UPDATE_MS });
   const { repos } = useActiveRepo();
   const repoNotFound = useRepoNotFound(repoId);
   const repo = repos.find((r) => r.id === repoId);
@@ -36,7 +45,11 @@ export function ContextView({ repoId }: { repoId: string }) {
 
   const rootsQuery = useContextRoots(repoId);
   const list = useContextList(repoId, q);
+  // Same query key as the preview inside DocPreview: Download reads the cache, no extra request.
+  const file = useContextFile(repoId, selected);
+  const usage = useContextUsage(repoId);
   const saveRoots = useUpdateContextRoots(repoId);
+  const editDisabledId = React.useId();
 
   const crumb = [{ label: t("crumbLab") }, { label: t("title") }];
   if (repoNotFound) {
@@ -53,12 +66,16 @@ export function ContextView({ repoId }: { repoId: string }) {
   const searching = q.trim() !== "";
   const saveError =
     saveRoots.error instanceof ApiError ? saveRoots.error.message : saveRoots.error ? t("roots.error") : null;
+  const updatedAt = list.dataUpdatedAt;
+  // Exact, case-sensitive path match; no item = nobody uses the doc. Loading / error: no indicator.
+  const usageCount = selected && usage.data ? (usage.data.items.find((i) => i.path === selected)?.agent_count ?? 0) : null;
+  const canDownload = !!selected && !!file.data && !file.isLoading && !file.isError;
 
   return (
     <AppShell crumb={crumb}>
       <div style={s.page}>
-        <div style={s.header}>
-          <div style={s.grow}>
+        <section style={s.docs} aria-label={t("docsPanelLabel")}>
+          <div style={s.docsHeader}>
             <h1 style={s.title} title={repo?.full_name}>
               {t("title")}
               {repo && (
@@ -72,29 +89,33 @@ export function ContextView({ repoId }: { repoId: string }) {
             </h1>
             <p style={s.subtitle}>{t("subtitle")}</p>
           </div>
-          {/* Re-index = refetch of the list query only (a GET); nothing is written. */}
-          <Button
-            kind="secondary"
-            size="sm"
-            icon="RefreshCw"
-            loading={list.isFetching}
-            onClick={() => list.refetch()}
-            title={t("reindexHint")}
-          >
-            {t("reindex")}
-          </Button>
-        </div>
 
-        {rootsQuery.data && (
-          <RootsEditor
-            roots={rootsQuery.data.roots}
-            saving={saveRoots.isPending}
-            error={saveError}
-            onSave={(next) => saveRoots.mutate(next, { onSuccess: () => notify.success(t("roots.saved")) })}
-          />
-        )}
+          <div style={s.toolbar}>
+            {/* Re-index = refetch of the list query only (a GET); nothing is written. */}
+            <Button
+              kind="secondary"
+              size="sm"
+              icon="RefreshCw"
+              loading={list.isFetching}
+              onClick={() => list.refetch()}
+              title={t("reindexHint")}
+            >
+              {t("reindex")}
+            </Button>
+            <Button
+              kind="secondary"
+              size="sm"
+              icon="Download"
+              disabled={!canDownload}
+              title={t("downloadHint")}
+              onClick={() => {
+                if (selected && file.data) downloadMarkdown(fileName(selected), file.data.content);
+              }}
+            >
+              {t("download")}
+            </Button>
+          </div>
 
-        <div style={s.toolbar}>
           <div style={s.search}>
             <TextInput
               value={input}
@@ -104,46 +125,43 @@ export function ContextView({ repoId }: { repoId: string }) {
               type="search"
             />
           </div>
-          {list.data && <span style={s.count}>{t("count", { count: files.length })}</span>}
-        </div>
 
-        {list.isLoading && (
-          <div style={s.state} aria-busy="true">
-            <Skeleton height={44} />
-            <Skeleton height={44} />
-            <Skeleton height={44} />
-          </div>
-        )}
-        {list.isError && notCloned && (
-          <div role="alert" style={s.stateText}>
-            {t("notCloned")}
-          </div>
-        )}
-        {list.isError && !notCloned && <ErrorState body={t("loadError")} onRetry={() => list.refetch()} />}
-
-        {list.data?.truncated && (
-          <div role="status" style={s.banner}>
-            <Icon.AlertTriangle size={15} />
-            <div>
-              <div style={s.bannerTitle}>{t("truncated.title")}</div>
-              {list.data.truncated_reasons.map((r) => (
-                <div key={r} style={s.bannerBody}>
-                  {t(`truncated.${r}`)}
-                </div>
-              ))}
+          {list.isLoading && (
+            <div style={s.state} aria-busy="true">
+              <Skeleton height={44} />
+              <Skeleton height={44} />
+              <Skeleton height={44} />
             </div>
-          </div>
-        )}
+          )}
+          {list.isError && notCloned && (
+            <div role="alert" style={s.stateText}>
+              {t("notCloned")}
+            </div>
+          )}
+          {list.isError && !notCloned && <ErrorState body={t("loadError")} onRetry={() => list.refetch()} />}
 
-        {list.data && files.length === 0 && !searching && (
-          <EmptyState icon="FileText" title={t("empty.title")} body={t("empty.body", { roots: roots.join(", ") })} />
-        )}
-        {list.data && files.length === 0 && searching && (
-          <div style={s.stateText}>{t("noMatches", { q: q.trim() })}</div>
-        )}
+          {list.data?.truncated && (
+            <div role="status" style={s.banner}>
+              <Icon.AlertTriangle size={15} />
+              <div>
+                <div style={s.bannerTitle}>{t("truncated.title")}</div>
+                {list.data.truncated_reasons.map((r) => (
+                  <div key={r} style={s.bannerBody}>
+                    {t(`truncated.${r}`)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-        {files.length > 0 && (
-          <div style={s.split}>
+          {list.data && files.length === 0 && !searching && (
+            <EmptyState icon="FileText" title={t("empty.title")} body={t("empty.body", { roots: roots.join(", ") })} />
+          )}
+          {list.data && files.length === 0 && searching && (
+            <div style={s.stateText}>{t("noMatches", { q: q.trim() })}</div>
+          )}
+
+          {files.length > 0 ? (
             <ul style={s.list} aria-label={t("listLabel")}>
               {files.map((f) => (
                 <li key={f.path}>
@@ -162,11 +180,57 @@ export function ContextView({ repoId }: { repoId: string }) {
                 </li>
               ))}
             </ul>
-            <DocPreview repoId={repoId} path={selected} />
-          </div>
-        )}
+          ) : (
+            <div style={s.filler} />
+          )}
 
-        {list.data && <AgentAttachments repoId={repoId} files={files} />}
+          {rootsQuery.data && (
+            <RootsPanel
+              roots={rootsQuery.data.roots}
+              saving={saveRoots.isPending}
+              error={saveError}
+              onSave={(next) => saveRoots.mutate(next, { onSuccess: () => notify.success(t("roots.saved")) })}
+            />
+          )}
+
+          {list.data && (
+            <div style={s.footer}>
+              <span>{t("count", { count: files.length })}</span>
+              <span>{t("kb", { kb: formatKb(totalSize(files)) })}</span>
+              {!!updatedAt && (
+                <span>
+                  {t("footer.updated", { time: format.relativeTime(Math.min(updatedAt, now.getTime()), now) })}
+                </span>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section style={s.preview} aria-label={t("previewPanelLabel")}>
+          {selected && (
+            <div style={s.previewHeader}>
+              <span className="mono" style={s.fileName} title={selected}>
+                {fileName(selected)}
+              </span>
+              <span style={s.modes} title={t("preview.editDisabled")}>
+                <button type="button" style={s.mode(true, false)} aria-pressed="true">
+                  {t("preview.modePreview")}
+                </button>
+                <button type="button" style={s.mode(false, true)} disabled aria-describedby={editDisabledId}>
+                  {t("preview.modeEdit")}
+                </button>
+                <span id={editDisabledId} style={s.srOnly}>
+                  {t("preview.editDisabled")}
+                </span>
+              </span>
+              {usageCount !== null && <span style={s.usage}>{t("usage.label", { count: usageCount })}</span>}
+            </div>
+          )}
+          <div style={s.previewBody}>
+            <DocPreview repoId={repoId} path={selected} fill />
+            {list.data && <AgentAttachments repoId={repoId} files={files} />}
+          </div>
+        </section>
       </div>
     </AppShell>
   );
