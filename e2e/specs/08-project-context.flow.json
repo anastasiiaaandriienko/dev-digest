@@ -33,9 +33,9 @@
     { "cmd": ["find", "role", "button", "click", "--name", "Open run trace & logs"], "label": "open the seeded run's Trace drawer" },
     { "cmd": ["wait", "--url", "trace="], "label": "trace drawer is open in the URL" },
     { "cmd": ["wait", "--text", "docs/spec.md"], "label": "Configuration lists docs/spec.md as read" },
-    { "cmd": ["find", "text", "Prompt assembly", "click"], "label": "expand Prompt assembly" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Prompt assembly"], "label": "expand Prompt assembly (role click scrolls the drawer to it)" },
     { "cmd": ["wait", "--text", "1 of 1 read"], "label": "Project context summary shows the doc was read" },
-    { "cmd": ["find", "text", "Project context as sent", "click"], "label": "expand the persisted Project context block" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Project context as sent"], "label": "expand the persisted Project context block" },
     { "cmd": ["wait", "--text", "[project-context omitted from trace] path=docs/spec.md"], "label": "the trace holds the placeholder line, not the doc text" }
   ]
 }
