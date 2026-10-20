@@ -1,4 +1,6 @@
-/* TraceSection — collapsible titled section used throughout the trace tab. */
+/* TraceSection — collapsible titled section used throughout the trace tab.
+   The header is a real button (aria-expanded) so it is keyboard- and
+   role-reachable; `right` must stay non-interactive (badges only). */
 "use client";
 
 import React from "react";
@@ -22,12 +24,12 @@ export function TraceSection({
   const I = Icon[icon];
   return (
     <div style={s.section}>
-      <div onClick={() => setOpen((o) => !o)} style={s.sectionHead}>
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} style={s.sectionHead}>
         <I size={15} style={s.sectionIcon} />
         <span style={s.sectionTitle}>{title}</span>
         {right}
         <Icon.ChevronDown size={15} style={s.chevron(open)} />
-      </div>
+      </button>
       {open && <div style={s.sectionBody}>{children}</div>}
     </div>
   );

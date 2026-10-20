@@ -16,6 +16,13 @@ export const s = {
     gap: 10,
     padding: "12px 16px",
     cursor: "pointer",
+    // <button> reset: looks like the former div header.
+    width: "100%",
+    border: 0,
+    background: "none",
+    color: "inherit",
+    font: "inherit",
+    textAlign: "left",
   } satisfies CSSProperties,
   sectionIcon: { color: "var(--text-muted)" } satisfies CSSProperties,
   sectionTitle: { fontSize: 14, fontWeight: 600, flex: 1 } satisfies CSSProperties,
@@ -65,6 +72,18 @@ export const s = {
   promptHead: { display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer" } satisfies CSSProperties,
   promptDot: (color: string): CSSProperties => ({ width: 7, height: 7, borderRadius: 2, background: color }),
   promptLabel: { fontSize: 13, fontWeight: 600 } satisfies CSSProperties,
+  // Label toggle <button> with the browser look reset.
+  promptToggleBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 10,
+    padding: 0,
+    border: 0,
+    background: "none",
+    color: "inherit",
+    font: "inherit",
+    cursor: "pointer",
+  } satisfies CSSProperties,
   promptToggle: { marginLeft: "auto", fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
   promptPre: {
     margin: 0,
