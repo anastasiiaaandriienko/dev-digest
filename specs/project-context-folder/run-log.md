@@ -48,3 +48,4 @@
 | A2 S6 | security-reviewer (A2) | UNKNOWN | a4f49eea11167728b | 2026-10-20 | 34576 | 46264 | 5 | approve, 0 findings |
 | A2 S6 | architecture-reviewer (A2) | UNKNOWN | a71e3a49fc87cd2bc | 2026-10-20 | 71283 | 76126 | 11 | approve, 0 findings |
 | A2 S7 | plan-verifier (A2) | UNKNOWN | abe2a77956fb1176d | 2026-10-20 | 106755 | 59410 | 10 | 35 PASS / 6 PARTIAL / 0 MISSING (131/137/147 not run, 108/138/140 manual) |
+| A2 G3 | main agent: run context.it.test.ts (approval 2) | — | — | 2026-10-20 | 10920 | — | 1 | 10/10 passed; AC-131, AC-137 → PASS |

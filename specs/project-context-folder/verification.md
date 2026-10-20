@@ -253,3 +253,11 @@ Working DB (:5432, read-only check): 15 migrations, last `created_at` = 0014 jou
 - Out-of-plan: `ContextView/constants.ts` (new `NOW_UPDATE_MS`, not listed in T9 files, harmless); IT fixture extra case (e); `run-log.md`.
 - **Summary: 35 PASS / 6 PARTIAL / 0 MISSING.** (Main-agent note: the verifier's report tallied "37 / 7" but its own matrix lists 6 PARTIAL rows of 41 ACs and marks AC-111 PASS; the matrix is authoritative.)
 - Remaining: run AC-131/137 integration (approval 2), run flow 08 e2e (approval 3), manual 1280×720 scroll check (AC-108). AC-138/140 are manual by design.
+
+## A2 update — integration run for AC-CTX-131/137 (main agent, 2026-10-20, approval 2)
+- Command: `cd server && DATABASE_URL=postgres://guard@127.0.0.1:1/do_not_use pnpm exec vitest run test/context.it.test.ts` → 1 file, **10/10 passed** (10.92 s), Testcontainers `pgvector/pgvector:pg16` on a random port; the guard URL points at a closed port, dev DB :5432 not used. Targeted rerun `-t "AC-CTX-137"` → 1 passed / 9 skipped.
+- `usageByPath` SQL on real Postgres (`context.it.test.ts`, "AC-CTX-137 usage counts on Postgres …"): `GET /repos/R1/context/usage` → `{ repo_id: R1, items: [{ path: P, agent_count: 4 }] }` — counted A1 (direct), A2 (via enabled skill + enabled link), A3 (direct + 2 skills, counted once), A6 (disabled agent); not counted A4 (link disabled), A5 (skill disabled), A7 (other repo). R2 → `agent_count: 1`.
+- Workspace isolation: cross-workspace rows inserted directly (bypassing HTTP) are not counted — (a) W2 `agent_context_docs` row on R1, (b) W1 row whose agent is in W2, (c) W2 `skill_context_docs` row on R1, (d) W1 skill linked to a W2 agent, (e) W2 skill with a W1 doc row linked to a W1 agent. W2 caller on R1 → 404; W2 caller on its own repo R3 → `agent_count: 1`.
+- The other 9 cases (base feature + A1 AC-CTX-101) still pass.
+- Status change: **AC-CTX-131 PARTIAL → PASS**, **AC-CTX-137 PARTIAL → PASS**; AC-CTX-138 (one statement, workspace scoping) is now also confirmed at runtime but stays a manual-review AC.
+- **A2 summary: 37 PASS / 4 PARTIAL / 0 MISSING.** Remaining: AC-147 (e2e, approval 3), AC-108 (manual 1280×720 scroll), AC-138/140 (manual by design).
