@@ -381,6 +381,13 @@ export const ContextReorderRequest = z.object({
 });
 export type ContextReorderRequest = z.infer<typeof ContextReorderRequest>;
 
+// GET /repos/:id/context/usage — how many agents use each stored doc path in this repo
+// (direct or via enabled skills). Only paths with agent_count >= 1 are listed.
+export const ContextUsageItem = z.object({ path: z.string(), agent_count: z.number().int().positive() });
+export type ContextUsageItem = z.infer<typeof ContextUsageItem>;
+export const ContextUsage = z.object({ repo_id: z.string(), items: z.array(ContextUsageItem) });
+export type ContextUsage = z.infer<typeof ContextUsage>;
+
 // ---- Run request (review trigger; owned by A2, contract lives here) ----
 export const RunRequest = z.object({
   agentId: z.string().optional(),
