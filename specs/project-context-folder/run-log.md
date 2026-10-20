@@ -44,3 +44,7 @@
 | A2 | spec-creator (amendment A2: resolve Q33–Q36, A16–A22) | opus | aee0ffc308e386b4e | 2026-10-20 | 57540 | 48498 | 18 | DONE, 0 markers, 147 unique ACs |
 | A2 S2 | implementation-planner (plan amendment A2) | opus | a8217954fe190eca7 | 2026-10-20 | 265761 | 132668 | 57 | READY, 11 tasks, 3 approvals, no SPEC_GAP |
 | A2 S3 | implementation-planner REVIEW (plan A2, cross-model) | sonnet | a0f3cd3e3ba8a88b0 | 2026-10-20 | 153289 | 80794 | 28 | approve-with-changes (0 blocker, 3 major, 7 minor); R1–R10 folded into draft |
+| A2 S4 | implementer (A2 T1–T11; T6/T11 written, not run) | opus | a5d9df65c306210c2 | 2026-10-20 | 711394 | 193713 | 90 | DONE; client 811 pass, server unit 610 pass/3 skip; 6 minor deviations |
+| A2 S6 | security-reviewer (A2) | UNKNOWN | a4f49eea11167728b | 2026-10-20 | 34576 | 46264 | 5 | approve, 0 findings |
+| A2 S6 | architecture-reviewer (A2) | UNKNOWN | a71e3a49fc87cd2bc | 2026-10-20 | 71283 | 76126 | 11 | approve, 0 findings |
+| A2 S7 | plan-verifier (A2) | UNKNOWN | abe2a77956fb1176d | 2026-10-20 | 106755 | 59410 | 10 | 35 PASS / 6 PARTIAL / 0 MISSING (131/137/147 not run, 108/138/140 manual) |

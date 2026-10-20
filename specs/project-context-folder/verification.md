@@ -222,3 +222,34 @@ Working DB (:5432, read-only check): 15 migrations, last `created_at` = 0014 jou
 - **Protected paths:** no migrations, schema, lockfiles, `package.json`; both contract copies changed identically under the Q19 approval.
 - **Gaps:** run AC-CTX-101 (`cd server && DATABASE_URL=postgres://guard@127.0.0.1:1/do_not_use pnpm exec vitest run test/context.it.test.ts`, approval); manual UI check `/agents/<id>?tab=context` (attach, reorder, preview).
 - **AC-101 run (approved, 2026-10-19):** `cd server && DATABASE_URL=postgres://guard@127.0.0.1:1/do_not_use pnpm exec vitest run test/context.it.test.ts` — Testcontainers `pgvector/pgvector:pg16` (Docker 29.8.2) → **9 passed / 0 failed / 0 skipped**, incl. "AC-CTX-101 concurrent reorder/attach and reorder/reorder keep distinct gap-free orders under the advisory lock"; the earlier CTX integration tests (AC-03, 14 ×4, 19, 30, 45) still pass. Remaining gap: manual UI check `/agents/<id>?tab=context`.
+
+## Amendment A2 — Project Context page redesign (plan-verifier, 2026-10-20)
+- Scope: spec §18 (AC-CTX-107..147) · plan `plan-a2.md` · tasks T1–T11 · base b7e31da + uncommitted working tree.
+- Approvals: G2 + approval 1 (usage endpoint package) granted 2026-10-20. Approval 2 (run `server/test/context.it.test.ts`) and approval 3 (run hermetic e2e) not granted.
+- Reviews (S6): architecture-reviewer approve (0 findings); security-reviewer approve (0 findings).
+
+| AC | Task | Evidence | Status |
+|---|---|---|---|
+| 107, 109, 110, 112, 113, 115, 116, 117, 120, 144, 145 | T9 | `ContextView.test.tsx` `it("AC-CTX-…")` cases, green | PASS |
+| 108 | T2, T9 | `ContextView.test.tsx` "AC-CTX-108 …overflowY auto, minHeight 0" green; 1280×720 independent scroll is a manual check | PARTIAL |
+| 111 | T9, T10 | "AC-CTX-111 header outside doc-preview…" + "AC-CTX-124" green | PASS |
+| 114 | T9, T10 | "AC-CTX-114 Re-index refetches the list only, not usage" green; existing AC-CTX-53 unedited, green | PASS |
+| 118 | T9 | "AC-CTX-118 …" + `helpers.test.ts` green | PASS |
+| 119 | T9 | "AC-CTX-119 Updated {time} re-evaluates every 60s…" + "…no Updated segment while dataUpdatedAt is 0…" green | PASS |
+| 121, 122, 123 | T8, T9 | `RootsPanel.test.tsx` + `ContextView.test.tsx` (121, 123) green | PASS |
+| 124 | T10 | `ContextView.test.tsx` "AC-CTX-124 …" green | PASS |
+| 125, 126 | T7, T10 | `client/src/lib/hooks/context.test.tsx` + `ContextView.test.tsx` green | PASS |
+| 127, 128, 129, 130, 132, 133, 134, 135, 136, 139 | T3–T5 | `server/test/context-usage.test.ts` green (in-memory store; Postgres SQL proven only by AC-137) | PASS |
+| 131 | T4–T6 | unit green; integration `context.it.test.ts:476` written, not run (approval 2) | PARTIAL |
+| 137 | T6 | `context.it.test.ts:476` written, not run (approval 2) | PARTIAL |
+| 138 | T4 | manual review: one statement `direct.unionAll(viaSkills).as('u')`, `count(distinct u.agent_id)::int`, workspace filters on both doc tables, `skills`, `agents`; `agent_skills` scoped via joins | PARTIAL (manual AC) |
+| 140 | T3 | manual review: new hunk byte-identical in both `platform.ts` copies | PARTIAL (manual AC) |
+| 141, 142, 143 | T1 | `Markdown.test.tsx` 3 new cases green; existing 5 unedited (29+/0−); full client suite green | PASS |
+| 146 | T2 | `DocPreview.test.tsx` 2 cases green; `ContextTab.test.tsx` untouched, green | PASS |
+| 147 | T11 | flow 08: exactly one inserted step `find role button click --name Roots`; not run (approval 3) | PARTIAL |
+
+- Checks run: `cd client && pnpm typecheck` pass; `cd client && pnpm test` 92 files / 811 passed; `cd server && pnpm typecheck` pass; `cd server && pnpm exec vitest run --exclude '**/*.it.test.ts'` 55 files / 610 passed / 3 skipped.
+- Plan constraints: existing `ContextView.test.tsx` content changed only within the R3 items plus additive imports and a `let usage` declaration/reset (no case body or assertion edited); `ContextTab.test.tsx`, `AgentAttachments.test.tsx`, `context-routes.test.ts` untouched; no migrations, schema, lockfiles, package.json, seed, `scripts/e2e.sh` or workflows changed.
+- Out-of-plan: `ContextView/constants.ts` (new `NOW_UPDATE_MS`, not listed in T9 files, harmless); IT fixture extra case (e); `run-log.md`.
+- **Summary: 35 PASS / 6 PARTIAL / 0 MISSING.** (Main-agent note: the verifier's report tallied "37 / 7" but its own matrix lists 6 PARTIAL rows of 41 ACs and marks AC-111 PASS; the matrix is authoritative.)
+- Remaining: run AC-131/137 integration (approval 2), run flow 08 e2e (approval 3), manual 1280×720 scroll check (AC-108). AC-138/140 are manual by design.
