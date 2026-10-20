@@ -13,18 +13,27 @@ export function TraceSection({
   right,
   children,
   defaultOpen = true,
+  testId,
 }: {
   icon: "Settings" | "Gauge" | "FileText" | "Wrench" | "Code" | "AlertOctagon";
   title: string;
   right?: React.ReactNode;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  /** data-testid on the header button (stable e2e selector). */
+  testId?: string;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const I = Icon[icon];
   return (
     <div style={s.section}>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} style={s.sectionHead}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        data-testid={testId}
+        style={s.sectionHead}
+      >
         <I size={15} style={s.sectionIcon} />
         <span style={s.sectionTitle}>{title}</span>
         {right}

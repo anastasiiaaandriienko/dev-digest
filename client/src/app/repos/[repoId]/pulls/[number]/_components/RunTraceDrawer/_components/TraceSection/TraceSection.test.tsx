@@ -33,6 +33,18 @@ describe("TraceSection", () => {
     );
     const head = screen.getByRole("button", { name: "Tool calls 3" });
     expect(head).toHaveAttribute("aria-expanded", "true");
+    expect(head).not.toHaveAttribute("data-testid");
     expect(screen.getByText("calls")).toBeInTheDocument();
+  });
+
+  it("puts the optional testId on the header button", () => {
+    render(
+      <TraceSection icon="FileText" title="Prompt assembly" testId="trace-section-prompt-assembly">
+        <p>body</p>
+      </TraceSection>,
+    );
+    expect(screen.getByTestId("trace-section-prompt-assembly")).toBe(
+      screen.getByRole("button", { name: "Prompt assembly" }),
+    );
   });
 });

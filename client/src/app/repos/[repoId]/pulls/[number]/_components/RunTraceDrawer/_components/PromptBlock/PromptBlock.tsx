@@ -20,7 +20,18 @@ const miniBtnStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-export function PromptBlock({ label, text, color }: { label: string; text: string; color: string }) {
+export function PromptBlock({
+  label,
+  text,
+  color,
+  testId,
+}: {
+  label: string;
+  text: string;
+  color: string;
+  /** data-testid on the toggle button (stable e2e selector). */
+  testId?: string;
+}) {
   const t = useTranslations("runs");
   const [open, setOpen] = React.useState(false);
   const [full, setFull] = React.useState(false);
@@ -38,6 +49,7 @@ export function PromptBlock({ label, text, color }: { label: string; text: strin
         <button
           type="button"
           aria-expanded={open}
+          data-testid={testId}
           onClick={(e) => {
             e.stopPropagation();
             setOpen((o) => !o);

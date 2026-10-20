@@ -88,7 +88,12 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
 
       <FindingsSection findings={findings} dropped={dropped} />
 
-      <TraceSection icon="FileText" title={t("trace.promptAssembly")} defaultOpen={false}>
+      <TraceSection
+        icon="FileText"
+        title={t("trace.promptAssembly")}
+        defaultOpen={false}
+        testId="trace-section-prompt-assembly"
+      >
         <PromptBlock label={t("trace.prompt.system")} text={trace.prompt_assembly.system} color={PROMPT_COLORS.system} />
         <SkillsAssembly assembly={trace.prompt_assembly} />
         {trace.prompt_assembly.memory != null && (

@@ -9,7 +9,7 @@ afterEach(cleanup);
 function renderIt() {
   return render(
     <NextIntlClientProvider locale="en" messages={{ runs: runsMessages }}>
-      <PromptBlock label="Project context as sent" text="[placeholder line]" color="red" />
+      <PromptBlock label="Project context as sent" text="[placeholder line]" color="red" testId="spec-sent" />
     </NextIntlClientProvider>,
   );
 }
@@ -18,6 +18,7 @@ describe("PromptBlock", () => {
   it("toggles the prompt text from a labelled button with aria-expanded", () => {
     renderIt();
     const toggle = screen.getByRole("button", { name: "Project context as sent" });
+    expect(toggle).toBe(screen.getByTestId("spec-sent"));
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("[placeholder line]")).toBeNull();
 

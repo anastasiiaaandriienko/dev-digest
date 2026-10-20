@@ -80,6 +80,7 @@ export function SpecBlocks({ assembly }: { assembly: PromptAssembly }) {
           label={blocks ? t("trace.specBlocks.sent") : t("trace.prompt.specs")}
           text={specs}
           color={PROMPT_COLORS.specs}
+          testId="trace-spec-sent-toggle"
         />
       )}
     </section>
