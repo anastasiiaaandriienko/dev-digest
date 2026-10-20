@@ -472,4 +472,95 @@ d('Project Context (Testcontainers pg)', () => {
     expect(api.payload).not.toContain(MARKER);
     expect(api.json().specs_read).toEqual(['docs/spec.md']);
   });
+
+  it('AC-CTX-137 usage counts on Postgres match AC-CTX-127..131 across workspaces, repos and disabled links', async () => {
+    const db = pg.handle.db;
+    const other = await secondWorkspace();
+    const r1 = await newRepo(workspaceId, null);
+    const r2 = await newRepo(workspaceId, null);
+    const r3 = await newRepo(other.ws.id, null);
+    const P = 'docs/p.md';
+    const doc = (ws: string, repoId: string, path = P) => ({ workspaceId: ws, repoId, path, order: 1 });
+    const direct = (ws: string, agentId: string, repoId: string, path = P) =>
+      db.insert(t.agentContextDocs).values({ ...doc(ws, repoId, path), agentId });
+    const viaSkill = (ws: string, skillId: string, repoId: string, path = P) =>
+      db.insert(t.skillContextDocs).values({ ...doc(ws, repoId, path), skillId });
+    const link = (agentId: string, skillId: string, enabled = true) =>
+      db.insert(t.agentSkills).values({ agentId, skillId, enabled });
+    const disabledSkill = async (ws: string) => {
+      const sk = await newSkill(ws);
+      await db.update(t.skills).set({ enabled: false }).where(eq(t.skills.id, sk.id));
+      return sk;
+    };
+
+    // Counted: A1 direct; A2 via enabled skill + enabled link; A3 direct + via 2 skills; A6 disabled agent, direct.
+    const a1 = await newAgent(workspaceId);
+    await direct(workspaceId, a1.id, r1.id);
+    const a2 = await newAgent(workspaceId);
+    const s2 = await newSkill(workspaceId);
+    await link(a2.id, s2.id);
+    await viaSkill(workspaceId, s2.id, r1.id);
+    const a3 = await newAgent(workspaceId);
+    const s3a = await newSkill(workspaceId);
+    const s3b = await newSkill(workspaceId);
+    await direct(workspaceId, a3.id, r1.id);
+    for (const sk of [s3a, s3b]) {
+      await link(a3.id, sk.id);
+      await viaSkill(workspaceId, sk.id, r1.id);
+    }
+    const a6 = await newAgent(workspaceId);
+    await db.update(t.agents).set({ enabled: false }).where(eq(t.agents.id, a6.id));
+    await direct(workspaceId, a6.id, r1.id);
+
+    // Not counted: A4 link disabled; A5 skill disabled; A7 has P on another repo.
+    const a4 = await newAgent(workspaceId);
+    const s4 = await newSkill(workspaceId);
+    await link(a4.id, s4.id, false);
+    await viaSkill(workspaceId, s4.id, r1.id);
+    const a5 = await newAgent(workspaceId);
+    const s5 = await disabledSkill(workspaceId);
+    await link(a5.id, s5.id);
+    await viaSkill(workspaceId, s5.id, r1.id);
+    const a7 = await newAgent(workspaceId);
+    await direct(workspaceId, a7.id, r2.id);
+
+    // Other workspace: its own agent + skill holding P for its own repo.
+    const x = await newAgent(other.ws.id);
+    await direct(other.ws.id, x.id, r3.id);
+    const xs = await newSkill(other.ws.id);
+    await link(x.id, xs.id);
+    await viaSkill(other.ws.id, xs.id, r3.id);
+
+    // Cross-workspace rows the HTTP attach path would reject (direct inserts):
+    const a8 = await newAgent(workspaceId);
+    await direct(other.ws.id, a8.id, r1.id); // (a) doc row of W2 on a W1 repo + W1 agent
+    const x2 = await newAgent(other.ws.id);
+    await direct(workspaceId, x2.id, r1.id); // (b) W1 doc row whose agent is in W2
+    const s9 = await newSkill(workspaceId);
+    const a9 = await newAgent(workspaceId);
+    await link(a9.id, s9.id);
+    await viaSkill(other.ws.id, s9.id, r1.id); // (c) W2 skill-doc row on a W1 skill linked to an enabled W1 agent
+    const s10 = await newSkill(workspaceId);
+    const x3 = await newAgent(other.ws.id);
+    await link(x3.id, s10.id);
+    await viaSkill(workspaceId, s10.id, r1.id); // (d) W1 skill + W1 doc row linked to a W2 agent
+    const s11 = await newSkill(other.ws.id);
+    const a11 = await newAgent(workspaceId);
+    await link(a11.id, s11.id);
+    await viaSkill(workspaceId, s11.id, r1.id); // (e) W2 skill carrying a W1 doc row, linked to a W1 agent
+
+    const a = await makeApp();
+    const res = await a.inject({ method: 'GET', url: `/repos/${r1.id}/context/usage` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ repo_id: r1.id, items: [{ path: P, agent_count: 4 }] });
+
+    const res2 = await a.inject({ method: 'GET', url: `/repos/${r2.id}/context/usage` });
+    expect(res2.json().items).toEqual([{ path: P, agent_count: 1 }]);
+
+    await a.close();
+    const b = await makeApp({ auth: other.auth });
+    expect((await b.inject({ method: 'GET', url: `/repos/${r1.id}/context/usage` })).statusCode).toBe(404);
+    const own = await b.inject({ method: 'GET', url: `/repos/${r3.id}/context/usage` });
+    expect(own.json().items).toEqual([{ path: P, agent_count: 1 }]);
+  });
 });
