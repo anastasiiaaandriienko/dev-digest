@@ -20,6 +20,7 @@ export const s = {
   } satisfies CSSProperties,
   path: { fontSize: 12.5, color: "var(--text-primary)", overflowWrap: "anywhere", flex: 1 } satisfies CSSProperties,
   body: { padding: "12px 16px", fontSize: 13.5, overflow: "auto", maxHeight: 520 } satisfies CSSProperties,
+  bodyFill: { padding: "12px 16px", fontSize: 13.5, overflow: "auto" } satisfies CSSProperties,
   note: { padding: "8px 16px", fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
   state: { padding: 16, fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
   error: { padding: 16, fontSize: 13, color: "var(--crit)" } satisfies CSSProperties,

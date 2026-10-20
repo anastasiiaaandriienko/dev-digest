@@ -9,7 +9,16 @@ import { ApiError } from "@/lib/api";
 import { useContextFile } from "@/lib/hooks/context";
 import { s } from "./styles";
 
-export function DocPreview({ repoId, path }: { repoId: string; path: string | null }) {
+export function DocPreview({
+  repoId,
+  path,
+  fill = false,
+}: {
+  repoId: string;
+  path: string | null;
+  /** Page layout: no 520px cap on the body (the parent scrolls). Default keeps the cap. */
+  fill?: boolean;
+}) {
   const t = useTranslations("context");
   const { data, isLoading, isError, error } = useContextFile(repoId, path);
 
@@ -41,7 +50,7 @@ export function DocPreview({ repoId, path }: { repoId: string; path: string | nu
       )}
       {data && (
         <>
-          <div style={s.body}>
+          <div style={fill ? s.bodyFill : s.body}>
             <Markdown>{data.content}</Markdown>
           </div>
           {data.truncated && <div style={s.note}>{t("preview.truncated")}</div>}
