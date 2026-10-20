@@ -33,8 +33,10 @@
     { "cmd": ["find", "role", "button", "click", "--name", "Open run trace & logs"], "label": "open the seeded run's Trace drawer" },
     { "cmd": ["wait", "--url", "trace="], "label": "trace drawer is open in the URL" },
     { "cmd": ["wait", "--text", "docs/spec.md"], "label": "Configuration lists docs/spec.md as read" },
-    { "cmd": ["find", "role", "button", "click", "--name", "Prompt assembly"], "label": "expand Prompt assembly (role click scrolls the drawer to it)" },
+    { "cmd": ["scrollintoview", "[data-testid=\"trace-section-prompt-assembly\"]"], "label": "scroll the drawer to Prompt assembly (the Linux runner does not scroll the drawer on click)" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Prompt assembly"], "label": "expand Prompt assembly" },
     { "cmd": ["wait", "--text", "1 of 1 read"], "label": "Project context summary shows the doc was read" },
+    { "cmd": ["scrollintoview", "[data-testid=\"trace-spec-sent-toggle\"]"], "label": "scroll the drawer to the persisted Project context block" },
     { "cmd": ["find", "role", "button", "click", "--name", "Project context as sent"], "label": "expand the persisted Project context block" },
     { "cmd": ["wait", "--text", "[project-context omitted from trace] path=docs/spec.md"], "label": "the trace holds the placeholder line, not the doc text" }
   ]
