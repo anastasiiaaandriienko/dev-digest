@@ -40,3 +40,5 @@
 | S6 | architecture-reviewer (A1) | opus | aaaa3b7f7059721e6 | UNKNOWN | 88780 | 65618 | 15 | approve (1 suggestion: reuse MAX_ATTACHMENTS) |
 | S7 | plan-verifier (A1) | sonnet | a5eb349c9c2f6be5c | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | PASS 29 / PARTIAL 1 (AC-101 not run) / MISSING 0 |
 | AC-101 run | main agent (vitest, testcontainers) | — | — | 2026-10-19 | UNKNOWN | — | — | context.it.test.ts 9/9 passed |
+| A2 | spec-creator (amendment A2: page redesign + usage endpoint) | opus | a7e45583269eb97ca | UNKNOWN | 339688 | 130678 | 48 | NEEDS_CLARIFICATION (Q33–Q36), 41 new ACs 107–147 |
+| A2 | spec-creator (amendment A2: resolve Q33–Q36, A16–A22) | opus | aee0ffc308e386b4e | 2026-10-20 | 57540 | 48498 | 18 | DONE, 0 markers, 147 unique ACs |
