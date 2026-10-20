@@ -42,3 +42,5 @@
 | AC-101 run | main agent (vitest, testcontainers) | — | — | 2026-10-19 | UNKNOWN | — | — | context.it.test.ts 9/9 passed |
 | A2 | spec-creator (amendment A2: page redesign + usage endpoint) | opus | a7e45583269eb97ca | UNKNOWN | 339688 | 130678 | 48 | NEEDS_CLARIFICATION (Q33–Q36), 41 new ACs 107–147 |
 | A2 | spec-creator (amendment A2: resolve Q33–Q36, A16–A22) | opus | aee0ffc308e386b4e | 2026-10-20 | 57540 | 48498 | 18 | DONE, 0 markers, 147 unique ACs |
+| A2 S2 | implementation-planner (plan amendment A2) | opus | a8217954fe190eca7 | 2026-10-20 | 265761 | 132668 | 57 | READY, 11 tasks, 3 approvals, no SPEC_GAP |
+| A2 S3 | implementation-planner REVIEW (plan A2, cross-model) | sonnet | a0f3cd3e3ba8a88b0 | 2026-10-20 | 153289 | 80794 | 28 | approve-with-changes (0 blocker, 3 major, 7 minor); R1–R10 folded into draft |
