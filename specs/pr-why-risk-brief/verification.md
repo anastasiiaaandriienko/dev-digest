@@ -3,7 +3,7 @@
 - **Verifier:** plan-verifier (S7), 2026-10-18 · **Status:** gaps to close (integration/e2e runs and paid T12 not approved yet)
 - **Scope:** spec `specs/pr-why-risk-brief/spec.md` (Approved, amended D18/D19; 50 AC-IDs, 49 active, AC-BRIEF-40 Withdrawn) · plan `specs/pr-why-risk-brief/plan.md` (Approved) · tasks T1–T11 (T6, T11 written, not run; T12 not done) · range `eaf279d..9feb6b4`.
 - **Reviews (S6):** architecture-reviewer — approve (1 suggestion: local `Tokenizer` port, applied in 9feb6b4); security-reviewer — approve (0 findings).
-- **Summary (after T6/T11 runs):** PASS 47 / PARTIAL 1 / MISSING 1 (49 active). Initial S7: PASS 33 / PARTIAL 15 / MISSING 1.
+- **Summary (final, 2026-10-20):** PASS 49 / PARTIAL 0 / MISSING 0 (49 active). After T6/T11 runs: PASS 47 / PARTIAL 1 / MISSING 1. Initial S7: PASS 33 / PARTIAL 15 / MISSING 1.
 
 Commit key: C1 0831bf9 · C2 8dc0fdb · C3 adf75ca · C4 3e48073 · C5 9cfd128 · C6 eba743f · C7 4765ea4 · C8 139afd0 · C9 64d750c · C10 20223c7 · C11 88965ea · fix 9feb6b4. Server tests in `server/test/`; client tests co-located.
 
@@ -48,11 +48,11 @@ Commit key: C1 0831bf9 · C2 8dc0fdb · C3 adf75ca · C4 3e48073 · C5 9cfd128 �
 | 35 | T8 | BriefCard helpers `focusHref` | "AC-BRIEF-35 …" ✓ | C8 | PASS | |
 | 36 | T9 | page.tsx, DiffTab, DiffViewer, FileCard | DiffTab "AC-BRIEF-36 …" (+ smart group); FileCard "AC-BRIEF-36 …" ✓ | C9 | PASS | |
 | 37 | T9 | DiffTab, diff-viewer `hasNewSideLine` | DiffTab "AC-BRIEF-37 …" ×2 ✓ | C9 | PASS | |
-| 38 | T8 | brief.json; BriefCard.tsx | "AC-BRIEF-38 strings come from brief.json" ✓ | C8 | PARTIAL | manual half (no hard-coded strings, layout) pending |
+| 38 | T8 | brief.json; BriefCard.tsx | "AC-BRIEF-38 strings come from brief.json" ✓ | C8 | PASS | manual half confirmed by the user from the HW-05 demo video (2026-10-20); see "Final evidence" below |
 | 39 | T7 | hooks/brief.ts | "AC-BRIEF-39 …" ×2 ✓ | C7 | PASS | |
 | 40 | — | — | — | — | Withdrawn | not counted |
 | 41 | T10,T11 | seed-brief.ts; 09-pr-brief.flow.json | e2e 09-pr-brief ✓ (14/14 steps): URL tab=diff, file=, line=12 + focus-missing-line notice | C10,C11,f269cdf | PASS | e2e run approved 2026-10-18 |
-| 42 | T12 | meta records `attempts` and cumulative tokens | — | — | MISSING | paid run not approved |
+| 42 | T12 | meta records `attempts` and cumulative tokens | stored brief `meta` (live run) | — | PASS | user-run paid generation on a real open PR, `attempts: 1`, `tokens_in: 768`; see "Final evidence" below |
 | 43 | T4,T6,T11 | MockLLMProvider / test-local fakes; e2e never clicks Generate | code review | C4,C6,C11 | PASS | manual AC (grep + partial read) |
 | 44 | T10,T11 | seed-brief.ts, seed.ts | brief-seed unit ✓; e2e 09-pr-brief ✓ (summary, risk, REVIEW FOCUS (2)) | C10,C11,f269cdf | PASS | e2e run approved 2026-10-18 |
 | 45 | T4 | service.ts:175 504, flight continues | "AC-BRIEF-45 …" ✓ | C4 | PASS | |
@@ -101,3 +101,13 @@ Commit key: C1 0831bf9 · C2 8dc0fdb · C3 adf75ca · C4 3e48073 · C5 9cfd128 �
 - f269cdf judged as preserving assertion strength (exact-match wait on the CSS-uppercased heading `styles.ts:36`, i18n key `brief.json:31`).
 - **Summary: PASS 47 / PARTIAL 1 (AC-38 manual UI/i18n check) / MISSING 1 (AC-42 paid T12 not approved).** 14 of the 47 PASS rest partly or wholly on the reported runs (07, 13, 14, 15, 22, 23, 29 integration; 41, 44 e2e).
 - Caveat AC-41: e2e proves the deep link by URL params + the "not in the loaded diff" notice (seeded files have no patch); card expansion is proven by the DiffTab/FileCard RTL tests.
+
+## Final evidence — AC-BRIEF-42 and AC-BRIEF-38 (main agent, 2026-10-20)
+- **AC-BRIEF-42 → PASS.** The user ran a paid brief generation while recording the HW-05 demo. Read-only check of the dev DB (`BEGIN READ ONLY … ROLLBACK`, `SELECT` only) found the stored `pr_brief` row:
+  - PR `anastasiiaaandriienko/dev-digest#3` (status `open`, 3 changed files, +8/−5); `meta.head_sha` `109471f2…` equals the PR's current `head_sha`.
+  - `meta`: provider `openrouter`, model `openai/gpt-oss-20b`, `prompt_version` `brief-v1`, `generated_at` 2026-10-20T13:02:47.690Z, **`attempts: 1`**, **`tokens_in: 768`** (provider-reported, ≤ 8,000; single attempt, so no fallback per D18), `tokens_out: 929`, `cost_usd: 0.000152332`, `truncated: false`, `intent_available: true`.
+  - All 4 `review_focus` paths and all 5 risk `file_refs` are in the PR's `pr_files` (`server/src/modules/agents/helpers.ts`, `server/src/modules/agents/routes.ts`, `server/src/vendor/shared/contracts/knowledge.ts`).
+  - Caveat: one live sample on a small PR; truncation on large PRs is covered by the prompt-builder unit tests (assembly ≤ 4,500 tokens).
+- **AC-BRIEF-38 → PASS.** Automated half: `BriefCard.tsx`, `constants.ts`, `helpers.ts` contain no hard-coded user-facing strings (all text via `t("…")`), RTL test green. Manual half (layout, no raw i18n keys) confirmed by the user from the HW-05 demo video.
+- No code, DB data or tests changed; no new LLM calls.
+- **Summary: PASS 49 / PARTIAL 0 / MISSING 0.**
