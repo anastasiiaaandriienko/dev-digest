@@ -261,3 +261,10 @@ Working DB (:5432, read-only check): 15 migrations, last `created_at` = 0014 jou
 - The other 9 cases (base feature + A1 AC-CTX-101) still pass.
 - Status change: **AC-CTX-131 PARTIAL → PASS**, **AC-CTX-137 PARTIAL → PASS**; AC-CTX-138 (one statement, workspace scoping) is now also confirmed at runtime but stays a manual-review AC.
 - **A2 summary: 37 PASS / 4 PARTIAL / 0 MISSING.** Remaining: AC-147 (e2e, approval 3), AC-108 (manual 1280×720 scroll), AC-138/140 (manual by design).
+
+## A2 update — hermetic e2e for AC-CTX-147 (main agent, 2026-10-20, approval 3)
+- Command (Git Bash): `OPENAI_API_KEY= ANTHROPIC_API_KEY= OPENROUTER_API_KEY= GITHUB_TOKEN= GITHUB_PAT= DEVDIGEST_CLONE_DIR=<scratchpad temp dir> AGENT_BROWSER_BIN=<npm root -g>/agent-browser/bin/agent-browser-win32-x64.exe ./scripts/e2e.sh` → exit 0, **9/9 flows passed**. Isolated stack only (Postgres :5433, API :3101, web :3100); `~/.devdigest/secrets.json` absent; server logged `GITHUB_TOKEN is not configured`; no LLM provider calls; stack torn down (ports 5433/3101/3100 free afterwards; dev DB :5432 not touched). `scripts/e2e.sh` has no single-flow filter, so all 9 read-only flows ran.
+- Flow 08 "Project Context: browse a repo doc, attach it to an agent, see it in a run's trace": all 35 steps green, incl. the new step "expand the Roots panel" (`find role button click --name Roots`) followed by "the Roots editor is shown" — the toggle is found by its exact name and expands the editor. The existing scenario still works: doc listed, select `docs/spec.md`, read-only preview with heading and marker, attach section shown (now in the preview panel), attach to the first agent, Detach, and the seeded run's Trace drawer shows `docs/spec.md` as read with the placeholder, not the doc text.
+- No seed, `e2e.sh`, workflow or production code changed.
+- Status change: **AC-CTX-147 PARTIAL → PASS**.
+- **A2 summary: 38 PASS / 3 PARTIAL / 0 MISSING.** Remaining: AC-108 (manual 1280×720 independent scroll), AC-138/140 (manual review by design; already reviewed, AC-138 also confirmed by AC-137 on Postgres).
