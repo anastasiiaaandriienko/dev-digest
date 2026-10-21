@@ -108,7 +108,7 @@ export const Risk = z.object({
 export type Risk = z.infer<typeof Risk>;
 
 export const Risks = z.object({
-  risks: z.array(Risk),
+  risks: z.array(Risk).max(6),
 });
 export type Risks = z.infer<typeof Risks>;
 
@@ -172,10 +172,37 @@ export const SmartDiff = z.object({
 export type SmartDiff = z.infer<typeof SmartDiff>;
 
 // ---- Composed PR Brief (pr_brief.json) ----
+/** A file/line the reviewer should look at first. */
+export const BriefReviewFocus = z.object({
+  path: z.string(),
+  line: z.number().int().min(1),
+  reason: z.string(),
+});
+export type BriefReviewFocus = z.infer<typeof BriefReviewFocus>;
+
+/** Generation metadata. tokens_in / tokens_out / attempts are cumulative over provider attempts. */
+export const PrBriefMeta = z.object({
+  head_sha: z.string(),
+  provider: z.string(),
+  model: z.string(),
+  prompt_version: z.string(),
+  tokens_in: z.number().int(),
+  tokens_out: z.number().int(),
+  attempts: z.number().int(),
+  cost_usd: z.number().nullable(),
+  generated_at: z.string(),
+  truncated: z.boolean(),
+  intent_available: z.boolean(),
+});
+export type PrBriefMeta = z.infer<typeof PrBriefMeta>;
+
 export const PrBrief = z.object({
   intent: Intent,
   blast: BlastRadius,
   risks: Risks,
-  history: PrHistory,
+  history: PrHistory.optional(),
+  summary: z.string().optional(),
+  review_focus: z.array(BriefReviewFocus).max(8).optional(),
+  meta: PrBriefMeta.optional(),
 });
 export type PrBrief = z.infer<typeof PrBrief>;

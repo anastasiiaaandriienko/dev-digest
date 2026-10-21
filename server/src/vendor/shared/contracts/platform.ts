@@ -315,6 +315,78 @@ export const IndexStatus = z.object({
   chunks_indexed: z.number().int().nullish(),
 });
 export type IndexStatus = z.infer<typeof IndexStatus>;
+// ---- Project Context folder (specs/project-context-folder) ----
+export const ContextTruncatedReason = z.enum(['file_limit', 'depth_limit', 'time_limit']);
+export type ContextTruncatedReason = z.infer<typeof ContextTruncatedReason>;
+
+/** One discovered doc in a list. Metadata only — never document content. */
+export const ContextListItem = z.object({
+  path: z.string(),
+  size: z.number().int().nonnegative(),
+  updated_at: z.string(),
+});
+export type ContextListItem = z.infer<typeof ContextListItem>;
+
+/** GET /repos/:id/context?q= */
+export const ContextList = z.object({
+  files: z.array(ContextListItem),
+  roots: z.array(z.string()),
+  truncated: z.boolean(),
+  truncated_reasons: z.array(ContextTruncatedReason),
+});
+export type ContextList = z.infer<typeof ContextList>;
+
+/** GET /repos/:id/context/file?path= — read-only preview (redacted, capped). */
+export const ContextFile = z.object({
+  path: z.string(),
+  content: z.string(),
+  size: z.number().int().nonnegative(),
+  updated_at: z.string(),
+  truncated: z.boolean(),
+});
+export type ContextFile = z.infer<typeof ContextFile>;
+
+/** Body of PUT /repos/:id/context/roots. */
+export const ContextRootsUpdate = z.object({ roots: z.array(z.string()) });
+export type ContextRootsUpdate = z.infer<typeof ContextRootsUpdate>;
+
+/** GET|PUT /repos/:id/context/roots. */
+export const ContextRoots = z.object({ roots: z.array(z.string()) });
+export type ContextRoots = z.infer<typeof ContextRoots>;
+
+export const ContextAttachmentStatus = z.enum(['ok', 'missing', 'outside_roots']);
+export type ContextAttachmentStatus = z.infer<typeof ContextAttachmentStatus>;
+
+/** One doc attached to an agent or a skill for a repo. */
+export const ContextAttachment = z.object({
+  id: z.string(),
+  repo_id: z.string(),
+  path: z.string(),
+  order: z.number().int().nonnegative(),
+  status: ContextAttachmentStatus,
+});
+export type ContextAttachment = z.infer<typeof ContextAttachment>;
+
+/** Body of POST /agents|skills/:id/context-docs?repo_id=. */
+export const ContextAttachRequest = z.object({ path: z.string().min(1) });
+export type ContextAttachRequest = z.infer<typeof ContextAttachRequest>;
+
+// Full new order of one owner's attached docs for a repo. `.max(10)` mirrors the
+// server's MAX_ATTACHMENTS (server/src/modules/context/constants.ts).
+export const ContextReorderRequest = z.object({
+  ids: z
+    .array(z.string().uuid())
+    .max(10)
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'ids must be unique' }),
+});
+export type ContextReorderRequest = z.infer<typeof ContextReorderRequest>;
+
+// GET /repos/:id/context/usage — how many agents use each stored doc path in this repo
+// (direct or via enabled skills). Only paths with agent_count >= 1 are listed.
+export const ContextUsageItem = z.object({ path: z.string(), agent_count: z.number().int().positive() });
+export type ContextUsageItem = z.infer<typeof ContextUsageItem>;
+export const ContextUsage = z.object({ repo_id: z.string(), items: z.array(ContextUsageItem) });
+export type ContextUsage = z.infer<typeof ContextUsage>;
 
 // ---- Run request (review trigger; owned by A2, contract lives here) ----
 export const RunRequest = z.object({

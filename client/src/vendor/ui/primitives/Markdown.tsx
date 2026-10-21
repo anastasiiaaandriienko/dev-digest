@@ -21,6 +21,16 @@ const heading = (fontSize: string, marginTop: number): React.CSSProperties => ({
   margin: `${marginTop}px 0 8px`,
 });
 
+/** GFM table cell style; alignment arrives as `align` (hast) or `style.textAlign` depending on the version. */
+function cell(props: { align?: string; style?: React.CSSProperties }): React.CSSProperties {
+  const align = props.align ?? props.style?.textAlign;
+  return {
+    border: "1px solid var(--border)",
+    padding: "6px 10px",
+    textAlign: align === "left" || align === "center" || align === "right" ? align : "left",
+  };
+}
+
 /**
  * Markdown renderer (replaces prototype mdLite). Inline + GFM. Block elements
  * get explicit styles because the global reset strips heading / list / pre
@@ -65,6 +75,18 @@ export function Markdown({ children }: { children?: string | null }) {
               <code className={blockCode(node).className}>{blockCode(node).text}</code>
             </pre>
           ),
+          table: ({ children }) => (
+            <div style={{ overflowX: "auto", margin: "0 0 10px", fontSize: "0.95em" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%" }}>{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => <thead>{children}</thead>,
+          tbody: ({ children }) => <tbody>{children}</tbody>,
+          tr: ({ children }) => <tr>{children}</tr>,
+          th: ({ children, ...rest }) => (
+            <th style={{ ...cell(rest), background: "var(--bg-hover)", fontWeight: 600 }}>{children}</th>
+          ),
+          td: ({ children, ...rest }) => <td style={cell(rest)}>{children}</td>,
           p: ({ children }) => <p style={{ margin: "0 0 10px" }}>{children}</p>,
           strong: ({ children }) => (
             <strong style={{ fontWeight: 650, color: "var(--text-primary)" }}>{children}</strong>

@@ -26,7 +26,17 @@ describe('list_agents', () => {
     expect(JSON.stringify(r)).not.toContain('TOP SECRET');
     expect(Object.keys(sc(r).agents[0]!)).not.toContain('system_prompt');
     expect(sc(r).agents[0]!.description).toHaveLength(300);
-    expect(sc(r).agents[1]).toMatchObject({ description: null, provider: null, model: null, skill_count: null });
+    expect(sc(r).agents[1]).toMatchObject({ description: null, model: null });
+  });
+
+  it('returns exactly id, name, description, model, enabled (no provider)', async () => {
+    const withExtras = [{ ...agents[0], strategy: 'single', skill_count: 3 }];
+    const { deps } = makeDeps(() => ({ body: withExtras }));
+    const r = await listAgents(deps, {});
+    expect(Object.keys(sc(r).agents[0]!)).toEqual(['id', 'name', 'description', 'model', 'enabled']);
+    expect(JSON.stringify(sc(r))).not.toContain('provider');
+    expect(textOf(r)).toContain('model m');
+    expect(textOf(r)).not.toContain('p/m');
   });
 
   it('filters enabled_only', async () => {
@@ -314,6 +324,29 @@ describe('get_findings', () => {
     expect(out.findings_total).toBe(55);
     expect(out.findings_truncated).toBe(true);
     expect(textOf(r)).toContain('5 more not shown');
+  });
+
+  it('total_findings counts findings beyond the per-review cap', async () => {
+    const many = Array.from({ length: 55 }, (_, i) => finding({ id: `f${i}`, start_line: i }));
+    const other = review({ id: 'r9', agent_id: AGENT2, findings: [finding({ id: 'x1' }), finding({ id: 'x2' })] });
+    const { deps } = makeDeps(() => ({ body: [review({ findings: many }), other] }));
+    const r = await getFindings(deps, { pr_id: PR });
+    expect(sc(r).total_findings).toBe(57);
+    expect(sc(r).reviews.flatMap((x) => x.findings)).toHaveLength(52);
+    expect(textOf(r)).toContain('Total findings: 57');
+  });
+
+  it('total_findings covers only the selected reviews (latest per agent by default)', async () => {
+    const older = review({ id: 'old', created_at: '2026-01-01T00:00:00Z', findings: [finding(), finding({ id: 'f2' })] });
+    const newer = review({ id: 'new', created_at: '2026-02-01T00:00:00Z', findings: [finding()] });
+    const { deps } = makeDeps(() => ({ body: [older, newer] }));
+    expect(sc(await getFindings(deps, { pr_id: PR })).total_findings).toBe(1);
+    expect(sc(await getFindings(deps, { pr_id: PR, all_runs: true })).total_findings).toBe(3);
+  });
+
+  it('total_findings is 0 when there are no reviews', async () => {
+    const { deps } = makeDeps(() => ({ body: [] }));
+    expect(sc(await getFindings(deps, { pr_id: PR })).total_findings).toBe(0);
   });
 
   it('does not flag truncation at exactly 50', async () => {

@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Implements an APPROVED DevDigest Development Plan (produced by the planner subagent) across server/, client/ and reviewer-core/. Use only after the user approved the plan; pass the plan verbatim plus the task IDs to execute and any extra approvals. Reads the package INSIGHTS.md and loads the project skills named in each task before editing, runs typecheck and unit tests, and returns changed files, check results and limitations. Does not commit, install, migrate, touch lockfiles or replace the architecture/security reviewers.
+description: Implements an APPROVED DevDigest Development Plan (produced by the planner or implementation-planner subagent) across server/, client/ and reviewer-core/. Use only after the user approved the plan; pass the plan verbatim plus the task IDs to execute and any extra approvals. Reads the package INSIGHTS.md and loads the project skills named in each task before editing, runs typecheck and unit tests, and returns changed files, check results and limitations. Does not commit, install, migrate, touch lockfiles or replace the architecture/security reviewers.
 tools: Read, Grep, Glob, Edit, Write, Bash, Skill
 disallowedTools: NotebookEdit, PowerShell, WebFetch, WebSearch, Agent
 model: sonnet

@@ -62,6 +62,17 @@ jobs:
           done
           [ "$(docker inspect -f '{{.State.Health.Status}}' devdigest-postgres)" = "healthy" ]
 
+      # --- Project Context fixture (flow 08): a throw-away "clone" with one doc ---
+      # The seed points acme/payments-api at SEED_CONTEXT_CLONE_PATH and records a
+      # run whose trace names docs/spec.md. $GITHUB_ENV makes the variable visible
+      # to the seed step and to the API step that serves the Context page.
+      - name: Create Project Context fixture clone
+        run: |
+          dir="$RUNNER_TEMP/devdigest-e2e-ctx"
+          mkdir -p "$dir/docs"
+          printf '# Payments Spec Fixture\n\nRULE-CTX-7f3a: every public endpoint must be rate limited.\n' > "$dir/docs/spec.md"
+          echo "SEED_CONTEXT_CLONE_PATH=$(realpath "$dir")" >> "$GITHUB_ENV"
+
       # --- API: install, migrate, seed, then start in the background ---
       - name: Install + migrate + seed (server)
         working-directory: server

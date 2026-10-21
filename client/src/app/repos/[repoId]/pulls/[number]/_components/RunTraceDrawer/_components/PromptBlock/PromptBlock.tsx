@@ -20,7 +20,18 @@ const miniBtnStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-export function PromptBlock({ label, text, color }: { label: string; text: string; color: string }) {
+export function PromptBlock({
+  label,
+  text,
+  color,
+  testId,
+}: {
+  label: string;
+  text: string;
+  color: string;
+  /** data-testid on the toggle button (stable e2e selector). */
+  testId?: string;
+}) {
   const t = useTranslations("runs");
   const [open, setOpen] = React.useState(false);
   const [full, setFull] = React.useState(false);
@@ -33,8 +44,21 @@ export function PromptBlock({ label, text, color }: { label: string; text: strin
   return (
     <div style={s.promptRow}>
       <div onClick={() => setOpen((o) => !o)} style={s.promptHead}>
-        <span style={s.promptDot(color)} />
-        <span style={s.promptLabel}>{label}</span>
+        {/* The label is the toggle button (keyboard/role-reachable); the row
+            stays clickable for the mouse, as before. */}
+        <button
+          type="button"
+          aria-expanded={open}
+          data-testid={testId}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((o) => !o);
+          }}
+          style={s.promptToggleBtn}
+        >
+          <span style={s.promptDot(color)} />
+          <span style={s.promptLabel}>{label}</span>
+        </button>
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           <button
             type="button"

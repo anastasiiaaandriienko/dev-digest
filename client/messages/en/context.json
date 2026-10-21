@@ -1,24 +1,105 @@
 {
   "title": "Project Context",
-  "chunks": "{count} chunks",
+  "crumbLab": "Skills Lab",
+  "subtitle": "Markdown docs from this repo that agents and skills can read as grounding context. Read-only: docs are never edited here.",
   "reindex": "Re-index",
-  "indexing": "Indexing…",
-  "resync": "Resync",
-  "resyncing": "Resyncing…",
-  "indexStatus": "Index status: {status}",
-  "loadError": "Couldn’t load specs",
-  "kb": "{kb}kb",
+  "reindexHint": "Reload the list of docs from the clone",
+  "download": "Download",
+  "downloadHint": "Download the previewed text (redacted and truncated like the preview)",
+  "docsPanelLabel": "Project docs",
+  "previewPanelLabel": "Doc preview",
+  "searchLabel": "Search docs",
+  "searchPlaceholder": "Search by path or content…",
+  "loadError": "Couldn’t load project context",
+  "notCloned": "This repository isn’t cloned yet, so there are no docs to list. Import or refresh it first.",
+  "kb": "{kb} kB",
+  "listLabel": "Discovered docs",
+  "count": "{count, plural, one {# doc} other {# docs}}",
+  "noMatches": "No docs match “{q}”.",
   "empty": {
-    "title": "No spec files yet",
-    "body": "Drop your PRDs, tech specs, and acceptance criteria under .devdigest/specs/. Every agent and the PR brief read them as grounding context."
+    "title": "No docs found",
+    "body": "No Markdown files were found under {roots}. Add the folders that hold your PRDs, tech specs and acceptance criteria to the Roots panel below."
   },
-  "mode": {
-    "preview": "preview",
-    "edit": "edit"
+  "truncated": {
+    "title": "The list is incomplete",
+    "file_limit": "Too many files: only the first ones are shown.",
+    "depth_limit": "Some folders are nested too deeply and were skipped.",
+    "time_limit": "Scanning took too long and was stopped."
   },
-  "editor": {
-    "loadError": "Couldn’t load spec",
-    "save": "Save",
-    "saving": "Saving…"
+  "roots": {
+    "title": "Roots",
+    "toggle": "Roots",
+    "summary": "Effective roots",
+    "hint": "One folder per line, relative to the repo root. Up to 10.",
+    "label": "Context roots",
+    "save": "Save roots",
+    "saving": "Saving…",
+    "reset": "Reset",
+    "saved": "Roots saved",
+    "error": "Couldn’t save roots"
+  },
+  "preview": {
+    "title": "Preview",
+    "empty": "Select a doc to preview it.",
+    "readOnly": "Read-only preview",
+    "truncated": "Preview truncated to the first part of the file.",
+    "loadError": "Couldn’t load the preview",
+    "unreadable": "This doc can’t be read ({reason}).",
+    "loading": "Loading preview…",
+    "modePreview": "Preview",
+    "modeEdit": "Edit",
+    "editDisabled": "Docs are read-only here. Edit them in the repository."
+  },
+  "attach": {
+    "title": "Attach to an agent",
+    "hint": "Attached docs are injected into that agent’s review prompt for this repo.",
+    "agentLabel": "Agent",
+    "noAgents": "There are no agents yet.",
+    "docLabel": "Doc to attach",
+    "pickDoc": "Choose a doc…",
+    "attach": "Attach",
+    "attaching": "Attaching…",
+    "detach": "Detach {path}",
+    "none": "Nothing attached for this repo yet.",
+    "listLabel": "Attached docs",
+    "loadError": "Couldn’t load attachments",
+    "limit": "At most 10 docs can be attached.",
+    "status": {
+      "ok": "Attached",
+      "missing": "Missing",
+      "outside_roots": "Outside roots"
+    },
+    "statusHint": {
+      "ok": "The doc is in the clone and under the current roots.",
+      "missing": "The file is no longer in the clone; it will be skipped at review time.",
+      "outside_roots": "The path is not under the current roots; it will be skipped at review time."
+    }
+  },
+  "usage": {
+    "label": "{count, plural, =0 {Not used by any agent} one {Used by # agent} other {Used by # agents}}"
+  },
+  "footer": {
+    "updated": "Updated {time}"
+  },
+  "tab": {
+    "noRepo": "Select a repository to attach project context docs.",
+    "title": "Project context",
+    "repoLabel": "Repository"
+  },
+  "agentTab": {
+    "title": "Project context",
+    "badge": "{attached} of {total} attached",
+    "helper": "Checked docs are attached to this agent. Attached docs are listed first, in the order they are injected.",
+    "filterLabel": "Filter documents",
+    "filterPlaceholder": "Filter documents…",
+    "empty": "No docs found for this repository.",
+    "noMatches": "No docs match “{q}”.",
+    "preview": "Preview",
+    "previewLabel": "Preview {path}",
+    "moveUp": "Move {path} up",
+    "moveDown": "Move {path} down",
+    "drag": "Drag {path} to reorder",
+    "reorderError": "Could not save the new order. The list shows the saved order.",
+    "footer": "Attached docs are injected as an untrusted “## Project context” block into review runs of this agent on pull requests of this repository."
   }
 }

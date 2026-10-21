@@ -49,6 +49,36 @@ export const AppliedSkill = z.object({
 });
 export type AppliedSkill = z.infer<typeof AppliedSkill>;
 
+/** One attached project-context doc as seen at run time (paths and metadata only,
+    never document text). One entry per attachment occurrence. */
+export const SpecBlock = z.object({
+  path: z.string(),
+  source: z.enum(['agent', 'skill']),
+  skill_id: z.string().nullish(),
+  status: z.enum(['read', 'missing', 'skipped']),
+  reason: z.string().nullish(),
+  tokens: z.number().int().nonnegative().nullish(),
+  truncated: z.boolean().nullish(),
+});
+export type SpecBlock = z.infer<typeof SpecBlock>;
+
+/** Counts and the limits used for the project-context section of a run. */
+export const SpecSummary = z.object({
+  attached: z.number().int().nonnegative(),
+  read: z.number().int().nonnegative(),
+  missing: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  truncated: z.number().int().nonnegative(),
+  tokens: z.number().int().nonnegative(),
+  limits: z.object({
+    doc_bytes: z.number().int().nonnegative(),
+    doc_tokens: z.number().int().nonnegative(),
+    prompt_tokens: z.number().int().nonnegative(),
+    attachments: z.number().int().nonnegative(),
+  }),
+});
+export type SpecSummary = z.infer<typeof SpecSummary>;
+
 export const PromptAssembly = z.object({
   system: z.string(),
   skills: z.string().nullish(),
@@ -68,6 +98,12 @@ export const PromptAssembly = z.object({
   /** Tokens of the Skills section ONLY (tiktoken), not the whole prompt. null
       when no skill was applied; absent in older traces. */
   skills_tokens: z.number().int().nonnegative().nullish(),
+  /** Project-context docs per attachment occurrence (paths + status, no text). */
+  spec_blocks: z.array(SpecBlock).nullish(),
+  /** Tokens of "## Project context
+" + the specs block as sent to the LLM; null when absent. */
+  specs_tokens: z.number().int().nonnegative().nullish(),
+  spec_summary: SpecSummary.nullish(),
   user: z.string(),
 });
 export type PromptAssembly = z.infer<typeof PromptAssembly>;

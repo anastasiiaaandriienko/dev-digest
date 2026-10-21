@@ -9,6 +9,8 @@ import {
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { seedBriefFixture } from './seed-brief.js';
+import { placeholderLine } from '../modules/context/constants.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -177,6 +179,9 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     ]);
   }
 
+  // ---- PR Brief fixture (outside `if (!pr)` so a re-seed adds it too) ----
+  await seedBriefFixture(db, { prId: pr!.id, headSha: pr!.headSha });
+
   // ---- built-in agents (the three starter presets) ----
   // Prompt bodies live in ./seed-prompts.ts (mirrored in docs/agent-prompts/*.md).
   const seedAgents: Array<typeof t.agents.$inferInsert> = [
@@ -222,7 +227,117 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     if (!existing) await db.insert(t.agents).values(a);
   }
 
+  // ---- Project Context e2e fixtures (opt-in; the dev seed is unchanged) ----
+  // Only the hermetic e2e stack sets SEED_CONTEXT_CLONE_PATH (scripts/e2e.sh).
+  const contextClonePath = process.env.SEED_CONTEXT_CLONE_PATH?.trim();
+  if (contextClonePath) {
+    await seedProjectContextFixtures(db, {
+      workspaceId,
+      repoId,
+      prId: pr!.id,
+      clonePath: contextClonePath,
+    });
+  }
+
   return { workspaceId, userId };
+}
+
+/** Model name that marks the seeded Project Context run (idempotency key). */
+const CONTEXT_SEED_MODEL = 'seed-context';
+const CONTEXT_SEED_DOC = 'docs/spec.md';
+
+/**
+ * e2e fixtures for the Project Context flow (AC-CTX-46): point the demo repo at
+ * a fixture clone and add ONE finished run for PR #482 whose trace records that
+ * `docs/spec.md` was read. The trace holds placeholders only — never doc text
+ * (AC-CTX-72). Idempotent.
+ */
+async function seedProjectContextFixtures(
+  db: Db,
+  p: { workspaceId: string; repoId: string; prId: string; clonePath: string },
+): Promise<void> {
+  const [repoRow] = await db.select().from(t.repos).where(eq(t.repos.id, p.repoId));
+  if (repoRow && repoRow.clonePath !== p.clonePath) {
+    await db.update(t.repos).set({ clonePath: p.clonePath }).where(eq(t.repos.id, p.repoId));
+  }
+
+  const [existing] = await db
+    .select({ id: t.agentRuns.id })
+    .from(t.agentRuns)
+    .where(
+      and(
+        eq(t.agentRuns.workspaceId, p.workspaceId),
+        eq(t.agentRuns.prId, p.prId),
+        eq(t.agentRuns.model, CONTEXT_SEED_MODEL),
+      ),
+    );
+  if (existing) return;
+
+  const [agent] = await db
+    .select()
+    .from(t.agents)
+    .where(and(eq(t.agents.workspaceId, p.workspaceId), eq(t.agents.name, 'General Reviewer')));
+
+  const tokens = 12;
+  const line = placeholderLine(CONTEXT_SEED_DOC, tokens, false);
+  const placeholders = `<untrusted source="spec-0">\n${line}\n</untrusted>`;
+  const [run] = await db
+    .insert(t.agentRuns)
+    .values({
+      workspaceId: p.workspaceId,
+      agentId: agent?.id ?? null,
+      prId: p.prId,
+      provider: 'seed',
+      model: CONTEXT_SEED_MODEL,
+      durationMs: 1200,
+      tokensIn: 0,
+      tokensOut: 0,
+      status: 'done',
+      findingsCount: 0,
+      grounding: '0/0 passed',
+      source: 'local',
+    })
+    .returning();
+
+  await db.insert(t.runTraces).values({
+    runId: run!.id,
+    trace: {
+      config: {
+        agent: 'General Reviewer',
+        version: '1',
+        provider: 'seed',
+        model: CONTEXT_SEED_MODEL,
+        pr: 482,
+        source: 'local',
+      },
+      stats: { duration_ms: 1200, tokens_in: 0, tokens_out: 0, findings: 0, grounding: '0/0 passed' },
+      prompt_assembly: {
+        system: 'Seeded e2e fixture run (no LLM was called).',
+        specs: placeholders,
+        user: `## Project context\n${placeholders}`,
+        spec_blocks: [
+          { path: CONTEXT_SEED_DOC, source: 'agent', status: 'read', tokens, truncated: false },
+        ],
+        specs_tokens: tokens,
+        spec_summary: {
+          attached: 1,
+          read: 1,
+          missing: 0,
+          skipped: 0,
+          truncated: 0,
+          tokens,
+          // Run-time snapshot of the limits. Literals on purpose: the L1-L9 constants
+          // are imported only by the context module and the executor (AC-CTX-67).
+          limits: { doc_bytes: 32768, doc_tokens: 4000, prompt_tokens: 12000, attachments: 10 },
+        },
+      },
+      tool_calls: [],
+      raw_output: '',
+      memory_pulled: [],
+      specs_read: [CONTEXT_SEED_DOC],
+      log: [],
+    },
+  });
 }
 
 // CLI entrypoint

@@ -20,6 +20,8 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [frontend-architecture](frontend-architecture/SKILL.md) | Frontend (repo) | Where pages, components, hooks, styles, i18n and tests go in `client/` |
 | [onion-architecture](onion-architecture/SKILL.md) | Backend (repo) | route → service → domain, adapters behind the Container, known violations |
 | [pr-self-review](pr-self-review/SKILL.md) | Workflow (manual) | `/pr-self-review` — routes the uncommitted diff to the client/server skill sets and reports findings |
+| [run-plan](run-plan/SKILL.md) | Workflow (manual) | `/run-plan <slug>` — SDD pipeline spec → plan → cross-model review → implement → test → review → verify, with approval gates; artifacts in `specs/<slug>/` |
+| [workflow-retro](workflow-retro/SKILL.md) | Workflow (manual) | `/workflow-retro <slug>` — measured tokens, cache, tool calls, concurrency and repeats of a run (deep mode: per subagent) → `docs/retros/ledger.md` |
 
 ## What Are Skills?
 

@@ -121,7 +121,9 @@
     "docsHint": "Documentation and notes",
     "boilerplateHint": "Generated / mechanical — skim",
     "diffStats": "{count} files · +{additions} −{deletions}",
-    "hideCard": "Hide this finding"
+    "hideCard": "Hide this finding",
+    "focusMissingFile": "{path} is not part of the loaded diff.",
+    "focusMissingLine": "Line {line} of {path} is not in the loaded diff (it may be outside the changed hunks or the patch was not fetched)."
   },
   "list": {
     "breadcrumb": "Pull Requests",

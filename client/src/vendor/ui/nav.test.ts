@@ -10,13 +10,18 @@ describe("NAV", () => {
     expect(keys("WORKSPACE")).toEqual(["pulls"]);
   });
 
-  it("lists Skills, Agents, then Conventions under SKILLS LAB", () => {
-    expect(keys("SKILLS LAB")).toEqual(["skills", "agents", "conventions"]);
+  it("lists Skills, Agents, Conventions, then Project Context under SKILLS LAB", () => {
+    expect(keys("SKILLS LAB")).toEqual(["skills", "agents", "conventions", "context"]);
     expect(section("SKILLS LAB")!.items[2]).toMatchObject({
       label: "Conventions",
       icon: "ListChecks",
       href: "/repos/:repoId/conventions",
       gKey: "c",
+    });
+    expect(section("SKILLS LAB")!.items[3]).toMatchObject({
+      label: "Project Context",
+      icon: "FileText",
+      href: "/repos/:repoId/context",
     });
     expect(section("SKILLS LAB")!.items[0]).toMatchObject({ href: "/skills", icon: "Sparkles", gKey: "s" });
     expect(section("SKILLS LAB")!.items[1]).toMatchObject({ href: "/agents", gKey: "a" });

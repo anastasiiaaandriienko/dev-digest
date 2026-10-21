@@ -35,7 +35,7 @@ export class ReviewService {
   constructor(private container: Container) {
     this.repo = new ReviewRepository(container.db);
     this.agents = container.agentsRepo;
-    this.executor = new ReviewRunExecutor(container, this.repo, this.agents, new IntentService(container));
+    this.executor = new ReviewRunExecutor(container, this.repo, this.agents, new IntentService(container), container.contextStore ?? undefined);
   }
 
   // ===========================================================================

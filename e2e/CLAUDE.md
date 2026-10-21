@@ -21,7 +21,7 @@ browser suite. Details live in the linked docs — open them only when needed.
 |---|---|
 | `run.ts` | runner: load specs, run steps, failure screenshot, summary, exit code |
 | `lib/assert.ts` | `Flow`/`Step` types, `{BASE}` substitution, `stdoutIncludes` check |
-| `specs/*.flow.json` | the 7 flows (boot, PR detail, agents, findings, diff, onboarding, settings) |
+| `specs/*.flow.json` | the 9 flows (boot, PR detail, agents, findings, diff, onboarding, settings, project context, PR brief) |
 | `agent-browser.json` | CLI config (headless) |
 | `../scripts/e2e.sh` | local hermetic stack (isolated Postgres :5433, API :3101, web :3100) |
 | `../.github/workflows/e2e-web.yml` | CI: dev ports, `pnpm build` + `pnpm start`, then `npm test` |
@@ -46,7 +46,7 @@ global install (`npm i -g agent-browser && agent-browser install`) — also ask.
 - Assert on **user-visible text** that the seed guarantees; when UI copy or seed
   data changes, update the affected flows in the same change.
 - Each flow starts from `open {BASE}/…` (session is shared, so don't rely on the
-  previous flow's page). Number new flows `08-…`; order = filename order.
+  previous flow's page). Number new flows `10-…`; order = filename order.
 - Use `npm` here (own `package-lock.json`); the package has no runtime deps.
 
 ## Boundaries

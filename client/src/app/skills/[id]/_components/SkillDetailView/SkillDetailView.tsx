@@ -23,6 +23,7 @@ import { TYPE_COLOR } from "../../../constants";
 import { DeleteSkillModal } from "../../../_components/DeleteSkillModal";
 import { SkillsSidebar } from "../../../_components/SkillsSidebar";
 import { ConfigTab, type ConfigGuard } from "./_components/ConfigTab";
+import { ContextTab } from "./_components/ContextTab";
 import { EvalsTab } from "./_components/EvalsTab";
 import { PreviewTab } from "./_components/PreviewTab";
 import { StatsTab } from "./_components/StatsTab";
@@ -161,6 +162,7 @@ export function SkillDetailView() {
                 {tab === "preview" && <PreviewTab skill={skill} />}
                 {tab === "evals" && <EvalsTab />}
                 {tab === "stats" && <StatsTab skill={skill} onNavigate={leaveTo} />}
+                {tab === "context" && <ContextTab skill={skill} />}
                 {tab === "versioning" && <VersioningTab skill={skill} restoreBlocked={configDirty} />}
               </div>
             </>

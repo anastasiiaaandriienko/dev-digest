@@ -3,7 +3,7 @@ import { getBlastRadius } from '../src/tools/get-blast-radius.js';
 import { getFindings } from '../src/tools/get-findings.js';
 import { runAgentOnPr } from '../src/tools/run-agent-on-pr.js';
 import { parsePrRef } from '../src/tools/pr-ref.js';
-import { AGENT, AGENT2, PR, RUN, makeDeps, review, textOf, type Call, type Handler } from './helpers.js';
+import { AGENT, AGENT2, PR, RUN, finding, makeDeps, review, textOf, type Call, type Handler } from './helpers.js';
 
 /**
  * One `pr_id` string — uuid, PR number ("3" / "#3") or part of the title — plus an
@@ -202,12 +202,18 @@ describe('get_findings — PR reference and all_runs', () => {
 
   it('all_runs caps the list at 50 and sets truncated', async () => {
     const many = Array.from({ length: 51 }, (_, i) =>
-      review({ id: `r${String(i).padStart(2, '0')}`, created_at: `2026-01-01T00:00:${String(i).padStart(2, '0')}Z` }),
+      review({
+        id: `r${String(i).padStart(2, '0')}`,
+        created_at: `2026-01-01T00:00:${String(i).padStart(2, '0')}Z`,
+        findings: [finding({ id: `f${i}` })],
+      }),
     );
     const { deps } = makeDeps((c) => (c.path.endsWith('/reviews') ? { body: many } : { body: [] }));
     const r = await getFindings(deps, { pr_id: PR, all_runs: true });
     expect(ids(r)).toHaveLength(50);
     expect(sc(r).truncated).toBe(true);
+    // Every review fixture carries one finding: the total includes the 51st, unlisted review.
+    expect(sc(r).total_findings).toBe(51);
     expect(textOf(r)).toContain('Only the newest 50 reviews are listed.');
   });
 

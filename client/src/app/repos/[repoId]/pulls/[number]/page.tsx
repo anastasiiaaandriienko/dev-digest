@@ -73,6 +73,10 @@ export default function PRDetailPage() {
 
   const tab = search.get("tab") ?? "overview";
   const traceRunId = search.get("trace");
+  // Deep link from the PR Brief: ?tab=diff&file=<path>&line=<n> (line must be an integer >= 1).
+  const focusFile = search.get("file");
+  const lineParam = Number(search.get("line"));
+  const focusLine = Number.isInteger(lineParam) && lineParam >= 1 ? lineParam : null;
   const setParam = (key: string, val: string | null) => {
     const sp = new URLSearchParams(search.toString());
     if (val == null) sp.delete(key);
@@ -200,6 +204,8 @@ export default function PRDetailPage() {
             agentNames={agentNames}
             repoFullName={repoFullName}
             headSha={pr.head_sha}
+            focusFile={focusFile}
+            focusLine={focusLine}
           />
         )}
       </div>

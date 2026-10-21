@@ -28,6 +28,8 @@ import { ReviewRepository } from '../modules/reviews/repository.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
+import type { ContextStore } from '../modules/context/types.js';
+import { ContextRepository } from '../modules/context/repository.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
 
 /**
@@ -51,6 +53,8 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /** Project Context store (attachments, roots). Tests inject an in-memory one. */
+  contextStore?: ContextStore;
 }
 
 export class Container {
@@ -76,6 +80,7 @@ export class Container {
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _priceBook?: PriceBook;
+  private _contextRepo?: ContextRepository;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
     this.config = config;
@@ -115,6 +120,15 @@ export class Container {
     if (this.overrides.repoIntel) return this.overrides.repoIntel;
     this._repoIntel ??= new RepoIntelService(this);
     return this._repoIntel;
+  }
+
+  /**
+   * Project Context store: the injected one (tests) or the lazily built Drizzle
+   * repository (constructing it does not touch the database).
+   */
+  get contextStore(): ContextStore | null {
+    if (this.overrides.contextStore) return this.overrides.contextStore;
+    return (this._contextRepo ??= new ContextRepository(this.db));
   }
 
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */

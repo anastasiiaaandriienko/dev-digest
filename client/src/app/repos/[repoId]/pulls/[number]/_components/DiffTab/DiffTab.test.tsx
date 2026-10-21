@@ -194,3 +194,52 @@ describe("DiffTab", () => {
     expect(container.querySelector("[data-finding-id='t1']")).toHaveStyle({ opacity: "0.6" });
   });
 });
+
+describe("DiffTab deep link (focus file + line)", () => {
+  const scrollIntoView = vi.fn();
+  beforeEach(() => {
+    scrollIntoView.mockReset();
+    Element.prototype.scrollIntoView = scrollIntoView;
+  });
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+  const BIG = [prFile("src/big.ts", { additions: 900 }), ...FILES];
+
+  it("AC-BRIEF-36 opens and scrolls the focused file", () => {
+    renderIntl(<DiffTab prId="pr1" filesCount={5} files={BIG} focusFile="src/big.ts" focusLine={2} />);
+    // The 900-line file would stay collapsed; focus forces it open and scrolls to its card.
+    expect(screen.getAllByText("added two").length).toBeGreaterThan(0);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    const card = scrollIntoView.mock.contexts[0] as HTMLElement;
+    expect(card).toHaveTextContent("src/big.ts");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("AC-BRIEF-36 opens the Smart group holding the focused file", () => {
+    renderIntl(<DiffTab prId="pr1" filesCount={4} files={FILES} focusFile="README.md" focusLine={2} />);
+    fireEvent.click(screen.getByRole("button", { name: "Smart order" }));
+    expect(within(groupEl("docs")).getByRole("button", { expanded: true })).toBeInTheDocument();
+    expect(within(groupEl("docs")).getByText("README.md")).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("AC-BRIEF-37 notice for missing file", () => {
+    renderIntl(<DiffTab prId="pr1" filesCount={4} files={FILES} focusFile="src/gone.ts" focusLine={5} />);
+    expect(screen.getByRole("status")).toHaveTextContent("src/gone.ts is not part of the loaded diff.");
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("AC-BRIEF-37 notice for line not in loaded diff", () => {
+    renderIntl(<DiffTab prId="pr1" filesCount={4} files={FILES} focusFile="src/core.ts" focusLine={99} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Line 99 of src/core.ts is not in the loaded diff");
+    // The file itself still opens and scrolls.
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    renderIntl(
+      <DiffTab prId="pr1" filesCount={1} files={[prFile("src/nopatch.ts", { patch: null })]} focusFile="src/nopatch.ts" focusLine={3} />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Line 3 of src/nopatch.ts");
+  });
+});
