@@ -177,7 +177,7 @@ describe("ContextView A2 layout", () => {
     const search = screen.getByLabelText(messages.searchLabel);
     const list = screen.getByRole("list", { name: messages.listLabel });
     const roots = screen.getByRole("button", { name: messages.roots.toggle });
-    const footer = screen.getByText("2 docs");
+    const footer = screen.getByText("2 documents");
     const order = [title, reindex, download, search, list, roots, footer];
     for (let i = 0; i < order.length - 1; i++) expect(before(order[i]!, order[i + 1]!)).toBe(true);
     for (const el of order) expect(docsPanel()).toContainElement(el as HTMLElement);
@@ -288,45 +288,63 @@ describe("ContextView A2 layout", () => {
     expect(screen.queryByRole("button", { name: /new (file|folder)|import|save (doc|file)|upload/i })).toBeNull();
   });
 
-  it("AC-CTX-118 footer count and kB follow the listed docs", () => {
+  it("AC-CTX-118 footer: N documents · ~X tokens total, following the listed docs", () => {
     renderView();
-    expect(within(docsPanel()).getByText("2 docs")).toBeInTheDocument();
-    expect(within(docsPanel()).getByText("2.5 kB")).toBeInTheDocument();
+    // 2048 + 512 bytes → 512 + 128 tokens (bytes / 4).
+    expect(within(docsPanel()).getByText("2 documents")).toBeInTheDocument();
+    expect(within(docsPanel()).getByText("~640 tokens total")).toHaveAttribute("title", messages.footer.tokensHint);
     cleanup();
     list = ok({ ...LIST, files: [LIST.files[1]!] });
     renderView();
-    expect(within(docsPanel()).getByText("1 doc")).toBeInTheDocument();
-    expect(within(docsPanel()).getAllByText("0.5 kB")).toHaveLength(2);
+    expect(within(docsPanel()).getByText("1 document")).toBeInTheDocument();
+    expect(within(docsPanel()).getByText("~128 tokens total")).toBeInTheDocument();
+    // kB stays on the row only.
+    expect(within(docsPanel()).getAllByText("0.5 kB")).toHaveLength(1);
   });
 
-  it("AC-CTX-119 Updated {time} re-evaluates every 60s, no 'index'", () => {
+  it("AC-CTX-119 refreshed {time} re-evaluates every 60s", () => {
     vi.useFakeTimers();
     try {
       const t0 = new Date("2026-10-20T12:00:00Z").getTime();
       vi.setSystemTime(t0);
       list = { ...ok(LIST), dataUpdatedAt: t0 - 120_000 };
       renderView();
-      expect(screen.getByText("Updated 2 minutes ago")).toBeInTheDocument();
+      expect(screen.getByText("refreshed 2 minutes ago")).toBeInTheDocument();
       act(() => {
         vi.advanceTimersByTime(8 * 60_000);
       });
-      const updated = screen.getByText("Updated 10 minutes ago");
-      expect(updated.textContent).not.toMatch(/index/i);
+      expect(screen.getByText("refreshed 10 minutes ago")).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("AC-CTX-119 no Updated segment while dataUpdatedAt is 0, count and kB stay", () => {
-    list = { ...ok(LIST), dataUpdatedAt: 0 };
-    renderView();
-    expect(screen.queryByText(/^Updated/)).toBeNull();
-    expect(screen.getByText("2 docs")).toBeInTheDocument();
+  it("AC-CTX-119 Re-index refetches the list and the refreshed time follows the new fetch", () => {
+    vi.useFakeTimers();
+    try {
+      const t0 = new Date("2026-10-20T12:00:00Z").getTime();
+      vi.setSystemTime(t0);
+      list = { ...ok(LIST), dataUpdatedAt: t0 - 30 * 60_000 };
+      renderView();
+      expect(screen.getByText("refreshed 30 minutes ago")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: messages.reindex }));
+      expect(list.refetch).toHaveBeenCalled();
+      // The refetch resolves: React Query moves dataUpdatedAt to now.
+      cleanup();
+      list = { ...ok(LIST), dataUpdatedAt: t0 };
+      renderView();
+      expect(screen.getByText("refreshed now")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it("AC-CTX-120 no token text", () => {
+  it("AC-CTX-119 no refreshed segment while dataUpdatedAt is 0, the count and tokens stay", () => {
+    list = { ...ok(LIST), dataUpdatedAt: 0 };
     renderView();
-    expect(docsPanel().textContent).not.toMatch(/token/i);
+    expect(screen.queryByText(/^refreshed/)).toBeNull();
+    expect(screen.getByText("2 documents")).toBeInTheDocument();
+    expect(screen.getByText("~640 tokens total")).toBeInTheDocument();
   });
 
   it("AC-CTX-121 page opens with Roots collapsed", () => {

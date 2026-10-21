@@ -53,7 +53,8 @@ delimiter-wrapped (`assemblePrompt` in `prompt.ts`):
 ## PR description        (untrusted, author-controlled, truncated to 4000 chars)
 ## Relevant memory       (curated memory items)
 ## Repo skeleton         (untrusted, repo-derived)
-## Project context       (untrusted spec chunks)
+## Project context       (untrusted attached docs, under ### Project specifications /
+                         ### Project docs / ### Project insights / ### Other project docs)
 ## Callers of changed symbols  (untrusted, repo-derived)
 ## Diff to review        (untrusted)
 ```

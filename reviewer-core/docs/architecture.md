@@ -120,7 +120,7 @@ empty or missing section is left out.
 | 2a | `## PR intent` | `intent` (summary, confidence, scope lists; capped at 4000 chars) | yes (`pr-intent`) | **yes** when the server resolved an intent (L03); recorded as `PromptAssembly.intent` |
 | 3 | `## Relevant memory` | `memory[]` as `- ` bullets | **no** (curated) | no (scaffolding, L07) |
 | 4 | `## Repo skeleton` | `repoMap` | yes (`repo-map`) | **yes** when the repo is indexed |
-| 5 | `## Project context` | `specs[]` | yes (`spec-<i>`) | no (scaffolding, L05) |
+| 5 | `## Project context` | `specGroups[]` — each group under a trusted `### <title>` heading (Project specifications / Project docs / Project insights / Other project docs, from `@devdigest/shared` `CONTEXT_DOC_GROUPS`); flat `specs[]` when no group has entries. Rendered by `renderSpecsBlock`, also used by the server to build the redacted trace copy | yes (`spec-<i>`, `i` counts across groups) | **yes** when docs are attached to the agent or its skills (Project Context) |
 | 6 | `## Callers of changed symbols` | `callers` | yes (`callers`) | **yes** when repo-intel finds callers |
 | 7 | `## Diff to review` | chunk diff text | yes (`diff`) | **yes**, always last |
 

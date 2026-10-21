@@ -280,7 +280,8 @@ async function seedProjectContextFixtures(
 
   const tokens = 12;
   const line = placeholderLine(CONTEXT_SEED_DOC, tokens, false);
-  const placeholders = `<untrusted source="spec-0">\n${line}\n</untrusted>`;
+  // Same layout a real redacted trace has: the doc's group heading, then the wrapped placeholder.
+  const placeholders = `### Project docs\n<untrusted source="spec-0">\n${line}\n</untrusted>`;
   const [run] = await db
     .insert(t.agentRuns)
     .values({

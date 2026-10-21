@@ -24,7 +24,7 @@ import { AgentAttachments } from "../AgentAttachments";
 import { DocPreview } from "@/components/context-doc-preview";
 import { RootsPanel } from "../RootsPanel";
 import { NOW_UPDATE_MS, SEARCH_DEBOUNCE_MS } from "./constants";
-import { downloadMarkdown, fileName, formatKb, totalSize } from "./helpers";
+import { approxTotalTokens, downloadMarkdown, fileName, formatKb } from "./helpers";
 import { s } from "./styles";
 
 export function ContextView({ repoId }: { repoId: string }) {
@@ -51,7 +51,8 @@ export function ContextView({ repoId }: { repoId: string }) {
   const saveRoots = useUpdateContextRoots(repoId);
   const editDisabledId = React.useId();
 
-  const crumb = [{ label: t("crumbLab") }, { label: t("title") }];
+  // A WORKSPACE page like Pull Requests: repo › page.
+  const crumb = [{ label: repo?.full_name ?? repoId, mono: true }, { label: t("title") }];
   if (repoNotFound) {
     return (
       <AppShell crumb={crumb}>
@@ -195,12 +196,19 @@ export function ContextView({ repoId }: { repoId: string }) {
 
           {list.data && (
             <div style={s.footer}>
-              <span>{t("count", { count: files.length })}</span>
-              <span>{t("kb", { kb: formatKb(totalSize(files)) })}</span>
+              <span>{t("footer.documents", { count: files.length })}</span>
+              <span aria-hidden="true">·</span>
+              <span title={t("footer.tokensHint")}>
+                {t("footer.tokens", { tokens: format.number(approxTotalTokens(files)) })}
+              </span>
               {!!updatedAt && (
-                <span>
-                  {t("footer.updated", { time: format.relativeTime(Math.min(updatedAt, now.getTime()), now) })}
-                </span>
+                <>
+                  <span aria-hidden="true">·</span>
+                  {/* dataUpdatedAt moves on every successful fetch, so Re-index resets it. */}
+                  <span>
+                    {t("footer.refreshed", { time: format.relativeTime(Math.min(updatedAt, now.getTime()), now) })}
+                  </span>
+                </>
               )}
             </div>
           )}

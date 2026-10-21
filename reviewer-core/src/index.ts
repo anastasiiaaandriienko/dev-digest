@@ -21,6 +21,8 @@ export {
   INTENT_POLICY_INFORM,
   INTENT_POLICY_CONSERVATIVE,
   intentPolicyFor,
+  renderSpecsBlock,
+  type PromptSpecGroup,
   type PromptIntent,
   type PromptParts,
   type PromptSkill,

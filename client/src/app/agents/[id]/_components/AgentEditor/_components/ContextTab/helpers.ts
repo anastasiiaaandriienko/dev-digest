@@ -1,4 +1,14 @@
 import type { ContextAttachment, ContextAttachmentStatus, ContextListItem } from "@devdigest/shared";
+import { approxInjectedTotal } from "@/lib/context-tokens";
+
+/**
+ * Approximate prompt tokens of the attached docs a review run would read: only
+ * `ok` attachments with a known size, each capped like the server's injection.
+ */
+export function attachedTokens(attachments: readonly ContextAttachment[], files: readonly ContextListItem[]): number {
+  const sizes = new Map(files.map((f) => [f.path, f.size]));
+  return approxInjectedTotal(attachments.filter((a) => a.status === "ok").map((a) => sizes.get(a.path)));
+}
 
 /** One line of the tab: an attachment (checked) or an unattached discovered doc. */
 export interface DocRow {

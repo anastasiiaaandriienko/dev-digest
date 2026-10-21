@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RunTrace, StructuredRequest, StructuredResult } from '@devdigest/shared';
-import { assemblePrompt, wrapUntrusted } from '@devdigest/reviewer-core';
+import { assemblePrompt, renderSpecsBlock, wrapUntrusted } from '@devdigest/reviewer-core';
 import { Container } from '../src/platform/container.js';
 import { loadConfig } from '../src/platform/config.js';
 import { MockGitClient, MockLLMProvider, MockSecretsProvider } from '../src/adapters/mocks.js';
@@ -96,6 +96,8 @@ const sent = (llm: MockLLMProvider): Msg[][] =>
   llm.calls.filter((c) => c.method === 'completeStructured').map((c) => (c.req as { messages: Msg[] }).messages);
 
 const SECTION = '## Project context\n';
+/** The section body for docs that all live under the `docs` root. */
+const docsGroup = (entries: string[]): string => renderSpecsBlock(undefined, [{ title: 'Project docs', specs: entries }])!;
 /** The `## Project context` section of a user message, header included. */
 function sectionOf(user: string): string {
   const start = user.indexOf(SECTION);
@@ -116,6 +118,7 @@ beforeAll(async () => {
   await writeDoc('docs/spec.md', `Rule one\n${MARKER}\n`);
   await writeDoc('docs/second.md', 'Second doc\n');
   await writeDoc('specs/skill.md', `Skill rule\n${SKILL_MARKER}\n`);
+  await writeDoc('docs/skill-doc.md', 'Skill doc\n');
 });
 
 afterAll(async () => {
@@ -247,7 +250,7 @@ describe('ReviewRunExecutor — project context (trace redaction)', () => {
     const [msgs] = sent(b.llm);
     const t = trace(b);
     const block = t.prompt_assembly.spec_blocks![0]!;
-    const placeholders = wrapUntrusted('spec-0', placeholderLine('docs/spec.md', block.tokens!, false));
+    const placeholders = docsGroup([placeholderLine('docs/spec.md', block.tokens!, false)]);
     const expectedUser = msgs![1]!.content.replace(sectionOf(msgs![1]!.content), `${SECTION}${placeholders}`);
     expect(t.prompt_assembly.user).toBe(expectedUser);
     expect(t.prompt_assembly.system).toBe(msgs![0]!.content);
@@ -270,12 +273,12 @@ describe('ReviewRunExecutor — project context (trace redaction)', () => {
     const entry = `path: docs/spec.md\n\nRule one\n${MARKER}\n`;
     const whole = assemblePrompt({
       system: 'You are a reviewer.',
-      specs: [entry],
+      specGroups: [{ title: 'Project docs', specs: [entry] }],
       task: taskLine(r.pull),
       diff: TWO_FILE_DIFF,
     });
     const block = t.prompt_assembly.spec_blocks![0]!;
-    const placeholders = wrapUntrusted('spec-0', placeholderLine('docs/spec.md', block.tokens!, false));
+    const placeholders = docsGroup([placeholderLine('docs/spec.md', block.tokens!, false)]);
     expect(t.prompt_assembly.user).toBe(whole.assembly.user.replace(sectionOf(whole.assembly.user), `${SECTION}${placeholders}`));
     expect(t.prompt_assembly.system).toBe(whole.assembly.system);
   });
@@ -285,10 +288,14 @@ describe('ReviewRunExecutor — project context (trace redaction)', () => {
     await b.run();
     const t = trace(b);
     const [a, s] = t.prompt_assembly.spec_blocks!;
-    const expected = [
-      wrapUntrusted('spec-0', placeholderLine('docs/spec.md', a!.tokens!, false)),
-      wrapUntrusted('spec-1', placeholderLine('docs/second.md', s!.tokens!, false)),
-    ].join('\n\n');
+    const expected = docsGroup([
+      placeholderLine('docs/spec.md', a!.tokens!, false),
+      placeholderLine('docs/second.md', s!.tokens!, false),
+    ]);
+    expect(expected).toBe(
+      `### Project docs\n${wrapUntrusted('spec-0', placeholderLine('docs/spec.md', a!.tokens!, false))}\n\n` +
+        wrapUntrusted('spec-1', placeholderLine('docs/second.md', s!.tokens!, false)),
+    );
     expect(t.prompt_assembly.specs).toBe(expected);
     expect(t.prompt_assembly.user).toContain(`${SECTION}${expected}`);
   });
@@ -446,13 +453,30 @@ describe('ReviewRunExecutor — project context (trace redaction)', () => {
     expect(sent(b.llm)).toEqual(sent(base.llm));
   });
 
-  it('AC-CTX-16 docs attached to an applied skill are injected after the agent docs', async () => {
-    const b = build({ skills: true, paths: ['docs/second.md'], skillPaths: ['specs/skill.md'] });
+  it('AC-CTX-16 docs are grouped by root in the prompt; inside a group the agent docs come before the skill docs', async () => {
+    const b = build({ skills: true, paths: ['docs/second.md'], skillPaths: ['specs/skill.md', 'docs/skill-doc.md'] });
     await b.run();
     const user = sent(b.llm)[0]![1]!.content;
     expect(user).toContain(SKILL_MARKER);
-    expect(user.indexOf('path: docs/second.md')).toBeLessThan(user.indexOf('path: specs/skill.md'));
-    expect(trace(b).specs_read).toEqual(['docs/second.md', 'specs/skill.md']);
+    // Prompt order: Project specifications, then Project docs (agent doc before the skill doc).
+    const order = [
+      '## Project context',
+      '### Project specifications',
+      'path: specs/skill.md',
+      '### Project docs',
+      'path: docs/second.md',
+      'path: docs/skill-doc.md',
+    ];
+    const at = order.map((x) => user.indexOf(x));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((x, y) => x - y)).toEqual(at);
+    expect(trace(b).specs_read).toEqual(['specs/skill.md', 'docs/second.md', 'docs/skill-doc.md']);
+    // Spec blocks keep the injection order (agent rows, then the skill rows).
+    expect(trace(b).prompt_assembly.spec_blocks!.map((x) => [x.path, x.source])).toEqual([
+      ['docs/second.md', 'agent'],
+      ['specs/skill.md', 'skill'],
+      ['docs/skill-doc.md', 'skill'],
+    ]);
     expect(trace(b).prompt_assembly.spec_blocks![1]).toMatchObject({ source: 'skill', skill_id: 'skill-1', status: 'read' });
     expect(JSON.stringify(trace(b))).not.toContain(SKILL_MARKER);
   });

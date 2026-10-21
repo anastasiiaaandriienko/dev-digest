@@ -1,6 +1,5 @@
 {
   "title": "Project Context",
-  "crumbLab": "Skills Lab",
   "subtitle": "Markdown docs from this repo that agents and skills can read as grounding context. Read-only: docs are never edited here.",
   "reindex": "Re-index",
   "reindexHint": "Reload the list of docs from the clone",
@@ -14,7 +13,6 @@
   "notCloned": "This repository isn’t cloned yet, so there are no docs to list. Import or refresh it first.",
   "kb": "{kb} kB",
   "listLabel": "Discovered docs",
-  "count": "{count, plural, one {# doc} other {# docs}}",
   "noMatches": "No docs match “{q}”.",
   "empty": {
     "title": "No docs found",
@@ -79,12 +77,25 @@
     "label": "{count, plural, =0 {Not used by any agent} one {Used by # agent} other {Used by # agents}}"
   },
   "footer": {
-    "updated": "Updated {time}"
+    "documents": "{count, plural, one {# document} other {# documents}}",
+    "tokens": "~{tokens} tokens total",
+    "tokensHint": "Approximate: file size / 4. Review runs read at most 32 KB and 4,000 tokens per doc.",
+    "refreshed": "refreshed {time}"
   },
   "tab": {
     "noRepo": "Select a repository to attach project context docs.",
     "title": "Project context",
     "repoLabel": "Repository"
+  },
+  "skillTab": {
+    "attached": "{count} attached"
+  },
+  "serializes": {
+    "title": "Serializes as",
+    "empty": "No docs attached for this repository, so nothing is added to the prompt.",
+    "tokens": "~{tokens} tokens",
+    "skipped": "{count, plural, one {# attached doc is} other {# attached docs are}} missing or outside the roots and will be skipped.",
+    "hint": "In a review run each doc is wrapped as untrusted content under these headings. Inside a heading the agent's own docs come first, then the docs of its skills."
   },
   "agentTab": {
     "title": "Project context",
@@ -100,6 +111,9 @@
     "moveDown": "Move {path} down",
     "drag": "Drag {path} to reorder",
     "reorderError": "Could not save the new order. The list shows the saved order.",
+    "tokens": "~{tokens} tokens",
+    "tokensHint": "Approximate prompt size of the attached docs: file size / 4, at most 32 KB and 4,000 tokens per doc. Docs of the agent's skills share the same budget.",
+    "overBudget": "The attached docs are about {tokens} tokens, over the {limit}-token Project context budget. Docs past the budget are skipped in review runs, so reorder or detach some.",
     "footer": "Attached docs are injected as an untrusted “## Project context” block into review runs of this agent on pull requests of this repository."
   }
 }

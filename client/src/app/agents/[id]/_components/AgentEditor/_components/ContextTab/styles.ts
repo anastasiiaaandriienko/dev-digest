@@ -43,4 +43,14 @@ export const s = {
   size: { fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" } satisfies CSSProperties,
   stateText: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
   footer: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  tokens: { fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" } satisfies CSSProperties,
+  tokensOver: { fontSize: 12, color: "var(--warn)", fontWeight: 600, whiteSpace: "nowrap" } satisfies CSSProperties,
+  warn: {
+    fontSize: 13,
+    color: "var(--warn)",
+    background: "var(--warn-bg)",
+    borderRadius: 6,
+    padding: "8px 12px",
+    lineHeight: 1.45,
+  } satisfies CSSProperties,
 } as const;

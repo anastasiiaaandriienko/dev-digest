@@ -9,8 +9,7 @@ themselves live in the agent files — read those, not this page, for details.
 | researcher | [researcher.md](researcher.md) | `sonnet` | no | Facts from the repo and external docs, with evidence |
 | brainstorm | [brainstorm.md](brainstorm.md) | `opus` | no | Solution options before planning: approaches, trade-offs, risks, open questions |
 | spec-creator | [spec-creator.md](spec-creator.md) | `opus` | yes (one `specs/<slug>/spec.md`) | SDD: request → spec with EARS acceptance criteria (`AC-<KEY>-NN`) and `[NEEDS CLARIFICATION]` markers |
-| implementation-planner | [implementation-planner.md](implementation-planner.md) | `opus` | no | SDD: approved spec → plan where every task cites AC-IDs; `MODE: REVIEW` for the cross-model plan review |
-| planner | [planner.md](planner.md) | `opus` | no | Ad-hoc requirement → Development Plan (or clarification questions), no spec |
+| implementation-planner | [implementation-planner.md](implementation-planner.md) | `opus` | no | The one planner: `MODE: PLAN` approved spec → plan where every task cites AC-IDs; `MODE: AD-HOC` requirement → plan (or clarification questions) without a spec; `MODE: REVIEW` cross-model plan review |
 | implementer | [implementer.md](implementer.md) | `sonnet` | yes (plan files) | Executes an approved plan, runs checks, reports |
 | test-writer | [test-writer.md](test-writer.md) | `sonnet` | yes (test files only) | Adds/updates unit tests; never changes production code |
 | architecture-reviewer | [architecture-reviewer.md](architecture-reviewer.md) | `opus` | no | Layering, dependencies, contracts, coupling — findings with file:line |
@@ -32,7 +31,7 @@ implementation-planner ──► plan (every task → AC-IDs; SPEC_GAP → back 
    │
    ▼
 implementation-planner MODE: REVIEW on another model ──► verdict + findings
-   │             (rework → planner again, ≤ 2 rounds)
+   │             (rework → implementation-planner again, ≤ 2 rounds)
    ▼  G2: user approves the plan + every APPROVAL REQUIRED item → plan.md
 implementer ──► test-writer
    │
@@ -65,7 +64,7 @@ brainstorm ──► options + trade-offs + recommendation + open questions
 main agent asks the user to choose a direction
    │
    ▼
-planner ──► NEEDS_CLARIFICATION ──► main agent asks the user ──► planner again
+implementation-planner (MODE: AD-HOC) ──► NEEDS_CLARIFICATION ──► main agent asks the user ──► again
    │
    ▼  STATUS: READY — Development Plan (each task names its agent)
 user approves the plan (explicitly)
@@ -120,7 +119,7 @@ user (reviews git diff, decides on commit)
   rules, with a recommendation and the open questions the user must decide.
 - **Tools:** `Read, Grep, Glob, WebSearch, WebFetch`; denied `Write, Edit,
   NotebookEdit, Bash, PowerShell, Agent, Skill`.
-- **Run when:** after research, before the planner, when there is more than one
+- **Run when:** after research, before the implementation-planner, when there is more than one
   reasonable way to build something. Skip it for an obvious, single-path change.
 - **Input → output:** problem + research report + constraints → `STATUS: DONE |
   PARTIAL | NEEDS_CLARIFICATION` report: constraints, existing building blocks,
@@ -149,37 +148,34 @@ user (reviews git diff, decides on commit)
 
 ## implementation-planner
 
-- **Purpose:** SDD stage 2 — approved spec → Development Plan; every task cites
-  ≥ 1 AC-ID, every AC is covered, unit ACs name their tests; proposed commits.
-  `MODE: REVIEW` checks a draft plan against the spec (run on another model).
-- **Tools:** same as planner (`Read, Grep, Glob`, everything else denied).
-- **Input → output:** spec path (`Status: Approved`) → `READY | BLOCKED | SPEC_GAP`
-  plan with tasks (AC, files, depends on, skills, steps, acceptance criteria, tests,
-  checks, risks, commit) — the planner task fields plus `AC`, `Tests`, `Commit`, so
-  implementer and test-writer read it unchanged, AC coverage table, commit table; REVIEW → verdict + findings table.
-- **Limits:** does not re-clarify product requirements (contradictions → `SPEC_GAP`);
-  protected areas, allowed checks, context order and skill map are read from
-  `planner.md` instead of being copied; never implements.
+The single planner (it replaced the former separate `planner` agent). One file holds
+the shared rules — hard rules, context order, skill map, planning rules — and three modes.
 
-## planner
-
-- **Purpose:** ad-hoc requirement → small, checkable tasks without a spec; knows
-  architecture, protected areas, skills, and which agent executes each task. Its
-  "Hard rules", "Planning rules", "Context to load" and "Skill map" are also the
-  reference for implementation-planner — keep them in sync when editing.
+- **Purpose:** turn a requirement into small, checkable tasks; knows architecture,
+  protected areas, skills, and which agent executes each task.
+  - `MODE: PLAN` (default with a spec path, SDD stage 2): approved spec →
+    Development Plan; every task cites ≥ 1 AC-ID, every AC is covered, unit ACs name
+    their tests; proposed commits.
+  - `MODE: AD-HOC` (no spec): requirement, research, answers, constraints →
+    `NEEDS_CLARIFICATION` (questions with recommended defaults) or a plan.
+  - `MODE: REVIEW`: checks a draft plan against the spec (run on another model).
 - **Tools:** `Read, Grep, Glob`; denied `Write, Edit, NotebookEdit, Bash, PowerShell,
   WebFetch, WebSearch, Agent, Skill`. External facts come from researcher reports.
-- **Run when:** after research, before a change that spans more than one file or
-  package.
-- **Input → output:** requirement, research, answers, constraints →
-  `NEEDS_CLARIFICATION` (questions with recommended defaults) or `READY` plan: goal,
-  scope, assumptions, architecture, approvals, tasks `T1…Tn` (package, agent, files,
-  depends on, skills, steps, acceptance criteria, checks, risks), order, final
-  verification, notes for architecture-reviewer / security-reviewer / plan-verifier,
-  Unknowns, Limitations.
+- **Run when:** after research (and brainstorm, if any), before a change that spans
+  more than one file or package; in `/run-plan` after the spec is approved.
+- **Input → output:** PLAN: spec path (`Status: Approved`) → `READY | BLOCKED |
+  SPEC_GAP` plan with tasks (AC, files, depends on, skills, steps, acceptance
+  criteria, tests, checks, risks, commit), AC coverage table, commit table. AD-HOC:
+  `NEEDS_CLARIFICATION` or `READY` plan: goal, scope, assumptions, architecture,
+  approvals, tasks `T1…Tn` (package, agent, files, depends on, skills, steps,
+  acceptance criteria, checks, risks), order, final verification, notes for
+  architecture-reviewer / security-reviewer / plan-verifier, Unknowns, Limitations.
+  Both task formats are read unchanged by implementer and test-writer. REVIEW →
+  verdict + findings table.
 - **Limits:** read-only; named files verified or marked `(new)`; migrations/schema,
   lockfiles, dependencies, paid LLM calls → `APPROVAL REQUIRED`; integration and e2e
-  only with approval; does not simulate the reviewers.
+  only with approval; in PLAN does not re-clarify product requirements
+  (contradictions → `SPEC_GAP`); does not simulate the reviewers; never implements.
 
 ## implementer
 
@@ -276,13 +272,14 @@ user (reviews git diff, decides on commit)
 - **Skills** live in [../skills/](../skills/README.md). Agents name them; they never
   copy skill text, and no agent preloads skills via the `skills` frontmatter field.
   - researcher, brainstorm, plan-verifier: no skills.
-  - planner: names the skills per task (skill map in [planner.md](planner.md)).
+  - implementation-planner: names the skills per task (skill map in
+    [implementation-planner.md](implementation-planner.md)); loads none itself.
   - implementer, test-writer, architecture-reviewer, security-reviewer: load skills on
     demand with the `Skill` tool. Package mapping: client → `frontend-architecture`
     (+ `react-best-practices`, `react-testing-library`, `next-best-practices`);
     server → `onion-architecture` (+ `fastify-best-practices`,
     `drizzle-orm-patterns`); reviewer-core → `typescript-expert`, and
-    `onion-architecture` for purity (planner, implementer, test-writer,
+    `onion-architecture` for purity (implementation-planner, implementer, test-writer,
     architecture-reviewer);
     contracts → `zod`; untrusted input → `security`.
   - architecture-reviewer and security-reviewer reuse the group → skills table from
@@ -290,9 +287,8 @@ user (reviews git diff, decides on commit)
   - doc-writer: reads `mermaid-diagram/SKILL.md` (no Skill tool).
   - `pr-self-review`, `run-plan` and `workflow-retro` are manual-only
     (`disable-model-invocation`); the user runs them, agents cannot.
-  - spec-creator and implementation-planner: no skills (implementation-planner
-    names them per task from planner's skill map).
-- **INSIGHTS.md** (today `server/` and `client/`): researcher and planner read the
+  - spec-creator: no skills.
+- **INSIGHTS.md** (today `server/` and `client/`): researcher and implementation-planner read the
   touched packages' files and re-verify entries; implementer and test-writer read them
   via `engineering-insights` (read mode) before editing a package. No agent writes
   `INSIGHTS.md`: agents return *insight candidates*, and recording them
@@ -302,7 +298,7 @@ user (reviews git diff, decides on commit)
 
 | Layer | Enforced by | What it covers |
 |---|---|---|
-| `tools` / `disallowedTools` | Claude Code | Which tools an agent has at all (researcher, brainstorm, planner, reviewers, plan-verifier: no write tools; doc-writer: no Bash) |
+| `tools` / `disallowedTools` | Claude Code | Which tools an agent has at all (researcher, brainstorm, implementation-planner, reviewers, plan-verifier: no write tools; doc-writer: no Bash) |
 | `permissions.deny` in [../settings.json](../settings.json) | Claude Code | `WebFetch` to `localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]` — for main session and subagents |
 | Agent prompt rules | the model only | Everything else: write scopes of spec-creator / implementer / test-writer / doc-writer, approval gates of `/run-plan`, read-only git for reviewers, no commit / install / migrations / lockfiles / app start |
 
@@ -330,8 +326,9 @@ an optional, approval-gated step and is not in place. Review `git status` /
 
 | Agent | Based on |
 |---|---|
-| planner, brainstorm | sub-agents, best-practices, model-config, skills |
-| spec-creator, implementation-planner | sub-agents (MCP tools in `tools`, model override per call), best-practices (spec → plan → implement → verify), model-config |
+| brainstorm | sub-agents, best-practices, model-config, skills |
+| spec-creator | sub-agents (MCP tools in `tools`), best-practices (spec → plan → implement → verify), model-config |
+| implementation-planner | sub-agents (model override per call for REVIEW), best-practices (spec → plan → implement → verify), model-config, skills |
 | implementer, test-writer | sub-agents, skills, best-practices, model-config, permissions |
 | architecture-reviewer, security-reviewer, plan-verifier | sub-agents, best-practices (verifier ≠ author, fresh context, no noise), model-config |
 | doc-writer | sub-agents, skills |

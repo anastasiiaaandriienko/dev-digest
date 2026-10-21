@@ -213,12 +213,38 @@ describe("Agent ContextTab", () => {
     expect(within(rowOf("docs/spec.md")).getByText(messages.attach.status.missing)).toBeInTheDocument();
   });
 
-  it("AC-CTX-105 rows show size in kB and no token counts or totals", () => {
+  it("AC-CTX-105 rows show size in kB, no per-row token counts; no total while nothing is attached", () => {
     renderTab();
     expect(within(rowOf("docs/spec.md")).getByText("2 kB")).toBeInTheDocument();
     expect(within(rowOf("docs/adr/0001.md")).getByText("0.5 kB")).toBeInTheDocument();
     expect(within(rowOf(".devdigest/specs/api.md")).getByText("30 kB")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/token/i);
+  });
+
+  it("shows the approximate prompt tokens of the attached docs, capped per doc, without a warning under the budget", () => {
+    docs = {
+      r1: [
+        att("a1", "docs/spec.md", 0), // 2 kB → 512
+        att("a2", ".devdigest/specs/api.md", 1), // 30 kB → 7,680, capped at 4,000
+        att("a3", "docs/gone.md", 2, "missing"), // skipped at review time → not counted
+      ],
+    };
+    renderTab();
+    const total = screen.getByText("~4,512 tokens");
+    expect(total).toHaveAttribute("title", messages.agentTab.tokensHint);
+    expect(screen.queryByRole("alert")).toBeNull();
+    for (const p of ["docs/spec.md", ".devdigest/specs/api.md"]) expect(rowOf(p).textContent).not.toMatch(/token/i);
+  });
+
+  it("warns when the attached docs exceed the Project context token budget", () => {
+    const big = Array.from({ length: 4 }, (_, i) => ({ path: `docs/big${i}.md`, size: 20_000, updated_at: "x" }));
+    list = { ...list, data: { ...LIST, files: [...LIST.files, ...big] } };
+    docs = { r1: big.map((f, i) => att(`b${i}`, f.path, i)) };
+    renderTab();
+    expect(screen.getByText("~16,000 tokens")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The attached docs are about 16,000 tokens, over the 12,000-token Project context budget.",
+    );
   });
 
   it("AC-CTX-96 reorder controls are disabled while filtering or pending", () => {
