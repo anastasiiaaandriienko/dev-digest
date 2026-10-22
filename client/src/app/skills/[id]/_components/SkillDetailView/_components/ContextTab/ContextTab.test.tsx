@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
 import React from "react";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { ContextAttachment, Skill } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/context.json";
@@ -65,6 +65,30 @@ describe("ContextTab", () => {
     // Another repo shows that repo's attachments.
     fireEvent.change(screen.getByLabelText(messages.tab.repoLabel), { target: { value: "r2" } });
     expect(docsArgs).toHaveBeenLastCalledWith("skills", "s1", "r2");
-    expect(screen.getByText("docs/rules.md")).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: messages.attach.listLabel })).getByText("docs/rules.md")).toBeInTheDocument();
+  });
+
+  it("shows how many docs are attached for the picked repo", () => {
+    renderTab();
+    expect(screen.getByText("0 attached")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(messages.tab.repoLabel), { target: { value: "r2" } });
+    expect(screen.getByText("1 attached")).toBeInTheDocument();
+  });
+
+  it("previews the prompt section under 'Serializes as'", () => {
+    renderTab();
+    expect(screen.getByText(messages.serializes.title)).toBeInTheDocument();
+    expect(screen.getByText(messages.serializes.empty)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(messages.tab.repoLabel), { target: { value: "r2" } });
+    expect(screen.getByText("## Project context")).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "Project docs" })).getByText("docs/rules.md")).toBeInTheDocument();
   });
 });
+
+function renderTab() {
+  return render(
+    <NextIntlClientProvider locale="en" messages={{ context: messages }}>
+      <ContextTab skill={SKILL} />
+    </NextIntlClientProvider>,
+  );
+}

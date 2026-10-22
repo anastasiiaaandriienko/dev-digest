@@ -5,7 +5,7 @@
 "use client";
 
 import React from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { Badge, ErrorState, SelectInput, Skeleton, TextInput } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
 import { ContextDocStatus } from "@/components/context-doc-status";
@@ -20,12 +20,25 @@ import {
 } from "@/lib/hooks/context";
 import { useActiveRepo } from "@/lib/repo-context";
 import { MAX_ATTACHMENTS } from "@/components/context-doc-attachments/constants";
+import { CONTEXT_PROMPT_TOKENS } from "@/lib/context-tokens";
 import { BADGED_STATUSES, ROOT_NEUTRAL, ROOT_STYLE } from "./constants";
-import { buildRows, dropOn, filterRows, formatKb, moveBy, rootKind, rootOf, sameIds, splitPath } from "./helpers";
+import {
+  attachedTokens,
+  buildRows,
+  dropOn,
+  filterRows,
+  formatKb,
+  moveBy,
+  rootKind,
+  rootOf,
+  sameIds,
+  splitPath,
+} from "./helpers";
 import { s } from "./styles";
 
 export function ContextTab({ agent }: { agent: Agent }) {
   const t = useTranslations("context");
+  const format = useFormatter();
   const { repos, repoId: activeId } = useActiveRepo();
   const [picked, setPicked] = React.useState("");
   const [filter, setFilter] = React.useState("");
@@ -57,6 +70,8 @@ export function ContextTab({ agent }: { agent: Agent }) {
   const attachments = docs.data ?? [];
   const rows = filterRows(buildRows(attachments, files), filter);
   const full = attachments.length >= MAX_ATTACHMENTS;
+  const tokens = attachedTokens(attachments, files);
+  const overBudget = tokens > CONTEXT_PROMPT_TOKENS;
   const busy = attach.isPending || detach.isPending || reorder.isPending;
   // AC-96: a filtered view would make the new order ambiguous; writes must not overlap.
   const canReorder = !busy && filter.trim() === "";
@@ -80,8 +95,21 @@ export function ContextTab({ agent }: { agent: Agent }) {
       <div style={s.header}>
         <h2 style={s.h2}>{t("agentTab.title")}</h2>
         {list.data && <Badge>{t("agentTab.badge", { attached: attachments.length, total: files.length })}</Badge>}
+        {list.data && attachments.length > 0 && (
+          <span style={overBudget ? s.tokensOver : s.tokens} title={t("agentTab.tokensHint")}>
+            {t("agentTab.tokens", { tokens: format.number(tokens) })}
+          </span>
+        )}
       </div>
       <p style={s.subtitle}>{t("agentTab.helper")}</p>
+      {list.data && overBudget && (
+        <div role="alert" style={s.warn}>
+          {t("agentTab.overBudget", {
+            tokens: format.number(tokens),
+            limit: format.number(CONTEXT_PROMPT_TOKENS),
+          })}
+        </div>
+      )}
       <div style={s.controls}>
         <div style={s.controlCell}>
           <SelectInput

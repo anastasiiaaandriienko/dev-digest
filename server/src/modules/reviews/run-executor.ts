@@ -374,9 +374,10 @@ export class ReviewRunExecutor {
         ...(promptIntent ? { intent: promptIntent } : {}),
         // Skills go into the SYSTEM message in this order (omitted when none).
         ...(skillPlan.prompt.length > 0 ? { skills: skillPlan.prompt } : {}),
-        // Project Context docs (untrusted; reviewer-core wraps them). Only when
-        // at least one doc was read → otherwise the prompt equals the baseline.
-        ...(projectContext && projectContext.specs.length > 0 ? { specs: projectContext.specs } : {}),
+        // Project Context docs (untrusted; reviewer-core wraps them) under their
+        // group headings. Only when at least one doc was read → otherwise the
+        // prompt equals the baseline.
+        ...(projectContext && projectContext.specs.length > 0 ? { specGroups: projectContext.groups } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),

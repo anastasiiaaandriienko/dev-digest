@@ -177,6 +177,12 @@ export interface PromptParts {
   /** Project-context spec chunks (untrusted content). */
   specs?: string[];
   /**
+   * Project-context entries grouped under `### <title>` headings, in prompt
+   * order. Takes precedence over `specs` when it has at least one entry. Titles
+   * are trusted (set by the caller); entries are untrusted and wrapped.
+   */
+  specGroups?: readonly PromptSpecGroup[];
+  /**
    * Repo skeleton / map (T3): top-ranked symbols by signature, token-budgeted.
    * Untrusted (derived from repo code) — delimiter-wrapped. Rendered before
    * `## Project context` so the model sees structure first. Empty/undefined →
@@ -214,6 +220,33 @@ export interface AssembledPrompt {
   assembly: PromptAssembly;
 }
 
+/** Project-context entries rendered under one `### <title>` heading. */
+export interface PromptSpecGroup {
+  title: string;
+  specs: readonly string[];
+}
+
+/**
+ * Body of the `## Project context` section: every entry delimiter-wrapped as
+ * `spec-<i>`, with `i` counting across groups. Non-empty `groups` render under
+ * `### <title>` headings; otherwise the flat `specs` list. Undefined when there
+ * is nothing to render.
+ */
+export function renderSpecsBlock(
+  specs?: readonly string[],
+  groups?: readonly PromptSpecGroup[],
+): string | undefined {
+  const filled = (groups ?? []).filter((g) => g.specs.length > 0);
+  if (filled.length > 0) {
+    let i = 0;
+    return filled
+      .map((g) => `### ${g.title}\n${g.specs.map((s) => wrapUntrusted(`spec-${i++}`, s)).join('\n\n')}`)
+      .join('\n\n');
+  }
+  if (specs && specs.length > 0) return specs.map((s, i) => wrapUntrusted(`spec-${i}`, s)).join('\n\n');
+  return undefined;
+}
+
 /**
  * Assemble the messages array + the PromptAssembly record for the run trace.
  * Untrusted blocks (specs, diff) are delimiter-wrapped. The system message is
@@ -231,10 +264,7 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
     parts.memory && parts.memory.length > 0
       ? parts.memory.map((m) => `- ${m}`).join('\n')
       : undefined;
-  const specsBlock =
-    parts.specs && parts.specs.length > 0
-      ? parts.specs.map((s, i) => wrapUntrusted(`spec-${i}`, s)).join('\n\n')
-      : undefined;
+  const specsBlock = renderSpecsBlock(parts.specs, parts.specGroups);
 
   const prDescription =
     parts.prDescription && parts.prDescription.trim().length > 0

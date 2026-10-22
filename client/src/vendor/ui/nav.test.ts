@@ -1,27 +1,30 @@
 import { describe, it, expect } from "vitest";
 import { NAV, SHORTCUTS } from "./nav";
 
-/** HW2 #6, #44 — sidebar groups: Pull Requests stays in WORKSPACE; Skills, Agents, Conventions live in SKILLS LAB. */
+/**
+ * HW2 #6, #44 — sidebar groups: the repo pages (Pull Requests, Project Context) live in
+ * WORKSPACE; Skills, Agents, Conventions live in SKILLS LAB.
+ */
 describe("NAV", () => {
   const section = (name: string) => NAV.find((g) => g.section === name);
   const keys = (name: string) => section(name)?.items.map((i) => i.key);
 
-  it("keeps Pull Requests under WORKSPACE and moves Agents out of it", () => {
-    expect(keys("WORKSPACE")).toEqual(["pulls"]);
+  it("lists Pull Requests, then Project Context under WORKSPACE", () => {
+    expect(keys("WORKSPACE")).toEqual(["pulls", "context"]);
+    expect(section("WORKSPACE")!.items[1]).toMatchObject({
+      label: "Project Context",
+      icon: "FileText",
+      href: "/repos/:repoId/context",
+    });
   });
 
-  it("lists Skills, Agents, Conventions, then Project Context under SKILLS LAB", () => {
-    expect(keys("SKILLS LAB")).toEqual(["skills", "agents", "conventions", "context"]);
+  it("lists Skills, Agents, Conventions under SKILLS LAB", () => {
+    expect(keys("SKILLS LAB")).toEqual(["skills", "agents", "conventions"]);
     expect(section("SKILLS LAB")!.items[2]).toMatchObject({
       label: "Conventions",
       icon: "ListChecks",
       href: "/repos/:repoId/conventions",
       gKey: "c",
-    });
-    expect(section("SKILLS LAB")!.items[3]).toMatchObject({
-      label: "Project Context",
-      icon: "FileText",
-      href: "/repos/:repoId/context",
     });
     expect(section("SKILLS LAB")!.items[0]).toMatchObject({ href: "/skills", icon: "Sparkles", gKey: "s" });
     expect(section("SKILLS LAB")!.items[1]).toMatchObject({ href: "/agents", gKey: "a" });

@@ -78,7 +78,7 @@ describe('buildProjectContext', () => {
     expect(ctx.blocks.map((b) => b.status)).toEqual(['read', 'read']);
   });
 
-  it('AC-CTX-16 skill docs come after the agent docs, skills in the given order', async () => {
+  it('AC-CTX-16 skill docs come after the agent docs, skills in the given order (inside each prompt group)', async () => {
     const ctx = await build(
       input({
         agent: [rowOf('docs/a.md', 0)],
@@ -88,7 +88,14 @@ describe('buildProjectContext', () => {
         ],
       }),
     );
-    expect(ctx.specsRead).toEqual(['docs/a.md', 'specs/s.md', 'docs/b.md']);
+    // Prompt order: Project specifications first, then Project docs (agent doc, then the s2 doc).
+    expect(ctx.specsRead).toEqual(['specs/s.md', 'docs/a.md', 'docs/b.md']);
+    expect(ctx.groups.map((g) => [g.title, g.specs.map((t) => t.split('\n')[0])])).toEqual([
+      ['Project specifications', ['path: specs/s.md']],
+      ['Project docs', ['path: docs/a.md', 'path: docs/b.md']],
+    ]);
+    expect(ctx.specs).toEqual(ctx.groups.flatMap((g) => g.specs));
+    // Blocks keep the injection order.
     expect(ctx.blocks.map((b) => [b.source, b.skill_id ?? null])).toEqual([
       ['agent', null],
       ['skill', 's1'],
@@ -287,7 +294,8 @@ describe('redactAssemblyForTrace', () => {
     const ctx = await build(input({ agent: paths.map((p, i) => rowOf(p, i)) }));
     const a = assemblePrompt({
       system: 'sys',
-      specs: ctx.specs,
+      // As the executor does: the grouped entries.
+      specGroups: ctx.groups,
       task: 'Review PR #1',
       diff: 'diff --git a/x b/x\n+added line',
     });
@@ -297,9 +305,9 @@ describe('redactAssemblyForTrace', () => {
   it('AC-CTX-72 persisted specs are the placeholders wrapped per doc; user holds the same block', async () => {
     const { ctx, a } = await assembled(['docs/a.md', 'docs/b.md']);
     const out = redactAssemblyForTrace(a.assembly, ctx, count);
-    const expected = ctx.reads
-      .map((r, i) => wrapUntrusted(`spec-${i}`, placeholderLine(r.path, r.tokens, r.truncated)))
-      .join('\n\n');
+    const expected =
+      '### Project docs\n' +
+      ctx.reads.map((r, i) => wrapUntrusted(`spec-${i}`, placeholderLine(r.path, r.tokens, r.truncated))).join('\n\n');
     expect(out.isolated).toBe(true);
     expect(out.assembly.specs).toBe(expected);
     expect(out.assembly.specs).toContain(
@@ -312,6 +320,28 @@ describe('redactAssemblyForTrace', () => {
       a.assembly.user.replace(`## Project context\n${a.assembly.specs}`, `## Project context\n${expected}`),
     );
     expect(out.assembly.system).toBe(a.assembly.system);
+  });
+
+  it('redaction keeps the group headings and stays isolated when docs span several groups', async () => {
+    const ctx = await build(input({ agent: [rowOf('docs/a.md', 0), rowOf('specs/s.md', 1)] }));
+    const a = assemblePrompt({ system: 'sys', specGroups: ctx.groups, diff: 'diff --git a/x b/x\n+added line' });
+    const out = redactAssemblyForTrace(a.assembly, ctx, count);
+    const [s, d] = ctx.reads;
+    expect(out.isolated).toBe(true);
+    expect(out.assembly.specs).toBe(
+      `### Project specifications\n${wrapUntrusted('spec-0', placeholderLine(s!.path, s!.tokens, false))}\n\n` +
+        `### Project docs\n${wrapUntrusted('spec-1', placeholderLine(d!.path, d!.tokens, false))}`,
+    );
+    expect(out.assembly.user).toBe(
+      a.assembly.user.replace(`## Project context\n${a.assembly.specs}`, `## Project context\n${out.assembly.specs}`),
+    );
+    expect(JSON.stringify(out.assembly)).not.toContain(MARKER);
+  });
+
+  it('a doc under a root of any other name goes to "Other project docs", after the named groups', async () => {
+    const ctx = await build(input({ roots: ['outside', 'docs'], agent: [rowOf('outside/o.md', 0), rowOf('docs/b.md', 1)] }));
+    expect(ctx.groups.map((g) => g.title)).toEqual(['Project docs', 'Other project docs']);
+    expect(ctx.specsRead).toEqual(['docs/b.md', 'outside/o.md']);
   });
 
   it('AC-CTX-35 specs_tokens counts the section as sent (full text); null when absent', async () => {

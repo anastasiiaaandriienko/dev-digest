@@ -26,3 +26,4 @@ export * from './contracts/observability.js';
 export * from './contracts/productionize.js';
 export * from './adapters.js';
 export * from './smart-diff-rules.js';
+export * from './context-doc-groups.js';

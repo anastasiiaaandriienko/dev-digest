@@ -1,5 +1,5 @@
-import { wrapUntrusted } from '@devdigest/reviewer-core';
-import type { PromptAssembly, SpecBlock, SpecSummary } from '@devdigest/shared';
+import { renderSpecsBlock, wrapUntrusted, type PromptSpecGroup } from '@devdigest/reviewer-core';
+import { groupContextDocs, type PromptAssembly, type SpecBlock, type SpecSummary } from '@devdigest/shared';
 import {
   MAX_ATTACHMENTS,
   MAX_DOC_BYTES,
@@ -38,11 +38,18 @@ export interface ReadEntry {
 }
 
 export interface BuiltProjectContext {
-  /** `specs[]` for reviewer-core, in injection order. */
+  /** Entry texts in prompt order (grouped, see `groups`). */
   specs: string[];
   /** Injected paths in prompt order (trace `specs_read`). */
   specsRead: string[];
+  /** Read entries in prompt order. */
   reads: ReadEntry[];
+  /**
+   * `specGroups` for reviewer-core: the read entries under their prompt headings
+   * (Project specifications, docs, insights, other — `CONTEXT_DOC_GROUPS`),
+   * stable inside a group. Selection and the L6 budget still follow injection order.
+   */
+  groups: PromptSpecGroup[];
   /** One block per attachment occurrence (metadata only). */
   blocks: SpecBlock[];
   summary: SpecSummary;
@@ -187,10 +194,13 @@ export async function buildProjectContext(
       attachments: MAX_ATTACHMENTS,
     },
   };
+  const grouped = groupContextDocs(reads, (r) => r.path, roots);
+  const ordered = grouped.flatMap((g) => g.items);
   return {
-    specs: reads.map((r) => r.text),
-    specsRead: reads.map((r) => r.path),
-    reads,
+    specs: ordered.map((r) => r.text),
+    specsRead: ordered.map((r) => r.path),
+    reads: ordered,
+    groups: grouped.map((g) => ({ title: g.title, specs: g.items.map((r) => r.text) })),
     blocks,
     summary,
   };
@@ -240,9 +250,11 @@ export function redactAssemblyForTrace(
   };
   if (ctx.reads.length === 0) return { assembly: { ...assembly, ...meta }, isolated: true };
 
-  const placeholders = ctx.reads
-    .map((r, i) => wrapUntrusted(`spec-${i}`, placeholderLine(r.path, r.tokens, r.truncated)))
-    .join('\n\n');
+  // Same layout as the real block (headings + spec-<i> wrappers), placeholder lines instead of text.
+  const lines = ctx.reads.map((r) => placeholderLine(r.path, r.tokens, r.truncated));
+  let next = 0;
+  const placeholderGroups = (ctx.groups ?? []).map((g) => ({ title: g.title, specs: g.specs.map(() => lines[next++]!) }));
+  const placeholders = renderSpecsBlock(lines, placeholderGroups) ?? '';
 
   let user = USER_OMITTED_PLACEHOLDER;
   let isolated = false;

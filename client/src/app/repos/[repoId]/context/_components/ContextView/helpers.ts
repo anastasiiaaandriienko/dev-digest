@@ -1,3 +1,5 @@
+import { approxDocTokens } from "@/lib/context-tokens";
+
 /** Size in kB with one decimal below 10 kB (e.g. 0.4, 12). */
 export function formatKb(bytes: number): string {
   const kb = bytes / 1024;
@@ -10,9 +12,9 @@ export function fileName(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-/** Sum of the listed docs' sizes in bytes. */
-export function totalSize(files: { size: number }[]): number {
-  return files.reduce((sum, f) => sum + f.size, 0);
+/** Approximate tokens of all listed docs (whole files, bytes / 4 each). */
+export function approxTotalTokens(files: { size: number }[]): number {
+  return files.reduce((sum, f) => sum + approxDocTokens(f.size), 0);
 }
 
 /** Save `content` as a local Markdown file (client only; no request is made). */
