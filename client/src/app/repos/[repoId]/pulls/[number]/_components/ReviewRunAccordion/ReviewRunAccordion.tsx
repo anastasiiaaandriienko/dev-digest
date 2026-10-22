@@ -152,6 +152,10 @@ export function ReviewRunAccordion({
             prId={prId}
             repoFullName={repoFullName}
             headSha={headSha}
+            // Same rule as the inline diff card: agent_name is resolved only for an agent that
+            // still exists in this workspace (reviews.agent_id has no FK), so a deleted agent
+            // offers no "Turn into eval case" that the server would reject.
+            agentId={review.agent_name ? review.agent_id : null}
           />
         </div>
       )}

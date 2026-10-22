@@ -25,11 +25,14 @@ export function FindingsPanel({
   prId,
   repoFullName,
   headSha,
+  agentId,
 }: {
   findings: FindingRecord[];
   prId: string;
   repoFullName?: string | null;
   headSha?: string | null;
+  /** The review's agent (null for agent-less reviews): enables "Turn into eval case". */
+  agentId?: string | null;
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
@@ -134,6 +137,7 @@ export function FindingsPanel({
               decision={decisions.get(f.id)}
               repoFullName={repoFullName}
               headSha={headSha}
+              canTurnIntoEvalCase={!!agentId}
               onAction={(act) => decide(f, act)}
             />
           ))

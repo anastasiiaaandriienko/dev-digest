@@ -18,8 +18,9 @@ describe("NAV", () => {
     });
   });
 
-  it("lists Skills, Agents, Conventions under SKILLS LAB", () => {
-    expect(keys("SKILLS LAB")).toEqual(["skills", "agents", "conventions"]);
+  it("lists Skills, Agents, Conventions, Eval Dashboard under SKILLS LAB", () => {
+    expect(keys("SKILLS LAB")).toEqual(["skills", "agents", "conventions", "eval"]);
+    expect(section("SKILLS LAB")!.items[3]).toEqual({ key: "eval", label: "Eval Dashboard", icon: "Gauge", href: "/eval" });
     expect(section("SKILLS LAB")!.items[2]).toMatchObject({
       label: "Conventions",
       icon: "ListChecks",

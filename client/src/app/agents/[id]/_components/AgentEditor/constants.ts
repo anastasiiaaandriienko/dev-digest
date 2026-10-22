@@ -7,11 +7,13 @@ export interface EditorTab {
   icon: IconName;
 }
 
-/** Editor tabs — exactly Config, Skills and Context (HW2 #35 as amended by CTX A1). Evals / Stats / CI come in later lessons. */
+/** Editor tabs — Config, Skills, Context (HW2 #35 as amended by CTX A1) and Evals (L06,
+    specs/eval-pipeline.md §12.2). Stats / CI come in later lessons. */
 export const TABS: readonly EditorTab[] = [
   { key: "config", labelKey: "editor.tabs.config", icon: "Settings" },
   { key: "skills", labelKey: "editor.tabs.skills", icon: "Sparkles" },
   { key: "context", labelKey: "editor.tabs.context", icon: "FileText" },
+  { key: "evals", labelKey: "editor.tabs.evals", icon: "FlaskConical" },
 ];
 
 /** Valid `?tab=` values (anything else falls back to Config). */

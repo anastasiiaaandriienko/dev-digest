@@ -202,3 +202,16 @@ describe("FindingsPanel — decisions", () => {
     expect(screen.getByText(messages.finding.decision.error)).toBeInTheDocument();
   });
 });
+
+describe("FindingsPanel — eval case action (L06)", () => {
+  const decided = [{ ...FINDINGS[0]!, accepted_at: "t" }];
+  const turnInto = () => screen.queryByRole("button", { name: messages.finding.evalCase.turnInto });
+
+  it("offers Turn into eval case only for reviews of an agent", () => {
+    renderWithIntl(<FindingsPanel findings={decided} prId="pr1" agentId="agent-1" />);
+    expect(turnInto()).toBeTruthy();
+    cleanup();
+    renderWithIntl(<FindingsPanel findings={decided} prId="pr1" agentId={null} />);
+    expect(turnInto()).toBeNull();
+  });
+});

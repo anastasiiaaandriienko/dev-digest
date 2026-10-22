@@ -1,7 +1,8 @@
 /* FindingCard — ported from findings.jsx (createElement → TSX).
    Severity icon+label, category, file:line, confidence, markdown rationale +
    suggestion, accept/dismiss actions. Accept/dismiss reflect persisted
-   timestamps. */
+   timestamps. L06: a decided finding of an agent can be turned into an eval
+   case (must find / must not flag); the modal mounts only when opened. */
 "use client";
 
 import React from "react";
@@ -20,6 +21,8 @@ import {
 import type { FindingRecord, FindingActionKind } from "@devdigest/shared";
 import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
 import { lineLabel } from "./helpers";
+import { AddToEvalModal } from "../AddToEvalModal";
+import { evalKindOf } from "../AddToEvalModal/helpers";
 import { githubBlobUrl } from "../../../../../../../lib/github-urls";
 import { s } from "./styles";
 
@@ -32,6 +35,7 @@ export function FindingCard({
   decision,
   repoFullName,
   headSha,
+  canTurnIntoEvalCase,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -43,6 +47,8 @@ export function FindingCard({
   decision?: "pending" | "error" | "success";
   repoFullName?: string | null;
   headSha?: string | null;
+  /** L06: the finding belongs to an agent, so a decided one can become an eval case. */
+  canTurnIntoEvalCase?: boolean;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
@@ -55,6 +61,9 @@ export function FindingCard({
   const dismissed = !!f.dismissed_at;
   const muted = accepted || dismissed;
   const busy = !!pending || decision === "pending";
+  const evalKind = canTurnIntoEvalCase ? evalKindOf(f) : null;
+  const inEvalSet = !!f.eval_case_id;
+  const [evalOpen, setEvalOpen] = React.useState(false);
 
   return (
     <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
@@ -118,6 +127,30 @@ export function FindingCard({
             >
               {t("finding.dismiss")}
             </Button>
+            {evalKind && (
+              <span style={s.evalGroup}>
+                {inEvalSet ? (
+                  <span data-testid="eval-case-badge" title={t("finding.evalCase.inEvalSetTitle")} style={s.evalBadge}>
+                    <Icon.FlaskConical size={13} />
+                    {t("finding.evalCase.inEvalSet")}
+                  </span>
+                ) : (
+                  <Button
+                    kind="ghost"
+                    size="sm"
+                    icon="FlaskConical"
+                    disabled={busy}
+                    title={t(evalKind === "must_find" ? "finding.evalCase.titleMustFind" : "finding.evalCase.titleMustNotFlag")}
+                    onClick={() => setEvalOpen(true)}
+                  >
+                    {t("finding.evalCase.turnInto")}
+                  </Button>
+                )}
+                <span data-testid="eval-kind-pill" style={s.evalKindPill(evalKind)}>
+                  {t(`finding.evalCase.kind.${evalKind}`)}
+                </span>
+              </span>
+            )}
             {decision && (
               <span role="status" aria-live="polite" style={s.decisionStatus(decision)}>
                 {t(`finding.decision.${decision}`)}
@@ -126,6 +159,7 @@ export function FindingCard({
           </div>
         </div>
       )}
+      {evalOpen && evalKind && !inEvalSet && <AddToEvalModal finding={f} onClose={() => setEvalOpen(false)} />}
     </div>
   );
 }

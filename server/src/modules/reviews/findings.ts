@@ -19,14 +19,17 @@ export async function actOnFinding(
     throw new NotFoundError('Finding not found');
   }
 
+  // The decision never changes an existing eval case (cases are snapshots); the
+  // DTO just reports it so the client keeps its "In eval set" state.
+  const evalCaseId = async () => (await repo.evalCaseIdsForFindings(workspaceId, [findingId])).get(findingId) ?? null;
   switch (action) {
     case 'accept': {
       const row = await repo.setFindingAccepted(findingId, new Date());
-      return { finding: findingRowToDto(row!) };
+      return { finding: findingRowToDto(row!, await evalCaseId()) };
     }
     case 'dismiss': {
       const row = await repo.setFindingDismissed(findingId, new Date());
-      return { finding: findingRowToDto(row!) };
+      return { finding: findingRowToDto(row!, await evalCaseId()) };
     }
     default:
       throw new AppError('invalid_action', `Action '${action}' is not available in the starter`, 400);

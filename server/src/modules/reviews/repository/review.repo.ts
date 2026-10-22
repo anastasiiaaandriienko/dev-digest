@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { Finding } from '@devdigest/shared';
@@ -96,6 +96,31 @@ export async function deleteReview(
     .where(and(eq(t.reviews.workspaceId, workspaceId), eq(t.reviews.id, reviewId)))
     .returning({ id: t.reviews.id });
   return rows.length > 0;
+}
+
+// ---- L06 eval cases of findings -----------------------------------------
+
+/**
+ * finding id → id of the eval case created from it, for the given findings.
+ * Scoped by workspace; only labeled (L06) cases count.
+ */
+export async function evalCaseIdsForFindings(
+  db: Db,
+  workspaceId: string,
+  findingIds: string[],
+): Promise<Map<string, string>> {
+  if (findingIds.length === 0) return new Map();
+  const rows = await db
+    .select({ findingId: t.evalCases.sourceFindingId, caseId: t.evalCases.id })
+    .from(t.evalCases)
+    .where(
+      and(
+        eq(t.evalCases.workspaceId, workspaceId),
+        inArray(t.evalCases.sourceFindingId, findingIds),
+        isNotNull(t.evalCases.kind),
+      ),
+    );
+  return new Map(rows.flatMap((r) => (r.findingId ? [[r.findingId, r.caseId] as [string, string]] : [])));
 }
 
 // ---- finding actions ------------------------------------------------------

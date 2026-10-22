@@ -12,7 +12,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:seed": "tsx src/db/seed.ts"
+    "db:seed": "tsx src/db/seed.ts",
+    "verify:l06": "node ../scripts/verify-l06.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.33.1",
