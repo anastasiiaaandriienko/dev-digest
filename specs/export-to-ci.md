@@ -94,7 +94,7 @@
 - **CI Runs page** `/ci-runs`, item "CI Runs" in the GLOBAL sidebar section created by A: table repository, PR (#n), agent, verdict (Blocked / Passed / Failed), findings, cost (`—` when null), duration, short commit SHA, "View job" link; Sync button; loading / empty (CTA to Agents) / error states. Layout per Q20 decision (AC-CI-82): columns in AC-CI-51 order, newest 50 rows, `agent_id`/`repo` filters only via URL query, no header stats, no pagination in the MVP.
 ### 6.4 Persistence (migration 0016 (S.2), created in the pre-fan-out prep commit 5eee208 (S.1), not by worktree B; no further schema change)
 - `ci_installations`: one row per (`agent_id`, `repo`, `target_type`) (unique `ci_installations_agent_repo_target_uq`); writes `status`, `agent_version`, `pr_url`, `updated_at`, `last_synced_at`.
-  - Status transitions (G5): first export/zip → `pending`; re-export of a `pending` row → `pending`; re-export of an `active` row → stays `active` (the workflow already runs; only the PR is updated); re-export of an `error` row → `pending` (the GitHub write just succeeded); ≥1 ingested run → `active`; sync fails with GitHub auth/404 → `error`.
+  - Status transitions (G5): first export/zip → `pending`; re-export of a `pending` row → `pending`; re-export of an `active` row → stays `active` (the workflow already runs; only the PR is updated); re-export of an `error` row → `pending` (the GitHub write just succeeded); ≥1 ingested run → `active`; sync finds the repository inaccessible (GitHub 401/403, or 404 of the repository itself) → `error` (AC-CI-58); a 404 for a workflow not yet on the default branch changes nothing (AC-CI-93).
   - Occupancy (G2): a `pending`, `active` or `error` installation of an agent occupies the repo for every other agent (AC-CI-37). The MVP has no way to remove an installation (§2). The row disappears only when its agent is deleted (FK cascade); that does **not** clean the target repo — the old manifest, skills, runner and workflow stay there, so another agent's export is still refused with `ci_manifest_conflict` / `ci_file_conflict` (AC-CI-89, 90) until someone removes those files by hand.
   - `last_synced_at` = the time the last automatic sync claimed the installation (TA4), not "last successful sync".
 - Per ingested CI run (S.3): `agent_runs` (`source='ci'`, `agent_id` from the installation, `model`, `provider='openrouter'`, `status`, `findings_count`, `blockers`, `duration_ms`, `pr_id` NULL unless the PR is imported, `multi_agent_run_id` NULL) + `run_traces` + `ci_runs` (`agent_run_id`, `ci_installation_id`, `github_run_id`, `commit_sha`, `github_repo_id`, `pr_number`, `github_url`, `ran_at`, `status`, `findings_count`, `cost_usd`, `source='ci'`). Idempotency via unique (`ci_installation_id`, `github_run_id`).
@@ -112,7 +112,7 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
 - FR-6 Zip download → AC-CI-17, 39.
 - FR-7 Scoping and validation → AC-CI-33..35.
 - FR-8 Gate/blocking → AC-CI-70, 71, 81.
-- FR-9 Ingest by pulling Actions artifacts → AC-CI-40..49, 55..58, 87, 88.
+- FR-9 Ingest by pulling Actions artifacts → AC-CI-40..49, 55..58, 87, 88, 93.
 - FR-10 CI Runs page + sidebar → AC-CI-50..54.
 - FR-11 Agent CI tab → AC-CI-60..67.
 - FR-12 Security invariants → AC-CI-75..78.
@@ -121,11 +121,17 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
 
 **Completed runs without an artifact (G1).** Only conclusion `failure` or `timed_out` without a `devdigest-result` artifact is stored, as `failed` with null findings (a runner hard failure). Every other artifact-less run — `skipped` (fork guard, AC-CI-27), `cancelled`, `success` without artifact (runner absent in the base checkout, AC-CI-78), `neutral`, `stale`, `action_required` — is skipped with a reason and writes no row; it is re-read (and skipped again) by later syncs while it is among the 20 newest.
 
+**Classifying GitHub failures during sync (AC-CI-58, 87, 93).** GitHub answers 404 for a workflow file that is not on the default branch yet — normal for a `pending` installation whose export PR is not merged. The sync therefore classifies each installation's failure:
+- `listWorkflowRuns` → 404: the repository is read once more (`getDefaultBranch`). If that read succeeds, the workflow is just not published yet: **no runs yet** — zero runs, the installation is reported in `skipped` with reason `workflow_not_published` (no `github_run_id`), it is not listed in `errors`, its status is unchanged (a `pending` installation stays `pending`) and the sync counts as completed (an automatic claim is kept; a manual sync sets `last_synced_at`).
+- The repository itself is not accessible — the repository read answers 404, or any call answers 401 or 403 (missing, private without access, revoked token or missing permission): the installation becomes `error` and is listed in `errors` (AC-CI-58).
+- Network errors, timeouts, 429 and 5xx (also on the repository read) are transient (AC-CI-87).
+- Any other GitHub error is listed in `errors` with its status and leaves the status unchanged; it is never turned into an empty run list.
+
 **Throttle and recovery (TA3, TA4).**
 - Automatic sync first *claims* each due installation atomically: `UPDATE ci_installations SET last_synced_at = now() WHERE id = $1 AND (last_synced_at IS NULL OR last_synced_at < now() - interval '10 minutes') RETURNING last_synced_at`, remembering the previous value. Only a claimed installation is synced; two tabs opened together sync it once. No GitHub I/O runs inside a DB transaction.
 - Recovery after a failure — a failed sync never blocks the next one for long:
   - transient GitHub failure (network, timeout, 429, 5xx): the claim is rolled back with a compare-and-set (`UPDATE … SET last_synced_at = <previous> WHERE id = $1 AND last_synced_at = <claimed>`), so the next page open retries; the installation status is unchanged;
-  - GitHub auth/404 failure: the claim is kept (10-minute back-off against a token or repo that keeps failing) and the status becomes `error`;
+  - repository not accessible (AC-CI-58: 401/403, or 404 of the repository itself): the claim is kept (10-minute back-off against a token or repo that keeps failing) and the status becomes `error`; a workflow 404 with a readable repository is not a failure (AC-CI-93);
   - process crash between claim and finish: nothing to roll back; the next automatic sync runs after at most 10 minutes;
   - in every case a manual sync is available at once: it ignores `last_synced_at` and is limited only by the in-process 60 s throttle (TA3); a successful manual sync sets `last_synced_at = now()`, a failed one leaves it unchanged.
 - Partial progress is safe: each run is written in its own transaction and the unique (`ci_installation_id`, `github_run_id`) index skips runs already stored, so a retry ingests only what is missing (among the 20 newest).
@@ -181,6 +187,7 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
 | A file the export would write already exists and is not owned (e.g. hand-written workflow, colliding skill file) | 409 `ci_file_conflict` naming the paths; nothing written, nothing deleted | AC-CI-90 |
 | `devdigest/ci` moved or was created by someone else between inspection and commit | 409 `ci_concurrent_change`; nothing written; retry re-inspects | AC-CI-91 |
 | AC-CI-92 | If an open PR from `devdigest/ci` targets a base branch other than the export's base, then the server shall respond 409 `ci_pr_base_mismatch` with `pr_url`, `pr_base` and `requested_base` before any commit or DB write, and leave the PR unchanged; an open PR into the same base is reused. | unit + integration (approval) |
+| AC-CI-93 | If listing an installation's workflow runs answers 404 and a read of the repository succeeds, then the sync shall treat it as no runs yet: no `errors` entry, a `skipped` entry with reason `workflow_not_published`, status unchanged (`pending` stays `pending`); if the repository read answers 404, 401 or 403, it shall handle it as a repository-access failure (AC-CI-58); any other error on either call shall stay an error and never become an empty run list. | unit + integration (approval) |
 | Two exports to the same repo at once in this API | Serialised by the per-repo lock; the second sees the first's result | AC-CI-91 |
 | An open `devdigest/ci` PR targets another base branch | 409 `ci_pr_base_mismatch` with the PR url and both bases; no commit, no DB write, PR unchanged | AC-CI-92 |
 | Workflow run failed / timed out without artifact (runner hard fail) | Stored as `failed`, findings null | AC-CI-46 |
@@ -190,7 +197,8 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
 | Same run synced twice | One row | AC-CI-44 |
 | Page opened within 10 min of last sync | No GitHub call | AC-CI-55 |
 | Manual sync repeated within 60 s | Reported `throttled`, no GitHub call | AC-CI-56 |
-| One installation's GitHub call fails during sync | Others processed; error listed; that installation `error` | AC-CI-48, 58 |
+| One installation's GitHub call fails during sync | Others processed; error listed; that installation `error` only if its repository is not accessible (401/403, repository 404), else status unchanged | AC-CI-48, 58 |
+| Workflow runs answer 404 but the repository is readable (export PR not merged yet) | No runs yet: `skipped` with `workflow_not_published`, not an error, status unchanged | AC-CI-93 |
 | Fork PR | Job skipped | AC-CI-27 |
 
 ## 12. Acceptance criteria (EARS)
@@ -253,7 +261,7 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
 | AC-CI-55 | While every installation's `last_synced_at` is within 10 minutes, an automatic sync shall make zero GitHub calls and report them as `throttled`. | integration (approval) |
 | AC-CI-56 | If a manual sync for an installation is requested within 60 s of its previous manual sync, then the server shall make no GitHub call and report it as `throttled`. | integration (approval) |
 | AC-CI-57 | When the user clicks "Sync" on CI Runs (all installations) or on a CI-tab row (that installation), the client shall call sync with `mode='manual'` and refresh runs and installations. | unit |
-| AC-CI-58 | When a run is ingested, the server shall set the installation `status='active'`; if sync fails with GitHub auth or 404, then it shall set `status='error'`; any other sync failure leaves the status unchanged. | integration (approval) |
+| AC-CI-58 | When a run is ingested, the server shall set the installation `status='active'`; if sync finds the repository not accessible (GitHub 401 or 403, or 404 of the repository itself), then it shall set `status='error'`; a 404 for a workflow not yet on the default branch is not a failure (AC-CI-93); any other sync failure leaves the status unchanged and is listed in `errors`. | integration (approval) |
 | AC-CI-60 | The agent editor shall show a "CI" tab selectable via `?tab=ci`. | unit |
 | AC-CI-61 | The CI tab shall show "CI deployment" and, while N ≥ 1 installations are `active`, the badge "Active in N repos". | unit |
 | AC-CI-62 | The CI tab shall list each installation with repo, "GitHub Actions", installation status, last run status and relative time, or "No runs yet". | unit |
@@ -276,7 +284,7 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
 | AC-CI-84 | The Install step shall show "Need help?" linking to https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions, opened in a new tab with `rel="noopener noreferrer"`. | unit |
 | AC-CI-85 | When the feature is verified, the implementer shall record the observed preview latency, export latency and `agent-runner/dist/index.js` size in the verification notes; no threshold is enforced. | manual |
 | AC-CI-86 | When `GET /ci/installations?repo=owner/name` is called, the server shall return the workspace's installations on that repo as `CiInstallationView` (with `agent_name`, `status`, `last_run_status`, `last_run_at`), and none from other workspaces. | integration (approval) |
-| AC-CI-87 | If an automatic sync of a claimed installation fails with a transient GitHub error (network, timeout, 429, 5xx), then the server shall restore its previous `last_synced_at` (compare-and-set) and leave its status unchanged, so the next automatic sync retries it; on an auth/404 failure it shall keep the claim and set `status='error'`. | unit + integration (approval) |
+| AC-CI-87 | If an automatic sync of a claimed installation fails with a transient GitHub error (network, timeout, 429, 5xx), then the server shall restore its previous `last_synced_at` (compare-and-set) and leave its status unchanged, so the next automatic sync retries it; on a repository-access failure (AC-CI-58) it shall keep the claim and set `status='error'`. | unit + integration (approval) |
 | AC-CI-88 | A manual sync shall not be blocked by `last_synced_at`, only by the 60 s per-installation manual throttle; a successful manual sync shall set `last_synced_at = now()` and a failed one shall leave it unchanged. | unit |
 | AC-CI-89 | When preview, zip or open-PR export inspects the repo (§8 steps 2–4, at the base branch and `devdigest/ci` head SHAs), the server shall use `.devdigest/agents/<current-slug>.yaml` when no manifest exists, keep the path of the single manifest owned by this agent (`agent_id` match) even after a rename, and otherwise (a manifest not owned by this agent, or more than one) respond 409 `ci_manifest_conflict` naming the files and write nothing. | unit + integration (approval) |
 | AC-CI-90 | If a file the export would write already exists at either inspected SHA and is not in the agent's owned set `K` (§8), then the server shall respond 409 `ci_file_conflict` naming the paths and write nothing; an export shall never delete or rename a file in the target repo. | unit + integration (approval) |
@@ -287,7 +295,7 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
 - T2 Wizard edge cases: preview 422, install 502, 409 other agent, regenerate prompt, close before install → AC-CI-05, 08, 10, 16, 18.
 - T3 Generator unit tests: manifest round-trip (`JSON.parse` + `AgentManifest`), model mapping, slug rules, workflow string assertions (no `pull_request_target`, permissions, SHA regex, env names, fork guard, base-SHA checkout, upload step, no untrusted `${{ }}` in `run:`), bundle missing → AC-CI-20..29, 35, 38, 78.
 - T4 `ci-export.it.test.ts` with mock GitHub: new install, re-export same agent (status per G5), 409 other agent incl. an `error` installation, reuse PR, default branch, zip install row, scoping, GitHub failure, `GET /ci/installations?repo=`, manifest-path rule (rename → same owned path; foreign / unparsable / multiple manifests → 409 `ci_manifest_conflict`), unknown existing files → 409 `ci_file_conflict` with zero commits, mock ref moved between inspection and commit → 409 `ci_concurrent_change` with no PR and no row, two concurrent exports serialised → AC-CI-30..34, 36, 37, 39, 80, 86, 89..91.
-- T5 `ci-ingest.it.test.ts` with mock runs/artifacts (fflate fixtures) and a fake clock: valid, invalid, PR mismatch, foreign workflow, duplicate, missing artifact by conclusion (failure/timed_out stored; skipped/cancelled/success skipped), partial failure, auto throttle (assert zero mock calls), claim rollback on a transient error and kept claim on 401/404, manual throttle and manual sync ignoring `last_synced_at`, status transitions, stored trace passes `RunTrace.safeParse` → AC-CI-40..49, 55, 56, 58, 87, 88.
+- T5 `ci-ingest.it.test.ts` with mock runs/artifacts (fflate fixtures) and a fake clock: valid, invalid, PR mismatch, foreign workflow, duplicate, missing artifact by conclusion (failure/timed_out stored; skipped/cancelled/success skipped), partial failure, auto throttle (assert zero mock calls), claim rollback on a transient error and kept claim on 401/404, manual throttle and manual sync ignoring `last_synced_at`, status transitions, stored trace passes `RunTrace.safeParse`, workflow 404 with a readable repository (no runs, `pending` kept, no error) vs repository 404 / 401 / 403 (`error`) vs a 5xx on the repository read (transient) → AC-CI-40..49, 55, 56, 58, 87, 88, 93.
 - T6 CI Runs page and CI tab component tests → AC-CI-50..54, 57, 60..67, 76.
 - T7 agent-runner tests: gate exit code, extended artifact → AC-CI-70, 81.
 - T8 Manual end-to-end on a real repo (paid LLM in the user's Actions; approval): export → PR on `devdigest/ci` → review permissions/triggers → add `OPENROUTER_API_KEY` → merge → mark check required → test PR with a CRITICAL issue → PR comment posted, check red, merge blocked → Sync → run in CI Runs with repo, PR, SHA → AC-CI-30, 70, 71, 40, 45, 51.
@@ -298,7 +306,7 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
 - A4. The studio's GitHub token has repo write + workflow-file permission; otherwise install fails with the GitHub reason.
 - A5. With `post_as='none'` the workflow uses `pull-requests: read` (still needed to fetch the diff).
 - A7. Verdict shown on CI Runs: `gate_triggered` → "Blocked", artifact without gate → "Passed", no artifact → "Failed".
-- A8. `status='error'` is set only on GitHub auth/404 sync failures and cleared to `active` on the next successful ingest (confirmed, user 2026-10-23; AC-CI-58).
+- A8. `status='error'` is set only when sync finds the repository not accessible (401/403, or 404 of the repository itself — not a 404 of a workflow that is not on the default branch yet) and cleared to `active` on the next successful ingest (confirmed, user 2026-10-23; refined before B7; AC-CI-58, 93).
 - (A1, A2, A6 from v1 are now decisions or covered by shared section S.2.)
 
 ## 15. Decisions and open questions
@@ -327,6 +335,7 @@ Decisions (user, 2026-10-23, P0 after the development plan):
 - **Runner package.json** (user, 2026-10-23, during B4): the ncc build emits an ESM `dist/index.js` (plus `dist/package.json` `{"type":"module"}` and a lazily loaded chunk used only by the OpenAI SDK's deprecated `fileFromPath`, which the runner never calls — not exported). Verified locally: with a root `package.json` `"type": "commonjs"` the runner fails to load unless `.devdigest/runner/package.json` `{"type":"module"}` is present. It is therefore part of the FR-4 file set and of the owned set `K` (§8); `.devdigest/runner/index.js` stays byte-equal to `agent-runner/dist/index.js` (AC-CI-26). Node 22 compatibility is verified in integration testing.
 - **Pinned actions** (user, 2026-10-23, during B4; AC-CI-25): `actions/checkout` v7.0.1 `3d3c42e5aac5ba805825da76410c181273ba90b1`, `actions/setup-node` v7.1.0 `949feb2413d6458794dcd2491c4babbbce0c15c1`, `actions/upload-artifact` v7.0.2 `cf430e030ddbb5b0abf93d22962f4752f3646cd9` — release-tag commits resolved via the public GitHub API, recorded in `server/src/modules/ci/constants.ts`.
 - **Manifest parsing and PR base** (user, 2026-10-23, during B6): `yaml` is a direct server dependency (the version already locked); an existing manifest is owned only if it parses as YAML within the limits of §8 step 3 and validates as `AgentManifest` with this agent's `agent_id`. An open `devdigest/ci` PR into another base is never reused silently: 409 `ci_pr_base_mismatch` (AC-CI-92).
+- **Workflow 404 during sync** (user, 2026-10-24, before B7): a 404 for the workflow while the repository is readable means no runs yet — not an error, a `pending` installation stays `pending`; a repository that is missing or not accessible (404, 401, 403) still sets `error`; other GitHub errors are never hidden as an empty run list (§7, AC-CI-58, 93).
 - **Installation removal:** no DB-only removal; `pending`, `active` and `error` installations keep occupying the repo; a safe removal together with the GitHub files is outside the MVP (§2). Deleting an agent does not clean the target repo (§6.4).
 
 Open questions: none (§19.2).
@@ -438,4 +447,4 @@ Neither worktree creates or edits a migration. A worktree that needs another sch
 | CI Runs: filters, pagination, header stats | none | AC-CI-82 | Covered | Q20 decision: URL filters, 50 rows, no pagination, no header stats |
 
 ### 19.2 Open questions ([NEEDS CLARIFICATION] index)
-None. Q20, Q24, Q26, Q28 and A8 were decided by the user on 2026-10-23 (see §15; AC-CI-82…85, AC-CI-58); G1–G5, TA1–TA4, Q29 (= A) and installation removal likewise (§15; AC-CI-86…91); manifest parsing and PR base during B6 (§15; AC-CI-92).
+None. Q20, Q24, Q26, Q28 and A8 were decided by the user on 2026-10-23 (see §15; AC-CI-82…85, AC-CI-58); G1–G5, TA1–TA4, Q29 (= A) and installation removal likewise (§15; AC-CI-86…91); manifest parsing and PR base during B6 (§15; AC-CI-92); workflow 404 during sync before B7 (§15; AC-CI-93).
