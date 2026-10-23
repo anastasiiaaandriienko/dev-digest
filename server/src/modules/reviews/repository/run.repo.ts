@@ -76,6 +76,28 @@ export async function listRunsForPull(
 }
 
 /**
+ * `source` of a run in the caller's workspace — the delete guard's input
+ * (AC-MAR-59). Read-only. A run of another workspace reads as missing, so the
+ * guard can never reveal that it exists. Exposed for `.toSQL()` checks.
+ */
+export function runSourceQuery(db: Db, workspaceId: string, runId: string) {
+  return db
+    .select({ source: t.agentRuns.source })
+    .from(t.agentRuns)
+    .where(and(eq(t.agentRuns.id, runId), eq(t.agentRuns.workspaceId, workspaceId)))
+    .limit(1);
+}
+
+export async function getRunSource(
+  db: Db,
+  workspaceId: string,
+  runId: string,
+): Promise<'local' | 'ci' | undefined> {
+  const [row] = await runSourceQuery(db, workspaceId, runId);
+  return row?.source;
+}
+
+/**
  * Delete one agent run (+ its trace via FK cascade) AND the review it produced.
  * Workspace-scoped. `reviews.run_id` has no FK to `agent_runs`, so the review
  * (and its findings, which DO cascade from `reviews`) must be removed explicitly

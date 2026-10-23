@@ -97,6 +97,11 @@ export class ReviewRepository {
     return runRepo.listRunsForPull(this.db, workspaceId, prId);
   }
 
+  /** A run's `source` within the workspace (undefined = missing or foreign). */
+  getRunSource(workspaceId: string, runId: string): Promise<'local' | 'ci' | undefined> {
+    return runRepo.getRunSource(this.db, workspaceId, runId);
+  }
+
   /** Delete one agent run (+ its trace via FK cascade). Workspace-scoped. */
   deleteAgentRun(workspaceId: string, runId: string): Promise<boolean> {
     return runRepo.deleteAgentRun(this.db, workspaceId, runId);

@@ -87,8 +87,17 @@ export class ReviewService {
     return this.repo.listRunsForPull(workspaceId, prId);
   }
 
-  /** Delete one run from the history (+ its trace). */
+  /**
+   * Delete one run from the history (+ its trace). A CI run (`source='ci'`) is
+   * refused with 409 BEFORE any delete (AC-MAR-59): GitHub is its source of
+   * truth, and deleting it would cascade to `ci_runs` so the next sync would
+   * re-ingest it. The check is workspace-scoped, so a foreign run reads as
+   * missing and gets the usual `false` (→ `{ ok: false }`), never the 409.
+   */
   async deleteRun(workspaceId: string, runId: string): Promise<boolean> {
+    if ((await this.repo.getRunSource(workspaceId, runId)) === 'ci') {
+      throw new AppError('ci_run_not_deletable', 'CI runs cannot be deleted from the studio', 409);
+    }
     return this.repo.deleteAgentRun(workspaceId, runId);
   }
 
