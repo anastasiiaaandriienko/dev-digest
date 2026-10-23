@@ -7,10 +7,12 @@ import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { ReviewService } from './service.js';
 import { IntentService } from './intent/service.js';
+import { normalizeAgentIds } from './multi-run/helpers.js';
 
 /**
  * reviews module.
- *   POST   /pulls/:id/review  {agentId} | {all:true}  → run review(s); returns runs
+ *   POST   /pulls/:id/review  {agentId} | {all:true} | {agentIds}
+ *                                                      → run review(s); returns runs (+ multi_agent_run_id)
  *   GET    /runs/:id/events                            → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                             → the single-document RunTrace
  *   GET    /pulls/:id/reviews                          → persisted reviews + findings for a PR
@@ -28,13 +30,24 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
 
   // ---- Run a review (manual trigger) -------------------------------
   // Tight per-route limit: each call can fan out to expensive LLM runs.
-  // Body stays a tolerant manual parse (both fields optional; empty body is OK).
+  // Body stays a tolerant manual parse (all fields optional; empty body is OK).
+  // `agentIds` → one multi-agent run (L07); otherwise the legacy single/all path.
   app.post(
     '/pulls/:id/review',
     { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (req) => {
     const { workspaceId } = await getContext(container, req);
     const body = RunRequest.parse(req.body ?? {});
+    const agentIds = normalizeAgentIds(body);
+    if (agentIds) {
+      const { multiAgentRunId, runs, reviews } = await service.runMultiAgentReview(
+        workspaceId,
+        req.params.id,
+        agentIds,
+        req.log,
+      );
+      return { pr_id: req.params.id, runs, reviews, multi_agent_run_id: multiAgentRunId };
+    }
     const targets = await service.resolveTargets(workspaceId, {
       ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
       ...(body.all !== undefined ? { all: body.all } : {}),
@@ -45,7 +58,7 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
       targets,
       req.log,
     );
-    return { pr_id: req.params.id, runs, reviews };
+    return { pr_id: req.params.id, runs, reviews, multi_agent_run_id: null };
   });
 
   // ---- SSE: live run events (replay buffer first, then live; ends on done) -
