@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, lte, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { FindingRow } from '../../../db/rows.js';
@@ -7,6 +7,21 @@ import { evalCaseIdsForFindings, findingsForReviews, type ReviewRow } from '../r
 
 /** An agent as needed to queue its run (a subset of AgentRow). */
 export type MultiRunAgent = { id: string; provider: string | null; model: string | null };
+
+/** Estimates use each agent's last N `done` local runs (AC-MAR-19, spec Q7). */
+export const ESTIMATE_WINDOW = 10;
+
+/**
+ * One row per workspace agent × one of its last ESTIMATE_WINDOW `done` local
+ * runs (`rn` 1 = newest). An agent with no such run yields ONE row with
+ * `rn: null` (LEFT JOIN), so it is still listed.
+ */
+export type EstimateRunRow = {
+  agentId: string;
+  rn: number | null;
+  durationMs: number | null;
+  costUsd: number | null;
+};
 
 /** A linked child run with its agent name and trace cost (null = unknown). */
 export type ChildRunRow = {
@@ -125,5 +140,52 @@ export class MultiRunRepository {
   /** finding id → eval case id created from it (workspace-scoped). */
   evalCaseIdsForFindings(workspaceId: string, findingIds: string[]): Promise<Map<string, string>> {
     return evalCaseIdsForFindings(this.db, workspaceId, findingIds);
+  }
+
+  /**
+   * The estimate input in ONE query (no N+1, at most ESTIMATE_WINDOW rows per
+   * agent): a window over the workspace's `done`, `source='local'` runs
+   * (CI runs never count — AC-MAR-56; `pr_id` may be NULL), numbered per agent
+   * newest first, LEFT JOINed onto every agent of the workspace. Cost comes
+   * from the run's trace (null = unknown). Exposed for `.toSQL()` checks.
+   */
+  estimateRowsQuery(workspaceId: string) {
+    const recent = this.db
+      .select({
+        agentId: t.agentRuns.agentId,
+        durationMs: t.agentRuns.durationMs,
+        costUsd: traceCostUsd().as('cost_usd'),
+        rn: sql<number>`row_number() over (partition by ${t.agentRuns.agentId} order by ${t.agentRuns.ranAt} desc, ${t.agentRuns.id} desc)`.as(
+          'rn',
+        ),
+      })
+      .from(t.agentRuns)
+      .leftJoin(t.runTraces, eq(t.runTraces.runId, t.agentRuns.id))
+      .where(
+        and(
+          eq(t.agentRuns.workspaceId, workspaceId),
+          eq(t.agentRuns.status, 'done'),
+          eq(t.agentRuns.source, 'local'),
+          isNotNull(t.agentRuns.agentId),
+        ),
+      )
+      .as('recent_runs');
+    return this.db
+      .select({ agentId: t.agents.id, rn: recent.rn, durationMs: recent.durationMs, costUsd: recent.costUsd })
+      .from(t.agents)
+      .leftJoin(recent, and(eq(recent.agentId, t.agents.id), lte(recent.rn, ESTIMATE_WINDOW)))
+      .where(eq(t.agents.workspaceId, workspaceId))
+      .orderBy(asc(t.agents.name), asc(t.agents.id), asc(recent.rn));
+  }
+
+  async estimateRows(workspaceId: string): Promise<EstimateRunRow[]> {
+    const rows = await this.estimateRowsQuery(workspaceId);
+    // postgres-js may return bigint/numeric as strings; keep null ≠ 0.
+    return rows.map((r) => ({
+      agentId: r.agentId,
+      rn: r.rn == null ? null : Number(r.rn),
+      durationMs: r.durationMs == null ? null : Number(r.durationMs),
+      costUsd: toCostUsd(r.costUsd),
+    }));
   }
 }

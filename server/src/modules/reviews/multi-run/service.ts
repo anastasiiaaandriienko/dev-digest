@@ -1,11 +1,11 @@
 import type { Container } from '../../../platform/container.js';
-import type { AgentColumnFinding, MultiAgentRun } from '@devdigest/shared';
+import type { AgentColumnFinding, AgentEstimate, MultiAgentRun } from '@devdigest/shared';
 import { NotFoundError } from '../../../platform/errors.js';
 import type { FindingRow } from '../../../db/rows.js';
 import { ReviewRepository } from '../repository.js';
 import type { ReviewRow } from '../repository/review.repo.js';
 import { findingRowToDto } from '../helpers.js';
-import { MultiRunRepository } from './repository.js';
+import { ESTIMATE_WINDOW, MultiRunRepository, type EstimateRunRow } from './repository.js';
 import { buildMultiAgentRun, type ChildRunInput } from './helpers.js';
 
 /**
@@ -78,6 +78,52 @@ export class MultiRunService {
       ),
     };
   }
+
+  /** Time/cost estimate per workspace agent from its recent local runs (AC-MAR-19). */
+  estimates(workspaceId: string): Promise<AgentEstimate[]> {
+    return estimatesFor(this.multiRuns, workspaceId);
+  }
+}
+
+/**
+ * Per-agent estimates for the workspace (GET /multi-agent/estimates, AC-MAR-19).
+ * Workspace-scoped; one query, then the averages are computed in memory.
+ */
+export async function estimatesFor(
+  multiRuns: Pick<MultiRunRepository, 'estimateRows'>,
+  workspaceId: string,
+): Promise<AgentEstimate[]> {
+  return aggregateEstimates(await multiRuns.estimateRows(workspaceId));
+}
+
+/**
+ * Fold the estimate rows into one AgentEstimate per agent (first-seen order).
+ * Window: only rows with `rn` 1..ESTIMATE_WINDOW count (the query already
+ * limits this; re-checked here). `runs` = runs in the window;
+ * `avg_duration_ms` = mean of the known durations (rounded to whole ms);
+ * `avg_cost_usd` = mean of the known costs. A value nobody knows stays null —
+ * an estimate is never invented.
+ */
+export function aggregateEstimates(rows: readonly EstimateRunRow[]): AgentEstimate[] {
+  const byAgent = new Map<string, { runs: number; durations: number[]; costs: number[] }>();
+  for (const row of rows) {
+    const acc = byAgent.get(row.agentId) ?? { runs: 0, durations: [], costs: [] };
+    byAgent.set(row.agentId, acc);
+    if (row.rn == null || row.rn < 1 || row.rn > ESTIMATE_WINDOW) continue;
+    acc.runs++;
+    if (row.durationMs != null) acc.durations.push(row.durationMs);
+    if (row.costUsd != null) acc.costs.push(row.costUsd);
+  }
+  const mean = (xs: number[]) => (xs.length === 0 ? null : xs.reduce((a, b) => a + b, 0) / xs.length);
+  return [...byAgent].map(([agent_id, acc]) => {
+    const avgDuration = mean(acc.durations);
+    return {
+      agent_id,
+      runs: acc.runs,
+      avg_duration_ms: avgDuration == null ? null : Math.round(avgDuration),
+      avg_cost_usd: mean(acc.costs),
+    };
+  });
 }
 
 /** A persisted finding as an AgentColumnFinding (the FindingRecord fields it carries). */
