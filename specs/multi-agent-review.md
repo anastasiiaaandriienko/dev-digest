@@ -1,5 +1,5 @@
 # Spec: Multi-Agent Review (L07 lab, worktree A)
-- **Key:** MAR · **Status:** Draft v3 — all decisions applied, no open questions · **Date:** 2026-10-23 · **Packages:** server | client | contracts
+- **Key:** MAR · **Status:** Draft v4 — plan gaps closed, technical decisions A-T1…A-T6 recorded · **Date:** 2026-10-23 · **Packages:** server | client | contracts
 - **Source request:** L07 lab "Multi-Agent Review + Export to CI via git worktree fan-out", worktree A. The user asked for it through the main agent. The instructor asked to keep it simple. User decisions applied on 2026-10-23 (§14).
 
 ## 1. Goals
@@ -40,9 +40,9 @@
 - **Traces.** Traces carry `source: 'local'` (`run-executor.ts:422,698`) and `RunStats {duration_ms, tokens_in, tokens_out, findings, grounding, cost_usd}` (`server/src/vendor/shared/contracts/trace.ts:118-127`). Grounding drops are logged as `grounding dropped "<title>": <reason>` (`reviewer-core/src/review/run.ts:210`).
 - **Schema.**
   - `multi_agent_runs` has only `id, workspace_id, pr_id, ran_at` (`server/src/db/schema/runs.ts:41-50`).
-  - `agent_runs` has `agent_id` and `source ('local'|'ci')` but no link to a multi-run (`runs.ts:8-31`).
-  - No module uses `multi_agent_runs` (only `server/src/db/schema.ts:41,88`).
-  - The latest migration is `0015_quick_red_wolf.sql`. The link column comes from migration 0016 (S.2), created in the pre-fan-out prep commit (S.1), not by worktree A.
+  - `agent_runs` has `agent_id`, `source ('local'|'ci')` and, since migration 0016, `multi_agent_run_id` (`server/src/db/schema/runs.ts:33-38`).
+  - No module uses `multi_agent_runs` yet (only `server/src/db/schema.ts:41,88`).
+  - Migration `0016_l07_multi_agent_ci.sql` (S.2) already exists: it was created in the pre-fan-out prep commit 5eee208 (S.1) and is applied to worktree A's isolated database `devdigest_multi_agent`. Worktree A does not create or change any migration.
 - **Existing contracts.**
   - `AgentColumn`, `AgentColumnFinding`, `Conflict`, `ConflictTake` and `MultiAgentRun` already exist and are identical in both copies (`{server,client}/src/vendor/shared/contracts/observability.ts:23-86`).
   - Their comments name endpoints that do not exist.
@@ -86,7 +86,7 @@
     - New `MultiAgentStartResponse = ReviewRunResponse.extend({multi_agent_run_id: string | null})`. This keeps `review-api.ts` untouched.
     - `AgentColumn.status` gains `cancelled`, and the column gains `error`.
     - `AgentColumnFinding` gains `end_line, rationale, suggestion, confidence, review_id, accepted_at, dismissed_at, eval_case_id`.
-    - New `FindingGroup {file, start_line, end_line, title, members[{finding_id, run_id, agent_id, agent_name, severity, title}]}`.
+    - New `FindingGroup {file, start_line, end_line, title, members[{finding_id, run_id, agent_id, agent_name, severity, title}], takes: ConflictTake[]}`. `takes` holds one take per column, computed with the same rule as for `Conflict` (AC-MAR-16), so the client never re-implements it.
     - `Conflict` gains `start_line`/`end_line`.
     - `ConflictTake.verdict` gains `no_result`; `ignored` means "did not flag".
     - `MultiAgentRun` gains `groups[]`, `wall_clock_ms`, `cost_partial`.
@@ -189,7 +189,7 @@
 | AC-MAR-13 | The grouping helper shall place findings with different files or non-overlapping ranges in different groups. | unit |
 | AC-MAR-14 | The grouping helper shall include every input finding exactly once, keep `finding_id, run_id, agent_id, agent_name`, and never write to `findings`/`reviews`. | unit |
 | AC-MAR-15 | The server shall mark a group as a conflict when at least one `done` agent flagged it and another `done` agent did not, or when the flagging agents' highest severities differ. | unit |
-| AC-MAR-16 | For each listed group, the server shall return one take per column: the highest severity + finding title if flagged, `ignored` if `done` and not flagged, `no_result` if failed/cancelled/running. | unit |
+| AC-MAR-16 | For every group in `groups` (conflict or not) and every `Conflict`, the server shall return `takes` with exactly one take per column: the highest severity + finding title if flagged, `ignored` if `done` and not flagged, `no_result` if failed/cancelled/running. | unit |
 | AC-MAR-17 | The server shall report `total_cost_usd` as the sum of known child costs, `cost_partial=true` when any `done` child cost is unknown, and null when none is known. | unit |
 | AC-MAR-18 | The server shall report `wall_clock_ms` = max(ran_at+duration) − min(ran_at) over terminal children, and `total_duration_ms` = the sum of child durations. | unit |
 | AC-MAR-19 | When `GET /multi-agent/estimates` is called, the server shall return, for each workspace agent, the average duration and average known cost over its last 10 `done` runs with `source='local'` (CI runs are excluded), or nulls when there are none. | integration (approval) |
@@ -215,10 +215,10 @@
 | AC-MAR-39 | When the user clicks "Turn into eval case", the client shall open the existing `AddToEvalModal` under its existing preconditions. | unit |
 | AC-MAR-40 | The Results page shall render "Learn" as a disabled button with the tooltip "Learning from findings is not available yet", and shall send no request when it is clicked. | unit |
 | AC-MAR-41 | The Results page shall not render a "Reply to author" action. | unit |
-| AC-MAR-42 | The disagree block shall render each listed group as `file:line` + title followed by one cell per agent: severity + finding title, "did not flag" with no reason text, or "no result". | unit |
+| AC-MAR-42 | The disagree block shall render each listed group — a conflict, or (toggle OFF) a non-conflict group flagged by ≥2 agents — as `file:line` + title followed by one cell per agent taken from that group's server-side `takes`: severity + finding title, "did not flag" with no reason text, or "no result". | unit |
 | AC-MAR-43 | While "Show only conflicts" is on (the default), the block shall list only conflicts; while it is off, it shall list every group flagged by ≥2 agents plus every conflict. | unit |
 | AC-MAR-44 | While any child run is not terminal, the disagree block shall state that it is computed over finished agents only. | unit |
-| AC-MAR-45 | When the Results page is (re)loaded, the client shall show the latest multi-run and subscribe to SSE only for its non-terminal runs. | e2e (approval) |
+| AC-MAR-45 | When the Results page is (re)loaded, the client shall show the latest multi-run and subscribe to SSE only for its non-terminal runs. | unit (RTL: reload with mixed statuses → `useRunEvents` only for non-terminal ids) + manual reload check; no e2e, the seed is not changed |
 | AC-MAR-46 | If the PR has no multi-run, then the Results page shall show an empty state with "Start new review". | unit |
 | AC-MAR-47 | When the user clicks "Start new review" or "Configure run", the client shall open Configure run with `?pr=` set to the current PR. | unit |
 | AC-MAR-48 | The sidebar shall contain a GLOBAL section, created by A in `nav.ts`, holding a "Multi-Agent Review" item that opens `/repos/:repoId/multi-agent` and is active on `/multi-agent` routes. B later adds "CI Runs" to that section (S.4). | unit |
@@ -249,7 +249,7 @@
   - Picker (21-27), Configure (28-31).
   - Results header / columns / tabs / actions incl. Learn disabled and no Reply (32-44, 46-47, 49, 50, 58).
   - Sidebar GLOBAL item (48).
-- S7 e2e (approval), seeded hermetic stack: reload a Results page with a seeded multi-run (45).
+- S7 Reload restore (45): an RTL test renders the Results page with a mocked multi-run whose columns are mixed (`done`, `failed`, `running`, `running`) and asserts `useRunEvents` is subscribed only for the two running ids; plus a manual check (reload the Results page while agents run). No e2e flow and no `server/src/db/seed.ts` change (the seed belongs to neither worktree, S.4; `e2e/CLAUDE.md` forbids editing it to make a flow pass).
 - S8 CI-run delete guard (integration, `*.it.test.ts`, throwaway Testcontainers DB): seed a `source='ci'` run with a trace, a review and a linked `ci_runs` row → `DELETE /runs/:id` returns 409 `ci_run_not_deletable`, and all four rows still exist with identical contents; seed a `source='local'` run → `DELETE /runs/:id` returns 200 `{ ok: true }` and its run, trace and reviews are gone (59). A unit test on `ReviewService.deleteRun` with a mocked repository asserts the repository delete is never called for a CI run (59).
 - S-M Measurement (manual, paid, explicit approval; use the test agent and an open PR with a real diff):
   - Runs: run 1 agent, then the same agent + 2 more, on the same PR and head SHA.
@@ -257,7 +257,7 @@
 
 ## 14. Decisions and accepted assumptions
 Decisions (user, 2026-10-23):
-- **Q1:** one shared migration 0016 before the fan-out, schema exactly as S.2. It is created in the prep commit S.1, not by A, and is NOT created yet: it needs a separate approval at prep time.
+- **Q1:** one shared migration 0016 before the fan-out, schema exactly as S.2. It was created in the prep commit S.1 (5eee208), not by A, and is applied to A's isolated database `devdigest_multi_agent`.
 - **Q2:** "Learn" is a disabled button with a tooltip; no backend (AC-MAR-40).
 - **Q3:** attribution per S.3. A keeps `agent_id`/`source`, and A's views tolerate NULL-link and CI rows (AC-MAR-55, 56).
 - **Nav:** A creates the GLOBAL sidebar section with "Multi-Agent Review"; B later adds "CI Runs" (AC-MAR-48).
@@ -280,6 +280,14 @@ Accepted assumptions (user, 2026-10-23):
 - **A6:** a deleted child run removes its column (AC-MAR-57).
 - **A7:** more than 4 columns scroll horizontally (AC-MAR-58).
 
+Technical decisions (user, 2026-10-23; from the development plan — implementation detail only, no functional change):
+- **A-T1 Column order:** the parent and all child `agent_runs` are inserted in ONE transaction, and each child gets an explicit `ran_at = t0 + i ms` (i = position in the de-duplicated `agentIds`). Postgres `now()` is the transaction start time, so `defaultNow()` would give every child the same `ran_at`. Resolves R2; verified by AC-MAR-53.
+- **A-T2 Malformed ids:** an id in `agentIds` that is not a uuid is answered with 404 (as an unknown agent, AC-MAR-02) without a DB query, so Postgres never sees a malformed uuid (no 500).
+- **A-T3 SSE budget:** the Results page keeps at most `MAX_LIVE_STREAMS = 4` EventSources — the first ≤4 non-terminal columns in column order (HTTP/1.1 allows 6 connections per origin). Because the executor starts jobs in list order with a cap of 4, these are exactly the agents in flight; other non-terminal columns refresh via a 4 s poll (AC-MAR-34, 45).
+- **A-T4 PR-page picker:** the checkbox picker replaces the old "Run all enabled agents" / single-agent menu items in `RunReviewDropdown`. The server keeps `{agentId}` / `{all:true}` (AC-MAR-04); the MCP server uses `{agentId}` and ignores the extra `multi_agent_run_id` field.
+- **A-T5 Agent icon/colour:** the `Agent` contract has no icon or colour, so cards use the `Cpu` icon and a colour from a fixed palette indexed by a hash of the agent id (AC-MAR-29). Resolves the icon/colour part of R4.
+- **A-T6 Finding actions:** Tabs mode reuses `FindingCard` (Accept/Dismiss, Turn into eval case — `AddToEvalModal` requires a decided finding); the disabled "Learn" button (AC-MAR-40) is added through a new optional `extraActions` slot on `FindingCard`.
+
 ## 15. Open questions and risks
 No open questions.
 
@@ -290,15 +298,15 @@ Decision (user, 2026-10-23):
 - CI-run deletion → option A: keep `ON DELETE CASCADE` on `ci_runs.agent_run_id` (migration 0016 unchanged) and reject `DELETE /runs/:id` for `source='ci'` runs with 409 in worktree A (AC-MAR-59).
 
 Risks (planning/verification, not user questions):
-- R1 `runOneAgent` narrows the shared `RunLogger` per run. Its safety under concurrent agents is unverified; check before implementing AC-MAR-05.
-- R2 Column order depends on `ran_at` from separate inserts. If timestamps tie, the run-id tie-break doesn't preserve selection order; the plan should insert children sequentially and verify.
+- R1 `runOneAgent` narrows the shared `RunLogger` per run. Checked in planning: `forRun` creates a new single-run logger (`server/src/platform/run-logger.ts:45-47`) and the RunBus keeps a buffer and sequence per run; the implementation must still assert per-run trace logs under concurrency (AC-MAR-05, 08).
+- R2 Column order: resolved by A-T1 (explicit `ran_at` in one transaction); verified by AC-MAR-53.
 - R3 The concurrency cap also changes `all:true` timing.
-- R4 Unverified: `AddToEvalModal` preconditions, whether `usePulls` (`client/src/lib/hooks/core.ts:100`) has the fields the PR select needs, the shared barrel `index.ts` exports, and the source of the agent icon/colour.
+- R4 Icon/colour resolved by A-T5 and `AddToEvalModal` preconditions by A-T6. Still to confirm during implementation: whether `usePulls` (`client/src/lib/hooks/core.ts:100`) has the fields the PR select needs.
 
 ## 16. Approvals required
-- Migration 0016 (S.2), created in the pre-fan-out prep commit (S.1), not by worktree A. `pnpm db:generate`/`db:migrate` need separate approval at prep time.
+- Migration 0016 (S.2): already created in the prep commit 5eee208 (S.1) and applied to `devdigest_multi_agent`; no further migration approval is needed for A (A never runs `db:generate`).
 - Contract changes in both vendored copies (`platform.ts`, `observability.ts`).
-- Integration tests (Docker) and e2e need a running stack.
+- Integration tests need Docker (Testcontainers). AC-MAR-45 has no e2e flow (S7).
 - The S-M measurement makes paid LLM calls.
 
 ## 17. Measurement record (appendix, Q12) — to be filled after S-M
@@ -326,7 +334,7 @@ One commit, made only after explicit user approval, containing exactly:
 3. Both specs.
 Neither worktree creates or edits a migration. A worktree that needs another schema change stops and asks.
 
-### S.2 Migration 0016 — exact schema delta (described, NOT yet created)
+### S.2 Migration 0016 — exact schema delta (created as `0016_l07_multi_agent_ci.sql` in prep commit 5eee208)
 `agent_runs` (`server/src/db/schema/runs.ts`):
 - `multi_agent_run_id uuid NULL` → FK `multi_agent_runs.id` ON DELETE SET NULL; index `agent_runs_multi_agent_run_id_idx`. Set by A for runs started with `agentIds`; NULL for single/`all` runs and for CI runs.
 - (no other new columns; CI runs use the existing `source` = `'ci'`, `agent_id`, `status`, `findings_count`, `score`, `blockers`, `duration_ms`, `model`, `provider`; `pr_id` stays NULL when the PR is not imported into the studio.)
@@ -381,7 +389,7 @@ Neither worktree creates or edits a migration. A worktree that needs another sch
 | Step 1 "Pull request" select | 2, 3 | 30 | Covered | |
 | Step 2 empty "Pick a pull request first" | 2 | 28 | Covered | |
 | CTA disabled with no PR | 2 | 28 | Covered | "(4)" in the mockup is demo data |
-| Agent cards: icon, name, description, colored border, checkbox | 3 | 29 | Covered | icon/colour source: R4 |
+| Agent cards: icon, name, description, colored border, checkbox | 3 | 29 | Covered | icon `Cpu`, colour from agent-id hash (A-T5) |
 | Per-agent "≈ time · $cost" | 3 | 19, 20 | Covered | last 10 runs |
 | "Select all" | 3 | 29 | Covered | |
 | CTA + "≈ 8.2s · $0.20 · parallel fan-out" | 3 | 20 | Covered | max/sum matches the mockup numbers |
