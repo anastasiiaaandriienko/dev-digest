@@ -8,11 +8,13 @@ import { NotFoundError } from '../../platform/errors.js';
 import { ReviewService } from './service.js';
 import { IntentService } from './intent/service.js';
 import { normalizeAgentIds } from './multi-run/helpers.js';
+import { MultiRunService } from './multi-run/service.js';
 
 /**
  * reviews module.
  *   POST   /pulls/:id/review  {agentId} | {all:true} | {agentIds}
  *                                                      → run review(s); returns runs (+ multi_agent_run_id)
+ *   GET    /pulls/:id/multi-agent                      → latest multi-run (columns, groups, conflicts, totals) or null
  *   GET    /runs/:id/events                            → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                             → the single-document RunTrace
  *   GET    /pulls/:id/reviews                          → persisted reviews + findings for a PR
@@ -27,6 +29,7 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
   const { container } = app;
   const service = new ReviewService(container);
   const intentService = new IntentService(container);
+  const multiRunService = new MultiRunService(container);
 
   // ---- Run a review (manual trigger) -------------------------------
   // Tight per-route limit: each call can fan out to expensive LLM runs.
@@ -107,6 +110,12 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
         }
       })(),
     );
+  });
+
+  // ---- Latest multi-agent run of a PR (L07; read-only, computed on read) ----
+  app.get('/pulls/:id/multi-agent', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return multiRunService.read(workspaceId, req.params.id);
   });
 
   // ---- Active (in-flight) runs for a PR (server source of truth) ----------
