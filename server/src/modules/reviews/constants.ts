@@ -12,6 +12,13 @@
 export const REVIEW_STRATEGY = 'single-pass' as const;
 
 /**
+ * Max agent runs of ONE review request executing at the same time (L07,
+ * AC-MAR-05). Applies to every request — `agentIds`, `all:true` and a single
+ * `agentId` alike; the rest wait in input order for a free slot.
+ */
+export const REVIEW_CONCURRENCY = 4;
+
+/**
  * Server-side bound (`SET LOCAL lock_timeout` + `statement_timeout`) for each
  * terminal-state write/read made after a run fails — e.g. the probe after an
  * ambiguous commit, which could otherwise wait on a lock held by a transaction
