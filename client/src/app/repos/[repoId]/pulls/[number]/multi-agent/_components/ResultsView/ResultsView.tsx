@@ -4,7 +4,8 @@
    opens RunTraceDrawer via ?trace=, and streams at most MAX_LIVE_STREAMS
    running runs over SSE (the drawer's own stream counts against that). A
    reload just re-reads the latest multi-run and re-subscribes to its
-   non-terminal runs (AC-MAR-45). The disagree block is added in T11. */
+   non-terminal runs (AC-MAR-45). Below either mode: "Where agents disagree"
+   (T11, AC-MAR-42..44). */
 "use client";
 
 import React from "react";
@@ -21,6 +22,7 @@ import { MAX_LIVE_STREAMS, configureRunHref, multiAgentResultsHref } from "@/lib
 import { ResultsHeader } from "../ResultsHeader";
 import { ColumnsView } from "../ColumnsView";
 import { TabsView } from "../TabsView";
+import { DisagreeBlock } from "../DisagreeBlock";
 import { parseView, toFindingRecord, type ResultsViewMode } from "./helpers";
 import { s } from "./styles";
 
@@ -134,6 +136,7 @@ export function ResultsView({ repoId, prNumber }: { repoId: string; prNumber: nu
             onViewTrace={(runId) => setParam("trace", runId)}
           />
         )}
+        <DisagreeBlock run={run} columns={run.columns} />
       </div>
       {traceColumn && (
         <RunTraceDrawer

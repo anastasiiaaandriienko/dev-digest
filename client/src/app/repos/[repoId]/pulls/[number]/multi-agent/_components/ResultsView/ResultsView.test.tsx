@@ -324,3 +324,31 @@ describe("ResultsView — Tabs (AC-MAR-37..41)", () => {
     expect(screen.getByRole("button", { name: /Turn into eval case/i })).toBeInTheDocument();
   });
 });
+
+describe("ResultsView — Where agents disagree (T11)", () => {
+  it("renders the block under either mode from the server conflicts", () => {
+    multiQ.data!.multi_run = multiRun([column(1), column(2)], {
+      conflicts: [
+        {
+          file: "src/rate.ts",
+          line: 28,
+          start_line: 28,
+          end_line: 28,
+          title: "Magic number 3600",
+          takes: [
+            { agent_id: "agent-1", persona: "Agent 1", verdict: "SUGGESTION", note: "Extract it" },
+            { agent_id: "agent-2", persona: "Agent 2", verdict: "ignored", note: "" },
+          ],
+        },
+      ],
+    });
+    renderPage();
+    const block = screen.getByTestId("disagree-block");
+    expect(within(block).getByText("Magic number 3600")).toBeInTheDocument();
+    expect(within(block).getByText("did not flag")).toBeInTheDocument();
+    cleanup();
+    search = new URLSearchParams("view=tabs");
+    renderPage();
+    expect(screen.getByTestId("disagree-block")).toBeInTheDocument();
+  });
+});
