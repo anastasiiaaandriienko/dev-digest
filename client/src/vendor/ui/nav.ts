@@ -39,12 +39,13 @@ export const NAV: NavGroup[] = [
     ],
   },
   {
-    // L07: cross-feature pages. Multi-Agent Review (worktree A); "CI Runs" is
-    // added here by the Export to CI work (worktree B), not by A.
+    // L07: cross-feature pages — Multi-Agent Review and the CI Runs history.
     section: "GLOBAL",
     items: [
       // Repo-scoped: Configure run lists the active repo's PRs.
       { key: "multi-agent", label: "Multi-Agent Review", icon: "Users", href: "/repos/:repoId/multi-agent" },
+      // Workspace-wide: runs ingested from exported GitHub Actions workflows.
+      { key: "ci-runs", label: "CI Runs", icon: "Workflow", href: "/ci-runs" },
     ],
   },
 ];

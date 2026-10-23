@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { NAV, SHORTCUTS } from "./nav";
+import { NAV, SHORTCUTS, resolveHref } from "./nav";
 
 /**
  * HW2 #6, #44 — sidebar groups: the repo pages (Pull Requests, Project Context) live in
@@ -31,11 +31,19 @@ describe("NAV", () => {
     expect(section("SKILLS LAB")!.items[1]).toMatchObject({ href: "/agents", gKey: "a" });
   });
 
-  it("L07 AC-MAR-48: a GLOBAL section after SKILLS LAB holds Multi-Agent Review (CI Runs is added by worktree B)", () => {
+  it("L07 AC-MAR-48 / export-to-ci §6.3: a GLOBAL section after SKILLS LAB holds Multi-Agent Review, then CI Runs", () => {
     expect(NAV.map((g) => g.section)).toEqual(["WORKSPACE", "SKILLS LAB", "GLOBAL"]);
     expect(section("GLOBAL")!.items).toEqual([
       { key: "multi-agent", label: "Multi-Agent Review", icon: "Users", href: "/repos/:repoId/multi-agent" },
+      { key: "ci-runs", label: "CI Runs", icon: "Workflow", href: "/ci-runs" },
     ]);
+  });
+
+  it("CI Runs is workspace-wide: its href does not depend on the active repo", () => {
+    const item = (key: string) => section("GLOBAL")!.items.find((i) => i.key === key)!;
+    expect(resolveHref(item("ci-runs").href, "r1")).toBe("/ci-runs");
+    expect(resolveHref(item("ci-runs").href, null)).toBe("/ci-runs");
+    expect(resolveHref(item("multi-agent").href, "r1")).toBe("/repos/r1/multi-agent");
   });
 
   it("has unique keys and g-shortcuts, each documented in SHORTCUTS", () => {
