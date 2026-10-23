@@ -41,6 +41,25 @@ export type UpsertInstallationResult =
   | { ok: false; reason: 'repo_has_agent'; occupiedBy: { agentId: string; agentName: string } }
   | { ok: false; reason: 'agent_not_found' };
 
+/** One row of the CI Runs list (GET /ci/runs). */
+export interface CiRunListRow {
+  id: string;
+  installationId: string | null;
+  prNumber: number | null;
+  ranAt: Date | null;
+  status: string | null;
+  findingsCount: number | null;
+  costUsd: number | null;
+  githubUrl: string | null;
+  source: string | null;
+  commitSha: string | null;
+  agentRunId: string | null;
+  repo: string | null;
+  agentName: string | null;
+  durationMs: number | null;
+  verdict: 'blocked' | 'passed' | 'failed';
+}
+
 /** A claimed automatic sync (TA4): both instants as Postgres text, for an exact compare-and-set. */
 export interface CiSyncClaim {
   installationId: string;
@@ -180,6 +199,81 @@ export class CiRepository {
   /** Every installation on `repo` in the workspace (wizard occupancy, AC-CI-05, 86). */
   listForRepo(workspaceId: string, repo: string): Promise<CiInstallationListRow[]> {
     return this.listWhere(and(eq(t.agents.workspaceId, workspaceId), eq(t.ciInstallations.repo, repo)));
+  }
+
+  /** The workspace's installations to sync — all of them, or one (B7). */
+  listForWorkspace(workspaceId: string, installationId?: string): Promise<CiInstallationListRow[]> {
+    return this.listWhere(
+      installationId
+        ? and(eq(t.agents.workspaceId, workspaceId), eq(t.ciInstallations.id, installationId))
+        : eq(t.agents.workspaceId, workspaceId),
+    );
+  }
+
+  /** The studio PR row for `owner/name#number` in the workspace, when it was imported (AC-CI-45). */
+  async findPullId(workspaceId: string, repoFullName: string, number: number): Promise<string | null> {
+    const [row] = await this.db
+      .select({ id: t.pullRequests.id })
+      .from(t.pullRequests)
+      .innerJoin(t.repos, eq(t.repos.id, t.pullRequests.repoId))
+      .where(
+        and(
+          eq(t.repos.workspaceId, workspaceId),
+          eq(t.repos.fullName, repoFullName),
+          eq(t.pullRequests.number, number),
+        ),
+      )
+      .limit(1);
+    return row?.id ?? null;
+  }
+
+  /**
+   * Ingested CI runs of the workspace, newest first (AC-CI-51, 82). Verdict
+   * (A7): no artifact → failed; the gate triggered (trace `ci.gate_triggered`,
+   * or blockers > 0 for an older artifact without it) → blocked; else passed.
+   */
+  async listRuns(
+    workspaceId: string,
+    opts: { agentId?: string; repo?: string; limit: number },
+  ): Promise<CiRunListRow[]> {
+    const gate = sql<string | null>`(${t.runTraces.trace} -> 'ci' ->> 'gate_triggered')`;
+    const rows = await this.db
+      .select({
+        id: t.ciRuns.id,
+        installationId: t.ciRuns.ciInstallationId,
+        prNumber: t.ciRuns.prNumber,
+        ranAt: t.ciRuns.ranAt,
+        status: t.ciRuns.status,
+        findingsCount: t.ciRuns.findingsCount,
+        costUsd: t.ciRuns.costUsd,
+        githubUrl: t.ciRuns.githubUrl,
+        source: t.ciRuns.source,
+        commitSha: t.ciRuns.commitSha,
+        agentRunId: t.ciRuns.agentRunId,
+        repo: t.ciInstallations.repo,
+        agentName: t.agents.name,
+        durationMs: t.agentRuns.durationMs,
+        blockers: t.agentRuns.blockers,
+        gate,
+      })
+      .from(t.ciRuns)
+      .innerJoin(t.agentRuns, eq(t.agentRuns.id, t.ciRuns.agentRunId))
+      .leftJoin(t.runTraces, eq(t.runTraces.runId, t.agentRuns.id))
+      .leftJoin(t.ciInstallations, eq(t.ciInstallations.id, t.ciRuns.ciInstallationId))
+      .leftJoin(t.agents, eq(t.agents.id, t.agentRuns.agentId))
+      .where(
+        and(
+          eq(t.agentRuns.workspaceId, workspaceId),
+          opts.agentId ? eq(t.agentRuns.agentId, opts.agentId) : undefined,
+          opts.repo ? eq(t.ciInstallations.repo, opts.repo) : undefined,
+        ),
+      )
+      .orderBy(sql`${t.ciRuns.ranAt} desc nulls last`, desc(t.ciRuns.id))
+      .limit(opts.limit);
+    return rows.map(({ gate: g, blockers, ...r }) => ({
+      ...r,
+      verdict: r.status === 'failed' ? 'failed' : g === 'true' || (g === null && (blockers ?? 0) > 0) ? 'blocked' : 'passed',
+    }));
   }
 
   private async listWhere(where: ReturnType<typeof and>): Promise<CiInstallationListRow[]> {

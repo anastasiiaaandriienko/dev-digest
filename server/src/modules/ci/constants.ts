@@ -31,6 +31,19 @@ export const PR_TITLE = 'Add DevDigest CI review';
 /** Preview / export / zip each read GitHub; export also writes to it. */
 export const CI_EXPORT_RATE_LIMIT = { max: 10, timeWindow: '1 minute' } as const;
 
+// ---- CI ingest & sync (B7, §7) ----
+
+/** Newest completed runs read per installation per sync (AC-CI-40). */
+export const SYNC_RUNS_PER_INSTALLATION = 20;
+/** A manual sync of one installation at most once per this window (AC-CI-56). */
+export const MANUAL_SYNC_INTERVAL_MS = 60_000;
+/** The downloaded artifact zip and the unzipped result JSON are each capped at this size. */
+export const MAX_ARTIFACT_BYTES = 64 * 1024;
+/** GET /ci/runs returns at most this many rows (AC-CI-82). */
+export const CI_RUNS_LIST_LIMIT = 50;
+/** POST /ci/runs/sync reads GitHub for every due installation. */
+export const CI_SYNC_RATE_LIMIT = { max: 30, timeWindow: '1 minute' } as const;
+
 /** What the runner writes (cwd) and the workflow uploads (AC-CI-28). */
 export const RESULT_FILE = 'devdigest-result.json';
 export const RESULT_ARTIFACT = 'devdigest-result';
