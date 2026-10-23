@@ -17,6 +17,11 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  CommitIfUnchangedPayload,
+  CommitIfUnchangedResult,
+  RepoDirEntry,
+  WorkflowRunMeta,
+  WorkflowRunArtifact,
   GitClient,
   CloneOptions,
   UnifiedDiff,
@@ -33,6 +38,7 @@ import type {
   SecretKey,
 } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
+import { assertCommitPaths, GitHubAdapterError } from './github/octokit.js';
 
 /**
  * Deterministic MOCK adapters for tests/dev — NO real network. Each mirrors the
@@ -125,17 +131,76 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  // ---- Export to CI (L07) ----
+  /** Returned by getDefaultBranch (default "main"). */
+  defaultBranch?: string;
+  /** Branch heads: branch name → commit SHA (a missing key = no such branch). */
+  branches?: Record<string, string>;
+  /** Repository files per commit SHA: path → UTF-8 contents. */
+  trees?: Record<string, Record<string, string>>;
+  /** Returned by listWorkflowRuns as configured (sliced to perPage). */
+  workflowRuns?: WorkflowRunMeta[];
+  /** Run id → its artifacts. */
+  runArtifacts?: Record<number, WorkflowRunArtifact[]>;
+  /** Artifact id → zip bytes (a missing key → 404). */
+  artifactZips?: Record<number, Uint8Array>;
+  /** Make an L07 method reject with this HTTP status, e.g. `{ listWorkflowRuns: 401 }`. */
+  failWith?: Partial<Record<MockGitHubCiMethod, number>>;
+  /**
+   * Called inside commitFilesIfUnchanged right before the compare-and-swap:
+   * tests call `gh.moveBranch(...)` here to simulate a concurrent push.
+   */
+  beforeRefWrite?: (gh: MockGitHubClient) => void;
 }
+
+export type MockGitHubCiMethod =
+  | 'getDefaultBranch'
+  | 'getBranchHeadSha'
+  | 'listDirectory'
+  | 'readFile'
+  | 'commitFilesIfUnchanged'
+  | 'listWorkflowRuns'
+  | 'listRunArtifacts'
+  | 'downloadArtifact';
 
 export class MockGitHubClient implements GitHubClient {
   public posted: { n: number; review: GitHubReviewPayload }[] = [];
   public openedPrs: OpenPrPayload[] = [];
   public committed: CommitFilesPayload[] = [];
   public createdComments: CreateReviewCommentInput[] = [];
+  /** Every call, in order (method + arguments) — lets tests assert "no GitHub call". */
+  public calls: { method: string; args: unknown[] }[] = [];
+  /** Successful compare-and-swap commits. */
+  public casCommits: (CommitIfUnchangedPayload & { commitSha: string })[] = [];
+  /** Live branch heads and trees (seeded from the options, changed by commits). */
+  public branches: Record<string, string>;
+  public trees: Record<string, Record<string, string>>;
 
-  constructor(private opts: MockGitHubOptions = {}) {}
+  constructor(private opts: MockGitHubOptions = {}) {
+    this.branches = { ...(opts.branches ?? {}) };
+    this.trees = Object.fromEntries(
+      Object.entries(opts.trees ?? {}).map(([sha, files]) => [sha, { ...files }]),
+    );
+  }
+
+  /** Move (or with null, delete) a branch — e.g. a concurrent push. */
+  moveBranch(branch: string, sha: string | null): void {
+    if (sha === null) delete this.branches[branch];
+    else this.branches[branch] = sha;
+  }
+
+  private track(method: string, args: unknown[]): void {
+    this.calls.push({ method, args });
+  }
+
+  private trackCi(method: MockGitHubCiMethod, args: unknown[]): void {
+    this.track(method, args);
+    const status = this.opts.failWith?.[method];
+    if (status != null) throw new GitHubAdapterError(`mock GitHub ${method} failed: HTTP ${status}`, status);
+  }
 
   async listPullRequests(_repo: RepoRef): Promise<PrMeta[]> {
+    this.track('listPullRequests', [_repo]);
     return (
       this.opts.pulls ?? [
         {
@@ -157,6 +222,7 @@ export class MockGitHubClient implements GitHubClient {
   }
 
   async getPullRequest(_repo: RepoRef, n: number): Promise<PrDetail> {
+    this.track('getPullRequest', [_repo, n]);
     const base: PrDetail = {
       number: n,
       title: 'Add rate limiting to public API endpoints',
@@ -186,11 +252,13 @@ export class MockGitHubClient implements GitHubClient {
   }
 
   async postReview(_repo: RepoRef, n: number, review: GitHubReviewPayload): Promise<{ id: string }> {
+    this.track('postReview', [_repo, n, review]);
     this.posted.push({ n, review });
     return { id: `mock-review-${n}` };
   }
 
   async listReviewComments(_repo: RepoRef, _n: number): Promise<PrReviewComment[]> {
+    this.track('listReviewComments', [_repo, _n]);
     return this.opts.comments ?? [];
   }
 
@@ -199,6 +267,7 @@ export class MockGitHubClient implements GitHubClient {
     _n: number,
     input: CreateReviewCommentInput,
   ): Promise<PrReviewComment> {
+    this.track('createReviewComment', [_repo, _n, input]);
     this.createdComments.push(input);
     return {
       id: this.createdComments.length,
@@ -216,26 +285,116 @@ export class MockGitHubClient implements GitHubClient {
   }
 
   async openPullRequest(_repo: RepoRef, payload: OpenPrPayload): Promise<{ url: string }> {
+    this.track('openPullRequest', [_repo, payload]);
     this.openedPrs.push(payload);
     return { url: 'https://github.com/mock/mock/pull/1' };
   }
 
   async commitFiles(_repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }> {
+    this.track('commitFiles', [_repo, payload]);
     this.committed.push(payload);
     return { branch: payload.branch };
   }
 
   async findOpenPr(_repo: RepoRef, branch: string): Promise<{ url: string } | null> {
+    this.track('findOpenPr', [_repo, branch]);
     const pr = this.openedPrs.find((p) => p.head === branch);
     return pr ? { url: 'https://github.com/mock/mock/pull/1' } : null;
   }
 
   async getIssue(_repo: RepoRef, n: number): Promise<IssueMeta> {
+    this.track('getIssue', [_repo, n]);
     return { number: n, title: `Issue #${n}`, body: 'mock issue', state: 'open' };
   }
 
   async currentLogin(): Promise<string> {
+    this.track('currentLogin', []);
     return this.opts.login ?? 'mock-user';
+  }
+
+  // ---- Export to CI (L07): an in-memory repo of branches → commit trees ----
+
+  async getDefaultBranch(repo: RepoRef): Promise<string> {
+    this.trackCi('getDefaultBranch', [repo]);
+    return this.opts.defaultBranch ?? 'main';
+  }
+
+  async getBranchHeadSha(repo: RepoRef, branch: string): Promise<string | null> {
+    this.trackCi('getBranchHeadSha', [repo, branch]);
+    return this.branches[branch] ?? null;
+  }
+
+  async listDirectory(repo: RepoRef, path: string, sha: string): Promise<RepoDirEntry[]> {
+    this.trackCi('listDirectory', [repo, path, sha]);
+    const files = this.trees[sha] ?? {};
+    const dir = path.replace(/\/+$/, '');
+    if (dir in files) throw new GitHubAdapterError(`Not a directory: ${path}`, 422);
+    const entries = new Map<string, RepoDirEntry>();
+    for (const file of Object.keys(files)) {
+      if (!file.startsWith(`${dir}/`)) continue;
+      const [name, ...rest] = file.slice(dir.length + 1).split('/');
+      const type = rest.length > 0 ? 'dir' : 'file';
+      entries.set(name!, { name: name!, path: `${dir}/${name}`, type });
+    }
+    return [...entries.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async readFile(repo: RepoRef, path: string, sha: string): Promise<string | null> {
+    this.trackCi('readFile', [repo, path, sha]);
+    const files = this.trees[sha] ?? {};
+    if (path in files) return files[path]!;
+    if (Object.keys(files).some((f) => f.startsWith(`${path}/`))) {
+      throw new GitHubAdapterError(`Not a file: ${path}`, 422);
+    }
+    return null;
+  }
+
+  async commitFilesIfUnchanged(
+    repo: RepoRef,
+    payload: CommitIfUnchangedPayload,
+  ): Promise<CommitIfUnchangedResult> {
+    this.trackCi('commitFilesIfUnchanged', [repo, payload]);
+    assertCommitPaths(payload.files);
+    this.opts.beforeRefWrite?.(this);
+    const current = this.branches[payload.branch] ?? null;
+    if (current !== payload.expectedHeadSha) return { ok: false, reason: 'ref_changed' };
+    const parent = payload.expectedHeadSha ?? payload.baseSha;
+    const commitSha = `mock-commit-${this.casCommits.length + 1}`;
+    this.trees[commitSha] = {
+      ...(this.trees[parent] ?? {}),
+      ...Object.fromEntries(payload.files.map((f) => [f.path, f.contents])),
+    };
+    this.branches[payload.branch] = commitSha;
+    this.casCommits.push({ ...payload, commitSha });
+    return { ok: true, commitSha };
+  }
+
+  async listWorkflowRuns(
+    repo: RepoRef,
+    workflowFile: string,
+    opts: { perPage: number },
+  ): Promise<WorkflowRunMeta[]> {
+    this.trackCi('listWorkflowRuns', [repo, workflowFile, opts]);
+    return (this.opts.workflowRuns ?? []).slice(0, opts.perPage);
+  }
+
+  async listRunArtifacts(repo: RepoRef, runId: number): Promise<WorkflowRunArtifact[]> {
+    this.trackCi('listRunArtifacts', [repo, runId]);
+    return this.opts.runArtifacts?.[runId] ?? [];
+  }
+
+  async downloadArtifact(
+    repo: RepoRef,
+    artifactId: number,
+    opts: { maxBytes: number },
+  ): Promise<Uint8Array> {
+    this.trackCi('downloadArtifact', [repo, artifactId, opts]);
+    const bytes = this.opts.artifactZips?.[artifactId];
+    if (!bytes) throw new GitHubAdapterError(`mock GitHub artifact ${artifactId} not found`, 404);
+    if (bytes.byteLength > opts.maxBytes) {
+      throw new GitHubAdapterError(`Artifact larger than ${opts.maxBytes} bytes`, 413);
+    }
+    return bytes;
   }
 }
 

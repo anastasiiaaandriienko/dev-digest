@@ -11,10 +11,89 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  CommitFile,
+  CommitIfUnchangedPayload,
+  CommitIfUnchangedResult,
+  RepoDirEntry,
+  WorkflowRunMeta,
+  WorkflowRunArtifact,
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
 const TIMEOUT = 30_000;
+
+/**
+ * An adapter-raised failure with an HTTP-like `status` for the caller to map.
+ * Its message never carries a token or a signed artifact URL.
+ */
+export class GitHubAdapterError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'GitHubAdapterError';
+  }
+}
+
+const statusOf = (err: unknown): number | undefined => (err as { status?: number } | null)?.status;
+
+/**
+ * Commit paths must be plain repo-relative paths, each written once: no
+ * absolute paths, `.`/`..` segments, empty segments or backslashes.
+ */
+export function assertCommitPaths(files: readonly CommitFile[]): void {
+  const seen = new Set<string>();
+  for (const f of files) {
+    const p = f.path;
+    const segments = p.split('/');
+    if (!p || p.includes('\\') || segments.some((s) => s === '' || s === '.' || s === '..')) {
+      throw new GitHubAdapterError(`Unsafe commit path: ${JSON.stringify(p)}`, 422);
+    }
+    if (seen.has(p)) throw new GitHubAdapterError(`Duplicate commit path: ${p}`, 422);
+    seen.add(p);
+  }
+}
+
+/** Read a response body, refusing more than `max` bytes (zip-bomb / oversize guard). */
+async function readCapped(res: Response, max: number): Promise<Uint8Array> {
+  const tooLarge = () => new GitHubAdapterError(`Artifact larger than ${max} bytes`, 413);
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > max) throw tooLarge();
+  if (!res.body) {
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength > max) throw tooLarge();
+    return bytes;
+  }
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel();
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return out;
+}
+
+/** Test seams only: an injected `fetch`, the Octokit retry count, request throttling. */
+export interface OctokitClientOptions {
+  fetch?: typeof fetch;
+  retries?: number;
+  /** false disables Octokit's request throttling (it spaces writes ~1 s apart). */
+  throttle?: boolean;
+}
 
 function mapStatus(state: string, merged: boolean | undefined): PrStatus {
   if (merged) return 'merged';
@@ -28,9 +107,19 @@ function mapStatus(state: string, merged: boolean | undefined): PrStatus {
  */
 export class OctokitGitHubClient implements GitHubClient {
   private octokit: Octokit;
+  private fetchImpl: typeof fetch;
 
-  constructor(token: string) {
-    this.octokit = new Octokit({ auth: token });
+  constructor(token: string, opts: OctokitClientOptions = {}) {
+    const request = {
+      ...(opts.fetch ? { fetch: opts.fetch } : {}),
+      ...(opts.retries != null ? { retries: opts.retries } : {}),
+    };
+    this.octokit = new Octokit({
+      auth: token,
+      ...(Object.keys(request).length ? { request } : {}),
+      ...(opts.throttle === false ? { throttle: { enabled: false } } : {}),
+    });
+    this.fetchImpl = opts.fetch ?? fetch;
   }
 
   async listPullRequests(repo: RepoRef): Promise<PrMeta[]> {
@@ -342,6 +431,280 @@ export class OctokitGitHubClient implements GitHubClient {
           });
           const pr = res.data[0];
           return pr ? { url: pr.html_url } : null;
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  // ---- Export to CI (L07, specs/export-to-ci.md §6.1, §8) ------------------
+
+  async getDefaultBranch(repo: RepoRef): Promise<string> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const { data } = await this.octokit.rest.repos.get({ owner: repo.owner, repo: repo.name });
+          return data.default_branch;
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async getBranchHeadSha(repo: RepoRef, branch: string): Promise<string | null> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          try {
+            const { data } = await this.octokit.rest.git.getRef({
+              owner: repo.owner,
+              repo: repo.name,
+              ref: `heads/${branch}`,
+            });
+            // An exact ref is an object; a list would mean only prefix matches exist.
+            return Array.isArray(data) ? null : data.object.sha;
+          } catch (err) {
+            if (statusOf(err) === 404) return null;
+            throw err;
+          }
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async listDirectory(repo: RepoRef, path: string, sha: string): Promise<RepoDirEntry[]> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          try {
+            const { data } = await this.octokit.rest.repos.getContent({
+              owner: repo.owner,
+              repo: repo.name,
+              path,
+              ref: sha,
+            });
+            if (!Array.isArray(data)) throw new GitHubAdapterError(`Not a directory: ${path}`, 422);
+            return data.map((e) => ({ name: e.name, path: e.path, type: e.type as RepoDirEntry['type'] }));
+          } catch (err) {
+            if (statusOf(err) === 404) return [];
+            throw err;
+          }
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async readFile(repo: RepoRef, path: string, sha: string): Promise<string | null> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          let data: Awaited<ReturnType<Octokit['rest']['repos']['getContent']>>['data'];
+          try {
+            ({ data } = await this.octokit.rest.repos.getContent({
+              owner: repo.owner,
+              repo: repo.name,
+              path,
+              ref: sha,
+            }));
+          } catch (err) {
+            if (statusOf(err) === 404) return null;
+            throw err;
+          }
+          if (Array.isArray(data) || data.type !== 'file') {
+            throw new GitHubAdapterError(`Not a file: ${path}`, 422);
+          }
+          if (data.size === 0) return '';
+          if (data.encoding === 'base64' && data.content) {
+            return Buffer.from(data.content, 'base64').toString('utf8');
+          }
+          // Files over 1 MB come back without inline content: read the blob.
+          const blob = await this.octokit.rest.git.getBlob({
+            owner: repo.owner,
+            repo: repo.name,
+            file_sha: data.sha,
+          });
+          return Buffer.from(blob.data.content, 'base64').toString('utf8');
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async commitFilesIfUnchanged(
+    repo: RepoRef,
+    payload: CommitIfUnchangedPayload,
+  ): Promise<CommitIfUnchangedResult> {
+    assertCommitPaths(payload.files);
+    const owner = repo.owner;
+    const name = repo.name;
+    const g = this.octokit.rest.git;
+    const step = <T>(fn: () => Promise<T>) => withRetry(() => withTimeout(fn(), TIMEOUT));
+    const changed: CommitIfUnchangedResult = { ok: false, reason: 'ref_changed' };
+
+    // 1. Fail fast if the branch already moved since inspection.
+    const current = await this.getBranchHeadSha(repo, payload.branch);
+    if (current !== payload.expectedHeadSha) return changed;
+
+    // 2. Git objects (blobs → tree on the parent's tree → commit). Creating
+    //    them is idempotent and never touches a ref, so it may be retried.
+    const parentSha = payload.expectedHeadSha ?? payload.baseSha;
+    const parent = await step(() => g.getCommit({ owner, repo: name, commit_sha: parentSha }));
+    const blobShas: string[] = [];
+    for (const f of payload.files) {
+      const blob = await step(() =>
+        g.createBlob({ owner, repo: name, content: f.contents, encoding: 'utf-8' }),
+      );
+      blobShas.push(blob.data.sha);
+    }
+    const tree = await step(() =>
+      g.createTree({
+        owner,
+        repo: name,
+        base_tree: parent.data.tree.sha,
+        tree: payload.files.map((f, i) => ({
+          path: f.path,
+          mode: '100644' as const,
+          type: 'blob' as const,
+          sha: blobShas[i]!,
+        })),
+      }),
+    );
+    const commit = await step(() =>
+      g.createCommit({
+        owner,
+        repo: name,
+        message: payload.message,
+        tree: tree.data.sha,
+        parents: [parentSha],
+      }),
+    );
+    const commitSha = commit.data.sha;
+
+    // 3. Compare-and-swap on the ref: never force, never retried blindly.
+    //    GitHub refuses a non-fast-forward update (the branch moved) and an
+    //    existing ref on create — both mean someone else changed the branch.
+    try {
+      if (payload.expectedHeadSha) {
+        await withTimeout(
+          g.updateRef({ owner, repo: name, ref: `heads/${payload.branch}`, sha: commitSha, force: false }),
+          TIMEOUT,
+        );
+      } else {
+        await withTimeout(
+          g.createRef({ owner, repo: name, ref: `refs/heads/${payload.branch}`, sha: commitSha }),
+          TIMEOUT,
+        );
+      }
+    } catch (err) {
+      const status = statusOf(err);
+      if (status === 422 || status === 404) return changed;
+      // Unknown outcome (timeout, network, 5xx): the write may have landed.
+      const now = await this.getBranchHeadSha(repo, payload.branch).catch(() => undefined);
+      if (now === commitSha) return { ok: true, commitSha };
+      throw err;
+    }
+    return { ok: true, commitSha };
+  }
+
+  async listWorkflowRuns(
+    repo: RepoRef,
+    workflowFile: string,
+    opts: { perPage: number },
+  ): Promise<WorkflowRunMeta[]> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const { data } = await this.octokit.rest.actions.listWorkflowRuns({
+            owner: repo.owner,
+            repo: repo.name,
+            workflow_id: workflowFile,
+            status: 'completed',
+            per_page: Math.min(Math.max(opts.perPage, 1), 100),
+          });
+          return data.workflow_runs.map((r) => ({
+            id: r.id,
+            head_sha: r.head_sha,
+            repository_id: r.repository.id,
+            repository_full_name: r.repository.full_name,
+            head_repository_full_name: r.head_repository?.full_name ?? null,
+            path: r.path,
+            event: r.event,
+            status: r.status ?? null,
+            conclusion: r.conclusion ?? null,
+            html_url: r.html_url,
+            pull_request_numbers: (r.pull_requests ?? []).map((p) => p.number),
+            run_started_at: r.run_started_at ?? null,
+            updated_at: r.updated_at,
+          }));
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async listRunArtifacts(repo: RepoRef, runId: number): Promise<WorkflowRunArtifact[]> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const { data } = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+            owner: repo.owner,
+            repo: repo.name,
+            run_id: runId,
+            per_page: 100,
+          });
+          return data.artifacts.map((a) => ({
+            id: a.id,
+            name: a.name,
+            size_in_bytes: a.size_in_bytes,
+            expired: a.expired,
+          }));
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  /**
+   * GitHub answers with a 302 to a short-lived signed storage URL. The
+   * redirect is NOT followed by Octokit (`redirect: 'manual'`): the signed URL
+   * is fetched here without the Authorization header, so the token never
+   * leaves api.github.com, and errors never echo the signed URL.
+   */
+  async downloadArtifact(
+    repo: RepoRef,
+    artifactId: number,
+    opts: { maxBytes: number },
+  ): Promise<Uint8Array> {
+    const res = await withRetry(() =>
+      withTimeout(
+        this.octokit.rest.actions.downloadArtifact({
+          owner: repo.owner,
+          repo: repo.name,
+          artifact_id: artifactId,
+          archive_format: 'zip',
+          request: { redirect: 'manual' },
+        }),
+        TIMEOUT,
+      ),
+    );
+    const location = (res.headers as Record<string, string | undefined>).location;
+    if (!location) throw new GitHubAdapterError('Artifact download returned no redirect location', 502);
+
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          let blob: Response;
+          try {
+            blob = await this.fetchImpl(location, { redirect: 'follow' });
+          } catch {
+            throw new GitHubAdapterError('Artifact download failed: network error', 503);
+          }
+          if (!blob.ok) {
+            throw new GitHubAdapterError(`Artifact download failed: HTTP ${blob.status}`, blob.status);
+          }
+          return readCapped(blob, opts.maxBytes);
         })(),
         TIMEOUT,
       ),

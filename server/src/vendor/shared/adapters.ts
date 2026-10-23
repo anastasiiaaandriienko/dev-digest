@@ -140,6 +140,60 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+// ---------- Export to CI (L07, specs/export-to-ci.md §6.1, §8) ----------
+
+/** One entry of a repository directory listed at a fixed commit SHA. */
+export interface RepoDirEntry {
+  name: string;
+  /** Path from the repo root. */
+  path: string;
+  type: 'file' | 'dir' | 'symlink' | 'submodule';
+}
+
+/** Compare-and-swap commit: written only if `branch` is still where it was inspected. */
+export interface CommitIfUnchangedPayload {
+  branch: string;
+  /** Head SHA of `branch` seen at inspection; null = the branch must still not exist. */
+  expectedHeadSha: string | null;
+  /** Parent commit when the branch does not exist yet (the inspected base-branch head). */
+  baseSha: string;
+  message: string;
+  /** Exactly the files to add or overwrite; nothing else in the tree is touched or deleted. */
+  files: CommitFile[];
+}
+
+export type CommitIfUnchangedResult =
+  | { ok: true; commitSha: string }
+  /** The branch moved, was created or was deleted after inspection — nothing was written to it. */
+  | { ok: false; reason: 'ref_changed' };
+
+/** A GitHub Actions workflow run (only the fields the CI ingest reads). */
+export interface WorkflowRunMeta {
+  id: number;
+  head_sha: string;
+  /** Repository the run belongs to. */
+  repository_id: number;
+  repository_full_name: string;
+  /** Repository of the head commit (differs for fork PRs). */
+  head_repository_full_name: string | null;
+  /** Workflow file path, e.g. ".github/workflows/devdigest-review.yml". */
+  path: string;
+  event: string;
+  status: string | null;
+  conclusion: string | null;
+  html_url: string;
+  pull_request_numbers: number[];
+  run_started_at: string | null;
+  updated_at: string;
+}
+
+export interface WorkflowRunArtifact {
+  id: number;
+  name: string;
+  size_in_bytes: number;
+  expired: boolean;
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -161,6 +215,41 @@ export interface GitHubClient {
   commitFiles(repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }>;
   /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
   findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
+  // ---- Export to CI (L07). Errors other than the documented "missing" cases
+  // propagate with their HTTP `status` (401/403/404/409/422/429/5xx) for the
+  // caller to map; no message ever carries a token or a signed download URL.
+  /** The repository's default branch name. */
+  getDefaultBranch(repo: RepoRef): Promise<string>;
+  /** Head commit SHA of `branch`; null when the branch does not exist. */
+  getBranchHeadSha(repo: RepoRef, branch: string): Promise<string | null>;
+  /** Entries of directory `path` at commit `sha`; [] when it does not exist there. */
+  listDirectory(repo: RepoRef, path: string, sha: string): Promise<RepoDirEntry[]>;
+  /** UTF-8 text of file `path` at commit `sha`; null when it does not exist there. */
+  readFile(repo: RepoRef, path: string, sha: string): Promise<string | null>;
+  /**
+   * ONE commit of `files` on top of `expectedHeadSha` (or `baseSha` when the
+   * branch must not exist yet), then a non-force ref update / ref creation
+   * that succeeds only if the branch is still at `expectedHeadSha` (still
+   * absent). Never force-pushes; never deletes files.
+   */
+  commitFilesIfUnchanged(
+    repo: RepoRef,
+    payload: CommitIfUnchangedPayload,
+  ): Promise<CommitIfUnchangedResult>;
+  /** Newest completed runs of workflow file `workflowFile` (e.g. "devdigest-review.yml"). */
+  listWorkflowRuns(
+    repo: RepoRef,
+    workflowFile: string,
+    opts: { perPage: number },
+  ): Promise<WorkflowRunMeta[]>;
+  /** Artifacts of one workflow run. */
+  listRunArtifacts(repo: RepoRef, runId: number): Promise<WorkflowRunArtifact[]>;
+  /** The artifact's zip bytes; rejects when larger than `opts.maxBytes`. */
+  downloadArtifact(
+    repo: RepoRef,
+    artifactId: number,
+    opts: { maxBytes: number },
+  ): Promise<Uint8Array>;
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
