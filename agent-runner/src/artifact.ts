@@ -11,6 +11,16 @@ export interface BuildResultArtifactInput {
   durationMs: number;
   agent: string;
   prNumber: number;
+  /** Model id from the manifest (as sent to OpenRouter). */
+  model: string;
+  /** Manifest `version` (agent version at export); null when the manifest has none. */
+  manifestVersion: number | null;
+  /** Whether the deterministic `ci_fail_on` gate triggered (same value as the exit code). */
+  gateTriggered: boolean;
+  /** Grounded findings at or above `ci_fail_on`. */
+  blockers: number;
+  /** Manifest skill slugs, in manifest order. */
+  skills: readonly string[];
 }
 
 function severityCounts(findings: Finding[]): { critical: number; warning: number; suggestion: number } {
@@ -41,6 +51,13 @@ export function buildResultArtifact(input: BuildResultArtifactInput): CiResultAr
     agent: input.agent,
     version: RUNNER_VERSION,
     pr_number: input.prNumber,
+    // L07 (specs/export-to-ci.md AC-CI-81): read back by the studio's CI ingest.
+    // Only manifest values and computed results — never env values or tokens.
+    model: input.model,
+    manifest_version: input.manifestVersion,
+    gate_triggered: input.gateTriggered,
+    blockers: input.blockers,
+    skills: [...input.skills],
   };
   const result = CiResultArtifact.safeParse(candidate);
   if (!result.success) {

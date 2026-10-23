@@ -340,6 +340,79 @@ describe('runCi (T8 agent-runner orchestrator)', () => {
     expect(artifact.agent).toBe('Security Reviewer');
   });
 
+  it('AC-CI-81: the artifact carries model, manifest_version, gate_triggered, blockers and skills — the same gate as the exit code', async () => {
+    writeFileSync(
+      path.join(dir, 'agents', 'security-reviewer.yaml'),
+      VALID_MANIFEST_YAML.replace('skills: []', 'version: 3\nskills:\n  - secure-config\n  - no-todos'),
+    );
+    writeFileSync(path.join(dir, 'skills', 'secure-config.md'), 'Flag hardcoded credentials.');
+    writeFileSync(path.join(dir, 'skills', 'no-todos.md'), 'Flag new TODO comments.');
+    const stub = makeStubLlm(GROUNDED_PLUS_HALLUCINATED_REVIEW);
+    const result = await runCi(baseDeps({ llm: stub.llm, fetchDiff: async () => FIXTURE_DIFF_RAW }));
+
+    expect(result.error).toBeUndefined();
+    const onDisk = CiResultArtifactSchema.parse(JSON.parse(readFileSync(resultPath, 'utf8')));
+    expect(onDisk).toMatchObject({
+      model: 'deepseek/deepseek-v4-flash',
+      manifest_version: 3,
+      gate_triggered: true,
+      blockers: 1,
+      skills: ['secure-config', 'no-todos'],
+    });
+    // Unchanged gate / exit code: the artifact reports exactly what decided them.
+    expect(result.gateTriggered).toBe(true);
+    expect(result.blockers).toBe(1);
+    expect(result.exitCode).toBe(1);
+  });
+
+  it('AC-CI-81: a manifest without version or skills writes manifest_version null and skills []', async () => {
+    const stub = makeStubLlm(ALL_HALLUCINATED_REVIEW); // grounds to zero findings
+    const result = await runCi(baseDeps({ llm: stub.llm, fetchDiff: async () => FIXTURE_DIFF_RAW }));
+
+    expect(result.exitCode).toBe(0);
+    const onDisk = CiResultArtifactSchema.parse(JSON.parse(readFileSync(resultPath, 'utf8')));
+    expect(onDisk).toMatchObject({
+      findings_count: 0,
+      manifest_version: null,
+      gate_triggered: false,
+      blockers: 0,
+      skills: [],
+    });
+  });
+
+  it('the artifact holds no env or secret values — only its fixed set of keys', async () => {
+    const env = {
+      GITHUB_REPOSITORY: 'acme/widgets',
+      GITHUB_EVENT_PATH: path.join(dir, 'event.json'),
+      GITHUB_TOKEN: 'ghp_secret_token_value',
+      OPENROUTER_API_KEY: 'sk-or-secret-key-value',
+    };
+    const stub = makeStubLlm(GROUNDED_PLUS_HALLUCINATED_REVIEW);
+    await runCi(baseDeps({ llm: stub.llm, env, fetchDiff: async () => FIXTURE_DIFF_RAW }));
+
+    const raw = readFileSync(resultPath, 'utf8');
+    expect(raw).not.toContain('ghp_secret_token_value');
+    expect(raw).not.toContain('sk-or-secret-key-value');
+    expect(raw).not.toContain('acme/widgets');
+    expect(raw).not.toContain('event.json');
+    expect(Object.keys(JSON.parse(raw)).sort()).toEqual([
+      'agent',
+      'blockers',
+      'cost_usd',
+      'critical',
+      'duration_ms',
+      'findings_count',
+      'gate_triggered',
+      'manifest_version',
+      'model',
+      'pr_number',
+      'skills',
+      'suggestion',
+      'version',
+      'warning',
+    ]);
+  });
+
   it('Q5: an LLM/model-call error hard-fails — non-zero exit, error status, nothing posted, no artifact, no synthetic review', async () => {
     const stub = makeStubLlm('throw');
     const { fetchImpl, calls } = makeFetchRecorder();
