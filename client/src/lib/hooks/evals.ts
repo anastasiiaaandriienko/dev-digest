@@ -11,6 +11,7 @@ import type {
   AgentEvalRunDetail,
   CreateEvalCaseFromFinding,
   EvalRunComparison,
+  MultiAgentRun,
   ReviewRecord,
 } from "@devdigest/shared";
 
@@ -58,10 +59,36 @@ export function existingEvalCaseId(err: unknown): string | null {
   return typeof id === "string" ? id : null;
 }
 
+/** Set one finding's `eval_case_id` in a cached multi-agent run (pure; L07). */
+export function patchMultiAgentEvalCaseId(
+  state: { multi_run: MultiAgentRun | null } | undefined,
+  findingId: string,
+  evalCaseId: string,
+): { multi_run: MultiAgentRun | null } | undefined {
+  const run = state?.multi_run;
+  if (!run || !run.columns.some((c) => c.findings.some((f) => f.id === findingId))) return state;
+  return {
+    ...state,
+    multi_run: {
+      ...run,
+      columns: run.columns.map((c) =>
+        c.findings.some((f) => f.id === findingId)
+          ? { ...c, findings: c.findings.map((f) => (f.id === findingId ? { ...f, eval_case_id: evalCaseId } : f)) }
+          : c,
+      ),
+    },
+  };
+}
+
 function markFindingInEvalSet(qc: QueryClient, findingId: string, evalCaseId: string) {
   // Every PR's cached reviews list ("reviews", prId) — the card, accordion and inline
   // diff cards all read it, so "In eval set" shows at once without a reload.
   qc.setQueriesData<ReviewRecord[]>({ queryKey: ["reviews"] }, (old) => patchEvalCaseId(old, findingId, evalCaseId));
+  // L07: the Multi-Agent Review results read the same finding from ("multi-agent", prId).
+  // Patched in place (no refetch: the PR page header also holds that query).
+  qc.setQueriesData<{ multi_run: MultiAgentRun | null }>({ queryKey: ["multi-agent"] }, (old) =>
+    patchMultiAgentEvalCaseId(old, findingId, evalCaseId),
+  );
 }
 
 export interface CreateEvalCaseVars {
