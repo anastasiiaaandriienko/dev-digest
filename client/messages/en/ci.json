@@ -72,7 +72,21 @@
     "installCardTitle": "Open a PR with these files",
     "installCardBody": "DevDigest opens a PR in {repo} titled “Add DevDigest CI review” with the {count} generated files.",
     "ownerRepo": "owner/repo",
-    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs."
+    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs.",
+    "close": "Close",
+    "notAvailable": "Not available yet",
+    "noRepos": "Connect a repository to this workspace first.",
+    "repoLocked": "Updating the CI config of {repo}.",
+    "checkingRepo": "Checking who runs in this repository…",
+    "occupied": "{repo} already runs the agent “{agent}” in CI. One agent per repository for now.",
+    "occupiedCheckFailed": "Could not check this repository’s CI installations.",
+    "previewError": "Could not generate the files",
+    "retry": "Retry",
+    "readOnly": "read-only",
+    "truncated": "Showing the first {shown} of {total} characters.",
+    "workflowTooLarge": "The workflow is {bytes} bytes; the limit is {limit} bytes (64 KB).",
+    "nextStepsSoon": "Configure and Install are not available yet.",
+    "fileCount": "{count, plural, one {# file} other {# files}}"
   },
   "ciTab": {
     "heading": "CI deployment",

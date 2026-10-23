@@ -4,8 +4,8 @@
    "Update CI config" opening the export wizard, and "Fail CI on" saved through the
    existing agent update. Mounted only while active; opening it starts the silent
    automatic sync (the server skips installations synced in the last 10 minutes).
-   The wizard itself (B11–B12) is plugged in through `renderWizard`: until then the
-   buttons that open it are disabled with a note. */
+   The export wizard opens through `renderWizard` (default: ExportWizard); `null`
+   disables the buttons that open it, with a note. */
 "use client";
 
 import React from "react";
@@ -17,6 +17,7 @@ import { useCiAutoSync, useCiInstallations, useCiSync } from "@/lib/hooks/ci";
 import { notify } from "@/lib/toast";
 import type { UnsavedGuard } from "@/lib/unsaved-guard";
 import { CI_FAIL_ON_VALUES } from "../ConfigTab/constants";
+import { ExportWizard } from "./_components/ExportWizard";
 import { InstallationRow } from "./_components/InstallationRow";
 import { activeCount, type CiWizardRequest, type RenderCiWizard } from "./helpers";
 import { s } from "./styles";
@@ -29,8 +30,8 @@ export function CiTab({
   agent: Agent;
   /** The Config tab's unsaved-edits guard: saving "Fail CI on" bumps the agent version. */
   guardRef?: React.MutableRefObject<UnsavedGuard | null>;
-  /** The export wizard (B11–B12). Without it, the buttons that open it are disabled. */
-  renderWizard?: RenderCiWizard;
+  /** The export wizard; default ExportWizard. `null` disables the buttons that open it. */
+  renderWizard?: RenderCiWizard | null;
 }) {
   const t = useTranslations("ci");
   const ta = useTranslations("agents");
@@ -43,9 +44,13 @@ export function CiTab({
 
   const installations = installationsQ.data ?? [];
   const active = activeCount(installations);
-  const wizardDisabled = renderWizard ? undefined : t("ciTab.wizardSoon");
+  const render: RenderCiWizard | null =
+    renderWizard === undefined
+      ? (request, close) => <ExportWizard agent={agent} request={request} onClose={close} />
+      : renderWizard;
+  const wizardDisabled = render ? undefined : t("ciTab.wizardSoon");
   const open = (request: CiWizardRequest) => {
-    if (renderWizard) setWizard(request);
+    if (render) setWizard(request);
   };
 
   const syncOne = (installationId: string) => {
@@ -147,7 +152,7 @@ export function CiTab({
         <span style={s.hint}>{t("ciTab.failOn.hint")}</span>
       </div>
 
-      {wizard && renderWizard?.(wizard, () => setWizard(null))}
+      {wizard && render?.(wizard, () => setWizard(null))}
     </div>
   );
 }

@@ -78,11 +78,12 @@ function inst(over: Partial<CiInstallationView> = {}): CiInstallationView {
   };
 }
 
-function renderTab(props: { renderWizard?: RenderCiWizard; dirty?: boolean; agent?: Agent } = {}) {
+/** `renderWizard: null` = no wizard (buttons disabled); omitted = a stub, so tests never render the real one. */
+function renderTab(props: { renderWizard?: RenderCiWizard | null; dirty?: boolean; agent?: Agent } = {}) {
   const guardRef = { current: { dirty: props.dirty ?? false, save: async () => true } };
   return render(
     <NextIntlClientProvider locale="en" messages={{ ci: ciMessages, agents: agentMessages }} now={new Date("2026-10-24T12:00:00Z")}>
-      <CiTab agent={props.agent ?? AGENT} guardRef={guardRef} renderWizard={props.renderWizard} />
+      <CiTab agent={props.agent ?? AGENT} guardRef={guardRef} renderWizard={"renderWizard" in props ? props.renderWizard : () => null} />
     </NextIntlClientProvider>,
   );
 }
@@ -132,7 +133,7 @@ describe("CiTab — states", () => {
 
   it("not exported yet: empty state; its CTA opens the wizard once one is plugged in", () => {
     installations = { data: [] };
-    renderTab();
+    renderTab({ renderWizard: null });
     expect(screen.getByText("Not deployed to CI yet")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Add to CI/ })).toHaveLength(1); // header only, CTA hidden
     cleanup();
@@ -229,7 +230,7 @@ describe("CiTab — actions", () => {
 
   it("without a wizard, Update / Add buttons are disabled with a note", () => {
     installations = { data: [inst()] };
-    renderTab();
+    renderTab({ renderWizard: null });
     for (const name of ["Update CI config", "Add to CI", "Add repository"]) {
       const button = screen.getByRole("button", { name: new RegExp(name) });
       expect(button).toBeDisabled();
