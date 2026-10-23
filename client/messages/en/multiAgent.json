@@ -8,7 +8,8 @@
     "run": "Run multi-agent review ({count})",
     "configure": "Configure agents…",
     "noAgents": "No agents yet.",
-    "latestRun": "Multi-agent review"
+    "latestRun": "Multi-agent review",
+    "limit": "Up to {max} agents per run"
   },
   "configure": {
     "breadcrumb": "Configure run",

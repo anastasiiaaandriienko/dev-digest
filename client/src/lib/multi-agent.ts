@@ -5,6 +5,20 @@ import type { AgentColumn } from "@devdigest/shared";
 /** The Results page polls the multi-run this often while a column is running. */
 export const MULTI_AGENT_POLL_MS = 4000;
 
+/** Max distinct agents per multi-run — mirrors the server's MAX_AGENTS_PER_RUN (AC-MAR-03). */
+export const MAX_AGENTS_PER_RUN = 8;
+
+/** A PR's multi-agent Results page (spec §6, A1). */
+export function multiAgentResultsHref(repoId: string, prNumber: number): string {
+  return `/repos/${encodeURIComponent(repoId)}/pulls/${prNumber}/multi-agent`;
+}
+
+/** Configure run, preselecting a PR (AC-MAR-24, 47). */
+export function configureRunHref(repoId: string, prId?: string | null): string {
+  const base = `/repos/${encodeURIComponent(repoId)}/multi-agent`;
+  return prId ? `${base}?pr=${encodeURIComponent(prId)}` : base;
+}
+
 /**
  * At most this many live SSE streams per Results page (A-T3): HTTP/1.1 allows
  * 6 connections per origin, so 8 streams would starve every other request.

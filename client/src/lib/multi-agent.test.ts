@@ -5,14 +5,30 @@ import { NextIntlClientProvider, useTranslations } from "next-intl";
 import messages from "../../messages/en/multiAgent.json";
 import {
   AGENT_COLORS,
+  MAX_AGENTS_PER_RUN,
   MAX_LIVE_STREAMS,
   agentColor,
+  configureRunHref,
   hasRunningColumn,
   isTerminalStatus,
   liveRunIds,
+  multiAgentResultsHref,
 } from "./multi-agent";
 
 /** L07 T7 — pure Multi-Agent Review helpers and the multiAgent namespace. */
+
+describe("routes and limits (T8)", () => {
+  it("builds the Results and Configure run URLs (A1)", () => {
+    expect(multiAgentResultsHref("repo-1", 482)).toBe("/repos/repo-1/pulls/482/multi-agent");
+    expect(configureRunHref("repo-1", "pr-1")).toBe("/repos/repo-1/multi-agent?pr=pr-1");
+    expect(configureRunHref("repo-1")).toBe("/repos/repo-1/multi-agent");
+    expect(configureRunHref("repo 1", "a&b")).toBe("/repos/repo%201/multi-agent?pr=a%26b");
+  });
+
+  it("mirrors the server limit of 8 agents per run", () => {
+    expect(MAX_AGENTS_PER_RUN).toBe(8);
+  });
+});
 
 const col = (run_id: string, status: "done" | "failed" | "running" | "cancelled") => ({ run_id, status });
 
