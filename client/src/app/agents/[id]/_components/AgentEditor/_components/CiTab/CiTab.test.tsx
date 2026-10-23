@@ -29,6 +29,14 @@ vi.mock("@/lib/hooks/ci", () => ({
       opts?.onSettled?.();
     },
   }),
+  // The real export wizard (opened by default) only needs these to render its first step.
+  useRepoCiInstallations: () => ({ data: [], isSuccess: true, isLoading: false, isError: false }),
+  useCiPreview: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useExportCi: () => ({ mutate: vi.fn(), isPending: false }),
+  useExportCiZip: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("@/lib/repo-context", () => ({
+  useActiveRepo: () => ({ activeRepo: { full_name: "acme/active" }, repos: [{ full_name: "acme/active" }, { full_name: "acme/widgets" }] }),
 }));
 vi.mock("@/lib/hooks/agents", () => ({
   useUpdateAgent: () => ({
@@ -79,11 +87,11 @@ function inst(over: Partial<CiInstallationView> = {}): CiInstallationView {
 }
 
 /** `renderWizard: null` = no wizard (buttons disabled); omitted = a stub, so tests never render the real one. */
-function renderTab(props: { renderWizard?: RenderCiWizard | null; dirty?: boolean; agent?: Agent } = {}) {
+function renderTab(props: { renderWizard?: RenderCiWizard | null; dirty?: boolean; agent?: Agent; realWizard?: boolean } = {}) {
   const guardRef = { current: { dirty: props.dirty ?? false, save: async () => true } };
   return render(
     <NextIntlClientProvider locale="en" messages={{ ci: ciMessages, agents: agentMessages }} now={new Date("2026-10-24T12:00:00Z")}>
-      <CiTab agent={props.agent ?? AGENT} guardRef={guardRef} renderWizard={"renderWizard" in props ? props.renderWizard : () => null} />
+      <CiTab agent={props.agent ?? AGENT} guardRef={guardRef} {...(props.realWizard ? {} : { renderWizard: "renderWizard" in props ? props.renderWizard : () => null })} />
     </NextIntlClientProvider>,
   );
 }
@@ -272,6 +280,30 @@ describe("CiTab — actions", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Fail CI on" }), { target: { value: "any" } });
     expect(updateMutate).not.toHaveBeenCalled();
     expect(toasts).toEqual([{ kind: "info", msg: "Save or discard the Config tab changes first." }]);
+  });
+});
+
+describe("CiTab — the real export wizard (default)", () => {
+  it("Add to CI opens it in add mode on the active repo; Update CI config opens it for that installation's repo", () => {
+    installations = { data: [inst({ repo: "acme/widgets" })] };
+    renderTab({ realWizard: true });
+    fireEvent.click(screen.getByRole("button", { name: /Add to CI/ }));
+    let dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Export to CI")).toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: "Target repository" })).toHaveValue("acme/active");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Add repository/ }));
+    dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("combobox", { name: "Target repository" })).toHaveValue("acme/active");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update CI config" }));
+    dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByRole("combobox", { name: "Target repository" })).toBeNull();
+    expect(within(dialog).getByText("Updating the CI config of acme/widgets.")).toBeInTheDocument();
   });
 });
 

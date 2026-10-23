@@ -1,18 +1,24 @@
 /* ExportWizard — "Export to CI · Run <agent> automatically on pull requests" (L07,
-   specs/export-to-ci.md §6.3; AC-CI-01..08, 18, 63, 64, 83). Four steps shown by
-   ExportWizardSteps: Target and Preview here; Configure and Install follow (B12).
-   State lives in a reducer inside the modal: × / Esc / backdrop discard it, and nothing
-   is written before Install. The preview is generated when Preview opens and again
-   only when its inputs changed; workflow edits survive Back / Continue. */
+   specs/export-to-ci.md §6.3; AC-CI-01..19, 63, 64, 79, 83, 84). Four steps shown by
+   ExportWizardSteps: Target → Preview → Configure → Install. State lives in a reducer
+   inside the modal: × / Esc / backdrop discard it, and nothing is written before
+   Install. The preview is generated for the current repo + options (on Preview and
+   again on Install when they changed); a workflow edit survives Back / Continue and
+   Retry, and is dropped when the repo or an option changes (after a confirmation in
+   Configure). Install opens / updates the PR or downloads the zip — once per click. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Button, ExportWizardSteps, Modal } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
-import { useCiPreview, useRepoCiInstallations } from "@/lib/hooks/ci";
+import { ApiError } from "@/lib/api";
+import { useCiPreview, useExportCi, useExportCiZip, useRepoCiInstallations } from "@/lib/hooks/ci";
 import { useActiveRepo } from "@/lib/repo-context";
+import { notify } from "@/lib/toast";
 import type { CiWizardRequest } from "../../helpers";
+import { ConfigureStep } from "./_components/ConfigureStep";
+import { InstallStep, type InstallError, type InstallMethod } from "./_components/InstallStep";
 import { PreviewStep } from "./_components/PreviewStep";
 import { TargetStep } from "./_components/TargetStep";
 import { STEP_KEYS } from "./constants";
@@ -20,6 +26,7 @@ import {
   exportBody,
   initialState,
   occupyingInstallation,
+  optionsValid,
   previewKey,
   shownFiles,
   wizardReducer,
@@ -27,8 +34,13 @@ import {
 } from "./helpers";
 import { s } from "./styles";
 
-/** Steps the wizard can reach so far: Configure and Install arrive in B12. */
-const LAST_AVAILABLE_STEP = 1;
+/** Steps that need files generated for the current inputs: Preview and Install. */
+const NEEDS_FILES = new Set([1, 3]);
+
+function toInstallError(err: unknown): InstallError {
+  if (err instanceof ApiError) return { message: err.message, code: err.code };
+  return { message: err instanceof Error ? err.message : String(err) };
+}
 
 export function ExportWizard({
   agent,
@@ -75,8 +87,16 @@ export function ExportWizard({
     );
   }, [agent.id, generate, key, state]);
   React.useEffect(() => {
-    if (state.step === 1 && state.filesKey !== key && !generating && failedKey !== key) runPreview();
+    if (NEEDS_FILES.has(state.step) && state.filesKey !== key && !generating && failedKey !== key) runPreview();
   }, [state.step, state.filesKey, key, generating, failedKey, runPreview]);
+
+  // Install (AC-CI-14..17, 19): one request per click, errors stay on the step.
+  const exportPr = useExportCi();
+  const exportZip = useExportCiZip();
+  const [method, setMethod] = React.useState<InstallMethod>("pr");
+  const [installError, setInstallError] = React.useState<InstallError | null>(null);
+  const inFlight = React.useRef(false);
+  const installing = exportPr.isPending || exportZip.isPending;
 
   const failed = failedKey === key && preview.isError;
   const overLimit = workflowOverLimit(state);
@@ -86,8 +106,43 @@ export function ExportWizard({
       ? !!state.repo && state.target === "gha" && repoQ.isSuccess && !occupiedBy
       : state.step === 1
         ? previewReady && overLimit === null
-        : false;
-  const reachable = state.step < LAST_AVAILABLE_STEP;
+        : state.step === 2
+          ? optionsValid(state)
+          : previewReady && overLimit === null && optionsValid(state) && !installing;
+
+  const install = () => {
+    if (inFlight.current || !valid) return;
+    inFlight.current = true;
+    setInstallError(null);
+    const body = exportBody(state);
+    const settle = { onSettled: () => void (inFlight.current = false) };
+    const fail = (err: unknown) => setInstallError(toInstallError(err));
+    if (method === "pr") {
+      exportPr.mutate(
+        { agentId: agent.id, body },
+        {
+          ...settle,
+          onSuccess: (res) => {
+            notify.success(t("exportWizard.prOpened", { url: res.pr_url ?? "" }));
+            onClose();
+          },
+          onError: fail,
+        },
+      );
+    } else {
+      exportZip.mutate(
+        { agentId: agent.id, agentName: agent.name, body },
+        {
+          ...settle,
+          onSuccess: (res) => {
+            notify.success(t("exportWizard.zipDownloaded", { filename: res.filename }));
+            onClose();
+          },
+          onError: fail,
+        },
+      );
+    }
+  };
 
   return (
     <Modal
@@ -97,23 +152,21 @@ export function ExportWizard({
       onClose={onClose}
       footer={
         <div style={s.footer}>
-          {!reachable && state.step === LAST_AVAILABLE_STEP && (
-            <span style={s.footerNote}>{t("exportWizard.nextStepsSoon")}</span>
-          )}
           <div style={s.footerRight}>
             {state.step > 0 && (
-              <Button kind="ghost" onClick={() => dispatch({ type: "back" })}>
+              <Button kind="ghost" disabled={installing} onClick={() => dispatch({ type: "back" })}>
                 {t("exportWizard.back")}
               </Button>
             )}
-            <Button
-              kind="primary"
-              disabled={!valid || !reachable}
-              title={!reachable ? t("exportWizard.nextStepsSoon") : undefined}
-              onClick={() => dispatch({ type: "next" })}
-            >
-              {t("exportWizard.continue")}
-            </Button>
+            {state.step < 3 ? (
+              <Button kind="primary" disabled={!valid} onClick={() => dispatch({ type: "next" })}>
+                {t("exportWizard.continue")}
+              </Button>
+            ) : (
+              <Button kind="primary" disabled={!valid} loading={installing} onClick={install}>
+                {installing ? t("exportWizard.installing") : t("exportWizard.install")}
+              </Button>
+            )}
           </div>
         </div>
       }
@@ -144,6 +197,29 @@ export function ExportWizard({
             error={failed ? ((preview.error as Error)?.message ?? "") : null}
             onRetry={runPreview}
             overLimitBytes={overLimit}
+          />
+        )}
+        {state.step === 2 && (
+          <ConfigureStep
+            triggers={state.triggers}
+            postAs={state.postAs}
+            failOn={agent.ci_fail_on}
+            workflowEdited={state.editedWorkflow !== null}
+            onChange={(change) => dispatch({ type: "setOptions", ...change })}
+          />
+        )}
+        {state.step === 3 && (
+          <InstallStep
+            mode={state.mode}
+            repo={state.repo}
+            fileCount={previewReady ? shownFiles(state).length : null}
+            method={method}
+            onMethod={(m) => {
+              setMethod(m);
+              setInstallError(null);
+            }}
+            disabled={installing}
+            error={installError ?? (failed ? { message: (preview.error as Error)?.message ?? "" } : null)}
           />
         )}
       </div>

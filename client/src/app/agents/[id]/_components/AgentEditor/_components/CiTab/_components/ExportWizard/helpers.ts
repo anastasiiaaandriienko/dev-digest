@@ -32,7 +32,10 @@ export type WizardAction =
   | { type: "back" }
   | { type: "previewLoaded"; files: CiFile[]; key: string }
   | { type: "selectFile"; path: string }
-  | { type: "editWorkflow"; text: string };
+  | { type: "editWorkflow"; text: string }
+  /** Configure options. The workflow is generated from them, so a change drops the
+      edit (the step asks "Regenerate workflow?" first when there is one, AC-CI-10). */
+  | { type: "setOptions"; triggers?: CiTrigger[]; postAs?: CiPostAs };
 
 export function initialState(request: CiWizardRequest, activeRepo: string | null): WizardState {
   return {
@@ -73,7 +76,26 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
       return { ...state, selectedPath: action.path };
     case "editWorkflow":
       return { ...state, editedWorkflow: action.text };
+    case "setOptions":
+      return {
+        ...state,
+        triggers: action.triggers ?? state.triggers,
+        postAs: action.postAs ?? state.postAs,
+        editedWorkflow: null,
+      };
   }
+}
+
+/** Configure is complete with at least one trigger (AC-CI-09). */
+export function optionsValid(state: Pick<WizardState, "triggers">): boolean {
+  return state.triggers.length > 0;
+}
+
+/** Toggle one trigger, keeping the canonical order opened → synchronize → reopened. */
+export function toggleTrigger(triggers: readonly CiTrigger[], trigger: CiTrigger): CiTrigger[] {
+  const order: CiTrigger[] = ["opened", "synchronize", "reopened"];
+  const next = triggers.includes(trigger) ? triggers.filter((t) => t !== trigger) : [...triggers, trigger];
+  return order.filter((t) => next.includes(t));
 }
 
 /** The inputs a preview depends on: a different key means the files must be generated again. */
