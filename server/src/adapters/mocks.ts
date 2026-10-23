@@ -296,10 +296,10 @@ export class MockGitHubClient implements GitHubClient {
     return { branch: payload.branch };
   }
 
-  async findOpenPr(_repo: RepoRef, branch: string): Promise<{ url: string } | null> {
+  async findOpenPr(_repo: RepoRef, branch: string): Promise<{ url: string; base: string } | null> {
     this.track('findOpenPr', [_repo, branch]);
     const pr = this.openedPrs.find((p) => p.head === branch);
-    return pr ? { url: 'https://github.com/mock/mock/pull/1' } : null;
+    return pr ? { url: 'https://github.com/mock/mock/pull/1', base: pr.base } : null;
   }
 
   async getIssue(_repo: RepoRef, n: number): Promise<IssueMeta> {

@@ -368,6 +368,20 @@ describe('OctokitGitHubClient — workflow runs and artifacts', () => {
   });
 });
 
+describe('OctokitGitHubClient.findOpenPr', () => {
+  it('returns the open PR from the branch with its base branch, or null', async () => {
+    const { client, requests } = fakeGitHub([
+      ['GET', re(`${API}/pulls`), (req) =>
+        req.query.get('head') === 'acme:devdigest/ci'
+          ? json([{ html_url: 'https://github.com/acme/widgets/pull/9', base: { ref: 'develop' } }])
+          : json([])],
+    ]);
+    expect(await client.findOpenPr(REPO, 'devdigest/ci')).toEqual({ url: 'https://github.com/acme/widgets/pull/9', base: 'develop' });
+    expect(await client.findOpenPr(REPO, 'other')).toBeNull();
+    expect(requests[0]!.query.get('state')).toBe('open');
+  });
+});
+
 describe('assertCommitPaths', () => {
   it('accepts plain repo-relative paths', () => {
     expect(() => assertCommitPaths([{ path: '.devdigest/skills/a.md', contents: '' }, { path: 'a', contents: '' }])).not.toThrow();
@@ -378,6 +392,13 @@ describe('MockGitHubClient — Export to CI', () => {
   const trees = {
     b0: { 'README.md': '# hi', '.devdigest/agents/security.yaml': '{"agent_id":"a1"}', '.devdigest/skills/owasp.md': 'x' },
   };
+
+  it('findOpenPr returns an opened PR of the branch with its base', async () => {
+    const gh = new MockGitHubClient();
+    expect(await gh.findOpenPr(REPO, 'devdigest/ci')).toBeNull();
+    await gh.openPullRequest(REPO, { title: 't', head: 'devdigest/ci', base: 'develop', body: 'b' });
+    expect(await gh.findOpenPr(REPO, 'devdigest/ci')).toEqual({ url: 'https://github.com/mock/mock/pull/1', base: 'develop' });
+  });
 
   it('logs every call, including the existing methods, in order', async () => {
     const gh = new MockGitHubClient({ trees, branches: { main: 'b0' } });

@@ -213,8 +213,8 @@ export interface GitHubClient {
    * fast-forwards it. Idempotent: re-publishing just adds a new commit.
    */
   commitFiles(repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }>;
-  /** The open PR whose head is `branch`, if any (so re-publish reuses it). */
-  findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null>;
+  /** The open PR whose head is `branch`, if any (so re-publish reuses it), with its base branch. */
+  findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string; base: string } | null>;
   // ---- Export to CI (L07). Errors other than the documented "missing" cases
   // propagate with their HTTP `status` (401/403/404/409/422/429/5xx) for the
   // caller to map; no message ever carries a token or a signed download URL.

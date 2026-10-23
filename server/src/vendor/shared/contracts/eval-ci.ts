@@ -328,6 +328,7 @@ export const CiErrorCode = z.enum([
   'ci_manifest_conflict',
   'ci_file_conflict',
   'ci_concurrent_change',
+  'ci_pr_base_mismatch',
   'ci_runner_bundle_missing',
 ]);
 export type CiErrorCode = z.infer<typeof CiErrorCode>;

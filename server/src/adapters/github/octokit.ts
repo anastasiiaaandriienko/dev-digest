@@ -418,7 +418,7 @@ export class OctokitGitHubClient implements GitHubClient {
     );
   }
 
-  async findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string } | null> {
+  async findOpenPr(repo: RepoRef, branch: string): Promise<{ url: string; base: string } | null> {
     return withRetry(() =>
       withTimeout(
         (async () => {
@@ -430,7 +430,7 @@ export class OctokitGitHubClient implements GitHubClient {
             per_page: 1,
           });
           const pr = res.data[0];
-          return pr ? { url: pr.html_url } : null;
+          return pr ? { url: pr.html_url, base: pr.base.ref } : null;
         })(),
         TIMEOUT,
       ),

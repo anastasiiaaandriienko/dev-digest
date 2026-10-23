@@ -19,6 +19,18 @@ export const RUNNER_PACKAGE_JSON = '{"type":"module"}\n';
 export const WORKFLOW_FILE = 'devdigest-review.yml';
 export const WORKFLOW_PATH = `.github/workflows/${WORKFLOW_FILE}`;
 
+/** Directories read (at the base and `devdigest/ci` SHAs) before an export (§8 step 3). */
+export const INSPECTED_DIRS = ['.devdigest/agents', '.devdigest/skills', '.devdigest/runner', '.github/workflows'] as const;
+
+/** A manifest read back from the repo larger than this is treated as not owned. */
+export const MAX_MANIFEST_BYTES = 256 * 1024;
+
+/** Title of the export PR (AC-CI-30). */
+export const PR_TITLE = 'Add DevDigest CI review';
+
+/** Preview / export / zip each read GitHub; export also writes to it. */
+export const CI_EXPORT_RATE_LIMIT = { max: 10, timeWindow: '1 minute' } as const;
+
 /** What the runner writes (cwd) and the workflow uploads (AC-CI-28). */
 export const RESULT_FILE = 'devdigest-result.json';
 export const RESULT_ARTIFACT = 'devdigest-result';
