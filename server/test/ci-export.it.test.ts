@@ -27,8 +27,10 @@ import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
  *
  * Database: a disposable Testcontainers Postgres (skipped without Docker), or
  * DEVDIGEST_IT_DB_URL pointing at the isolated, migrated `devdigest_export_ci`
- * (anything else fails); the test then only touches workspaces it creates,
- * deletes them and checks every touched table is back to its row count.
+ * (anything else fails); the test then only touches workspaces it creates.
+ * Checks are scoped to those workspaces (other files may share the DB in
+ * parallel); at the end they are deleted and every row id they owned is
+ * checked to be gone.
  */
 
 const EXTERNAL_DB = 'devdigest_export_ci';
@@ -39,8 +41,36 @@ if (externalUrl && new URL(externalUrl).pathname !== `/${EXTERNAL_DB}`) {
 const enabled = externalUrl ? true : await dockerAvailable();
 const d = enabled ? describe : describe.skip;
 
-const TABLES = ['workspaces', 'agents', 'repos', 'ci_installations', 'ci_runs', 'agent_runs'] as const;
 const SECRET = 'sk-or-it-SECRET-VALUE';
+
+const inList = (ids: readonly string[]) =>
+  ids.length === 0 ? sql`(null)` : sql`(${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`;
+
+/** Ids of every row owned by `ws` (taken before deleting, checked to be gone after). */
+async function ownedIds(db: Db, ws: readonly string[]) {
+  const w = inList(ws);
+  const ids = async (q: ReturnType<typeof sql>) => (await db.execute<{ id: string }>(q)).map((r) => r.id);
+  return {
+    agents: await ids(sql`select id from agents where workspace_id in ${w}`),
+    repos: await ids(sql`select id from repos where workspace_id in ${w}`),
+    ci_installations: await ids(sql`select i.id from ci_installations i join agents a on a.id = i.agent_id where a.workspace_id in ${w}`),
+    agent_runs: await ids(sql`select id from agent_runs where workspace_id in ${w}`),
+  };
+}
+
+async function remainingIds(db: Db, ws: readonly string[], ids: Awaited<ReturnType<typeof ownedIds>>) {
+  const [row] = await db.execute<Record<string, number>>(sql`
+    select
+      (select count(*)::int from workspaces where id in ${inList(ws)}) as workspaces,
+      (select count(*)::int from agents where id in ${inList(ids.agents)}) as agents,
+      (select count(*)::int from repos where id in ${inList(ids.repos)}) as repos,
+      (select count(*)::int from ci_installations where id in ${inList(ids.ci_installations)}) as ci_installations,
+      (select count(*)::int from agent_runs where id in ${inList(ids.agent_runs)}) as agent_runs,
+      (select count(*)::int from run_traces where run_id in ${inList(ids.agent_runs)}) as run_traces,
+      (select count(*)::int from ci_runs where agent_run_id in ${inList(ids.agent_runs)}
+         or ci_installation_id in ${inList(ids.ci_installations)}) as ci_runs`);
+  return row!;
+}
 
 d('Export to CI API (real Postgres, mocked GitHub)', () => {
   let pg: PgFixture | undefined;
@@ -50,16 +80,6 @@ d('Export to CI API (real Postgres, mocked GitHub)', () => {
   let bundleDir: string;
   let github: MockGitHubClient;
   const workspaces: string[] = [];
-  let countsBefore: Record<string, number> = {};
-
-  const counts = async () => {
-    const out: Record<string, number> = {};
-    for (const table of TABLES) {
-      const [row] = await db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.identifier(table)}`);
-      out[table] = row!.n;
-    }
-    return out;
-  };
 
   beforeAll(async () => {
     if (externalUrl) {
@@ -69,7 +89,6 @@ d('Export to CI API (real Postgres, mocked GitHub)', () => {
       handle = pg.handle;
     }
     db = handle.db;
-    countsBefore = await counts();
 
     bundleDir = mkdtempSync(join(tmpdir(), 'devdigest-ci-it-'));
     const bundlePath = join(bundleDir, 'index.js');
@@ -105,13 +124,20 @@ d('Export to CI API (real Postgres, mocked GitHub)', () => {
     await app?.close();
     if (bundleDir) rmSync(bundleDir, { recursive: true, force: true });
     if (!db) return;
+    const ids = await ownedIds(db, workspaces);
     if (workspaces.length > 0) await db.delete(t.workspaces).where(inArray(t.workspaces.id, workspaces));
-    if (externalUrl) {
-      expect(await counts()).toEqual(countsBefore);
-      await handle.close();
-    } else {
-      await pg?.stop();
-    }
+    // Everything this file created is gone again (workspace cascade), nothing orphaned.
+    expect(await remainingIds(db, workspaces, ids)).toEqual({
+      workspaces: 0,
+      agents: 0,
+      repos: 0,
+      ci_installations: 0,
+      agent_runs: 0,
+      run_traces: 0,
+      ci_runs: 0,
+    });
+    if (externalUrl) await handle.close();
+    else await pg?.stop();
   });
 
   async function fixture(baseTree: Record<string, string> = { 'README.md': '# x' }) {

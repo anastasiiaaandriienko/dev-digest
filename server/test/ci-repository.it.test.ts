@@ -15,8 +15,11 @@ import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
  * - default: a disposable Testcontainers Postgres (skipped without Docker);
  * - DEVDIGEST_IT_DB_URL: an already-migrated database that MUST be named
  *   `devdigest_export_ci` (worktree B's isolated DB — anything else fails).
- *   The test then works only in workspaces it creates, deletes them at the
- *   end (cascade) and asserts every touched table is back to its row count.
+ *
+ * Every count is scoped to the workspaces this file creates (other test files
+ * may write to the same DB in parallel). At the end those workspaces are
+ * deleted (cascade) and every row id they owned is checked to be gone, with no
+ * orphan agent_runs / run_traces / ci_runs left behind.
  */
 
 const EXTERNAL_DB = 'devdigest_export_ci';
@@ -27,7 +30,62 @@ if (externalUrl && new URL(externalUrl).pathname !== `/${EXTERNAL_DB}`) {
 const enabled = externalUrl ? true : await dockerAvailable();
 const d = enabled ? describe : describe.skip;
 
-const TABLES = ['workspaces', 'agents', 'ci_installations', 'ci_runs', 'agent_runs', 'run_traces'] as const;
+const inList = (ids: readonly string[]) =>
+  ids.length === 0 ? sql`(null)` : sql`(${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`;
+
+/** Rows owned by `ws` in every table the CI repository writes. */
+async function ownedCounts(db: Db, ws: readonly string[]) {
+  const w = inList(ws);
+  const [row] = await db.execute<Record<string, number>>(sql`
+    select
+      (select count(*)::int from workspaces where id in ${w}) as workspaces,
+      (select count(*)::int from agents where workspace_id in ${w}) as agents,
+      (select count(*)::int from ci_installations i join agents a on a.id = i.agent_id where a.workspace_id in ${w}) as ci_installations,
+      (select count(*)::int from agent_runs where workspace_id in ${w}) as agent_runs,
+      (select count(*)::int from run_traces x join agent_runs r on r.id = x.run_id where r.workspace_id in ${w}) as run_traces,
+      (select count(*)::int from ci_runs c join agent_runs r on r.id = c.agent_run_id where r.workspace_id in ${w}) as ci_runs`);
+  return row!;
+}
+
+/** CI runs of `ws` missing a part: agent_runs without trace or ci_runs row, ci_runs of an installation without agent run. */
+async function orphanCounts(db: Db, ws: readonly string[]) {
+  const w = inList(ws);
+  const [row] = await db.execute<Record<string, number>>(sql`
+    select
+      (select count(*)::int from agent_runs r where r.workspace_id in ${w} and r.source = 'ci'
+         and not exists (select 1 from run_traces x where x.run_id = r.id)) as runs_without_trace,
+      (select count(*)::int from agent_runs r where r.workspace_id in ${w} and r.source = 'ci'
+         and not exists (select 1 from ci_runs c where c.agent_run_id = r.id)) as runs_without_ci_run,
+      (select count(*)::int from ci_runs c join ci_installations i on i.id = c.ci_installation_id
+         join agents a on a.id = i.agent_id where a.workspace_id in ${w} and c.agent_run_id is null) as ci_runs_without_run`);
+  return row!;
+}
+
+/** Ids of every row owned by `ws` (taken before deleting, checked to be gone after). */
+async function ownedIds(db: Db, ws: readonly string[]) {
+  const w = inList(ws);
+  const ids = async (q: ReturnType<typeof sql>) => (await db.execute<{ id: string }>(q)).map((r) => r.id);
+  return {
+    agents: await ids(sql`select id from agents where workspace_id in ${w}`),
+    ci_installations: await ids(sql`select i.id from ci_installations i join agents a on a.id = i.agent_id where a.workspace_id in ${w}`),
+    agent_runs: await ids(sql`select id from agent_runs where workspace_id in ${w}`),
+    ci_runs: await ids(sql`select c.id from ci_runs c join agent_runs r on r.id = c.agent_run_id where r.workspace_id in ${w}`),
+  };
+}
+
+async function remainingIds(db: Db, ws: readonly string[], ids: Awaited<ReturnType<typeof ownedIds>>) {
+  const [row] = await db.execute<Record<string, number>>(sql`
+    select
+      (select count(*)::int from workspaces where id in ${inList(ws)}) as workspaces,
+      (select count(*)::int from agents where id in ${inList(ids.agents)}) as agents,
+      (select count(*)::int from ci_installations where id in ${inList(ids.ci_installations)}) as ci_installations,
+      (select count(*)::int from agent_runs where id in ${inList(ids.agent_runs)}) as agent_runs,
+      (select count(*)::int from run_traces where run_id in ${inList(ids.agent_runs)}) as run_traces,
+      (select count(*)::int from ci_runs where id in ${inList(ids.ci_runs)}
+         or agent_run_id in ${inList(ids.agent_runs)}
+         or ci_installation_id in ${inList(ids.ci_installations)}) as ci_runs`);
+  return row!;
+}
 
 function trace(findings: number): RunTrace {
   return {
@@ -48,16 +106,6 @@ d('CiRepository (real Postgres)', () => {
   let db: Db;
   let repo: CiRepository;
   const workspaces: string[] = [];
-  let countsBefore: Record<string, number> = {};
-
-  const counts = async () => {
-    const out: Record<string, number> = {};
-    for (const table of TABLES) {
-      const [row] = await db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.identifier(table)}`);
-      out[table] = row!.n;
-    }
-    return out;
-  };
 
   beforeAll(async () => {
     if (externalUrl) {
@@ -72,19 +120,24 @@ d('CiRepository (real Postgres)', () => {
     }
     db = handle.db;
     repo = new CiRepository(db);
-    countsBefore = await counts();
   });
 
   afterAll(async () => {
     if (!db) return;
+    expect(await orphanCounts(db, workspaces)).toEqual({ runs_without_trace: 0, runs_without_ci_run: 0, ci_runs_without_run: 0 });
+    const ids = await ownedIds(db, workspaces);
     if (workspaces.length > 0) await db.delete(t.workspaces).where(inArray(t.workspaces.id, workspaces));
-    if (externalUrl) {
-      // Everything this file created is gone again (workspace cascade).
-      expect(await counts()).toEqual(countsBefore);
-      await handle.close();
-    } else {
-      await pg?.stop();
-    }
+    // Everything this file created is gone again (workspace cascade), nothing orphaned.
+    expect(await remainingIds(db, workspaces, ids)).toEqual({
+      workspaces: 0,
+      agents: 0,
+      ci_installations: 0,
+      agent_runs: 0,
+      run_traces: 0,
+      ci_runs: 0,
+    });
+    if (externalUrl) await handle.close();
+    else await pg?.stop();
   });
 
   async function workspace(): Promise<string> {
@@ -244,29 +297,35 @@ d('CiRepository (real Postgres)', () => {
     });
 
     it('the same GitHub run twice → one row; the second reports duplicate and writes nothing', async () => {
-      const { installation } = await installed();
+      const { ws, installation } = await installed();
       await repo.insertCiRun(run(installation.id, 77));
-      const before = await counts();
+      const before = await ownedCounts(db, [ws]);
+      expect(before).toMatchObject({ agent_runs: 1, run_traces: 1, ci_runs: 1 });
       expect(await repo.insertCiRun(run(installation.id, 77))).toEqual({ inserted: false, reason: 'duplicate' });
-      expect(await counts()).toEqual(before);
+      expect(await ownedCounts(db, [ws])).toEqual(before);
       expect(await repo.existingGithubRunIds(installation.id, [77, 78])).toEqual(new Set([77]));
     });
 
     it('concurrent syncs of one GitHub run store it once (no orphan agent_runs)', async () => {
-      const { installation } = await installed();
-      const before = await counts();
+      const { ws, installation } = await installed();
+      expect(await ownedCounts(db, [ws])).toMatchObject({ agent_runs: 0, run_traces: 0, ci_runs: 0 });
       const results = await Promise.all(Array.from({ length: 5 }, () => repo.insertCiRun(run(installation.id, 555))));
       expect(results.filter((x) => x.inserted)).toHaveLength(1);
-      const after = await counts();
-      expect(after.ci_runs - before.ci_runs).toBe(1);
-      expect(after.agent_runs - before.agent_runs).toBe(1);
-      expect(after.run_traces - before.run_traces).toBe(1);
+      expect(await ownedCounts(db, [ws])).toMatchObject({ agent_runs: 1, run_traces: 1, ci_runs: 1 });
+      expect(await orphanCounts(db, [ws])).toEqual({ runs_without_trace: 0, runs_without_ci_run: 0, ci_runs_without_run: 0 });
     });
 
     it('an unknown installation is reported, nothing written', async () => {
-      const before = await counts();
-      expect(await repo.insertCiRun(run(randomUUID(), 1))).toEqual({ inserted: false, reason: 'installation_not_found' });
-      expect(await counts()).toEqual(before);
+      // Unique markers, so the check cannot see rows written by parallel test files.
+      const githubRunId = 9_000_000_000 + Math.floor(Math.random() * 1_000_000_000);
+      const ranAt = new Date(Date.UTC(2001, 0, 1) + Math.floor(Math.random() * 1e10));
+      const missing = randomUUID();
+      expect(await repo.insertCiRun(run(missing, githubRunId, { ranAt }))).toEqual({ inserted: false, reason: 'installation_not_found' });
+      const [row] = await db.execute<{ ci_runs: number; agent_runs: number }>(sql`
+        select
+          (select count(*)::int from ci_runs where github_run_id = ${githubRunId} or ci_installation_id = ${missing}::uuid) as ci_runs,
+          (select count(*)::int from agent_runs where ran_at = ${ranAt.toISOString()}::timestamptz) as agent_runs`);
+      expect(row).toEqual({ ci_runs: 0, agent_runs: 0 });
     });
 
     it('lists show the newest run per installation, scoped to the workspace (AC-CI-62, 86)', async () => {
