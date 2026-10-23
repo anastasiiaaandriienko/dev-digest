@@ -18,6 +18,7 @@ import { AppError } from './platform/errors.js';
 import { modules } from './modules/index.js';
 import { ReviewService } from './modules/reviews/service.js';
 import { ConventionsService } from './modules/conventions/service.js';
+import { EvalService } from './modules/evals/service.js';
 
 // Attach the DI container to every request/instance.
 declare module 'fastify' {
@@ -91,6 +92,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     if (reaped > 0) app.log.info({ reaped }, 'reaped interrupted convention scans on boot');
   } catch (err) {
     app.log.warn({ err: (err as Error).message }, 'convention-scan reaping failed (non-fatal)');
+  }
+  // Same for L06 eval runs: the runner lives in the process that started it.
+  try {
+    const reaped = await new EvalService(container).reapInterruptedRuns();
+    if (reaped > 0) app.log.info({ reaped }, 'reaped interrupted eval runs on boot');
+  } catch (err) {
+    app.log.warn({ err: (err as Error).message }, 'eval-run reaping failed (non-fatal)');
   }
 
   // Security headers (X-Content-Type-Options, X-Frame-Options, …). The API

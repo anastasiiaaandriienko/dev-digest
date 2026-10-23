@@ -14,7 +14,57 @@
     "replyToAuthor": "Reply to author",
     "replyPlaceholder": "Reply to the author about this finding…",
     "sendReply": "Send reply",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "evalCase": {
+      "turnInto": "Turn into eval case",
+      "titleMustFind": "Create a 'must find' eval case from this finding",
+      "titleMustNotFlag": "Create a 'must NOT comment' eval case from this dismissal",
+      "inEvalSet": "In eval set",
+      "inEvalSetTitle": "This finding is already part of the agent's eval set",
+      "kind": {
+        "must_find": "must find",
+        "must_not_flag": "must not flag"
+      },
+      "modal": {
+        "title": "Add to eval set",
+        "subtitleMustFind": "Seeded from an accepted finding · the agent must find it again",
+        "subtitleMustNotFlag": "Seeded from a dismissed finding · the agent must not flag it again",
+        "positive": "Positive case",
+        "negative": "Negative case",
+        "assertionMustFind": "MUST find “{title}” at {location}",
+        "assertionMustNotFlag": "MUST NOT comment on {location} ({title})",
+        "nameLabel": "Name",
+        "nameHint": "Lowercase letters, digits and dashes; up to 80 characters.",
+        "notesLabel": "Notes",
+        "notesHint": "Optional, up to 500 characters.",
+        "expectedLabel": "Expected output",
+        "expectedEmpty": "[]  // dismissed — the agent must produce no finding here",
+        "frozenNote": "The pull request diff and metadata are frozen into the case when you save.",
+        "cancel": "Cancel",
+        "save": "Save",
+        "saving": "Saving…"
+      },
+      "validation": {
+        "nameRequired": "Enter a name.",
+        "nameFormat": "Use lowercase letters, digits and dashes, starting with a letter or digit.",
+        "nameTooLong": "Use at most 80 characters.",
+        "notesTooLong": "Use at most 500 characters."
+      },
+      "created": "Added to the eval set as {kind}.",
+      "alreadyExists": "This finding is already in the eval set.",
+      "errors": {
+        "eval_case_exists": "This finding is already in the eval set.",
+        "duplicate_location": "Another eval case of this agent already covers this location on the same diff.",
+        "conflicting_label": "An eval case with the opposite label already covers this location on the same diff.",
+        "range_too_wide": "The finding spans more than 50 lines — too wide for a precise eval case.",
+        "location_not_in_diff": "The finding location is not part of the pull request diff.",
+        "diff_unavailable": "The pull request diff could not be loaded. Sync the pull request and try again.",
+        "diff_too_large": "The pull request diff is too large for an eval case.",
+        "finding_not_decided": "Accept or reject the finding first.",
+        "finding_has_no_agent": "This finding does not belong to an agent.",
+        "generic": "Couldn’t create the eval case. Try again."
+      }
+    }
   },
   "trifecta": {
     "lethal": "LETHAL TRIFECTA — ALL 3 PRESENT",

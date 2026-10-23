@@ -59,6 +59,8 @@ export function InlineFinding({
         decision={decisions.get(f.id)}
         repoFullName={repoFullName}
         headSha={headSha}
+        // Only agent reviews carry an agent name; agent-less findings cannot become eval cases.
+        canTurnIntoEvalCase={!!agentName}
         onAction={decide}
       />
     </div>

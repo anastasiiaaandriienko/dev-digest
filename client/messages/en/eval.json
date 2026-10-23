@@ -8,7 +8,7 @@
     "running": "Running…",
     "metricTrend": "Metric trend",
     "recentRuns": "Recent runs",
-    "noRuns": "No runs yet. Create an eval case and run it.",
+    "noRuns": "No eval runs yet. Turn accepted or dismissed findings into eval cases, then run evals.",
     "metrics": {
       "recall": "RECALL",
       "precision": "PRECISION",
@@ -25,10 +25,32 @@
       "precision": "Precision",
       "citation": "Citation",
       "pass": "Pass",
-      "cost": "Cost"
+      "cost": "Cost",
+      "version": "Version",
+      "status": "Status",
+      "select": "",
+      "cases": "Cases"
     },
     "pass": "pass",
-    "fail": "fail"
+    "fail": "fail",
+    "subtitle": "Regression harness for one reviewer agent · mechanical scoring, no model call in the scorer",
+    "agentLabel": "Agent",
+    "noAgents": "No agents yet. Create an agent to start building its eval set.",
+    "noAgentsTitle": "No agents",
+    "agentNotFound": "This agent does not exist in the workspace.",
+    "loadError": "Couldn’t load the eval dashboard",
+    "openAgent": "Open agent →",
+    "runEvals": "Run evals",
+    "noFinishedRun": "No finished eval run yet — metrics appear after the first run finishes.",
+    "precisionDipped": "Precision dipped {pt}pt on v{version} compared with the previous finished run.",
+    "trendSkipped": "{count, plural, one {# finished run is} other {# finished runs are}} not plotted because a metric is N/A.",
+    "trendEmpty": "The trend appears after a finished run with all three metrics defined.",
+    "selectHint": "Select two finished runs to compare",
+    "selectedCount": "{count} selected",
+    "compare": "Compare",
+    "selectRun": "Select run {version}",
+    "onlyDoneSelectable": "Only finished runs can be compared",
+    "openDetails": "Details"
   },
   "caseEditor": {
     "newCase": "New eval case",
@@ -63,7 +85,7 @@
     "casesHeading": "Eval cases",
     "newCase": "New case",
     "loadingCases": "Loading cases…",
-    "emptyCases": "No eval cases yet. Create one to assert this agent's expected findings on a sample diff.",
+    "emptyCases": "No eval cases yet. Accept or dismiss findings on a pull request and turn them into eval cases.",
     "neverRun": "never run",
     "passed": "passed",
     "failed": "failed",
@@ -71,7 +93,73 @@
     "run": "Run",
     "running": "Running…",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "emptyCasesTitle": "No eval cases yet",
+    "viewDashboard": "View full dashboard →",
+    "scoringNote": "Scoring is mechanical — a finding counts when file matches and line ranges overlap. No model call in the scorer.",
+    "na": "N/A",
+    "metric": {
+      "recall": "Recall",
+      "precision": "Precision",
+      "citation": "Citation accuracy",
+      "casesPassed": "Cases passed"
+    },
+    "metricsFrom": "Latest finished run · v{version} · {date}",
+    "noFinishedRun": "No finished eval run yet — metrics appear after the first run.",
+    "fpBreakdown": "FP: {unlabeled} unlabeled · {negative} dismissed location · {duplicate} duplicate · {tooWide} too wide",
+    "passingBadge": "{passed} / {total} passing",
+    "casesBadge": "{count, plural, one {# case} other {# cases}}",
+    "runEvals": "Run evals",
+    "runDisabledRunning": "An eval run is already in progress",
+    "runDisabledNoCases": "Add eval cases first",
+    "runningBanner": "An eval run is in progress — results appear when it finishes.",
+    "lastFailed": "The last eval run failed: {error}",
+    "loadCasesError": "Couldn’t load the eval cases",
+    "loadRunsError": "Couldn’t load the eval runs",
+    "outcome": {
+      "tp": "found",
+      "fn": "missed",
+      "pass": "not flagged",
+      "fail": "flagged",
+      "error": "error",
+      "never": "never run"
+    },
+    "kind": {
+      "must_find": "must find",
+      "must_not_flag": "must not flag"
+    },
+    "expectedEmpty": "assert empty",
+    "confirm": {
+      "title": "Run evals?",
+      "body": "Runs {agent} v{version} on {cases, plural, one {# eval case} other {# eval cases}} ({inputs, plural, one {# distinct input} other {# distinct inputs}}).",
+      "paid": "This makes paid LLM calls — one review per distinct input, with the agent’s current prompt, model and skills.",
+      "cancel": "Cancel",
+      "start": "Start eval run",
+      "starting": "Starting…"
+    },
+    "started": "Eval run started.",
+    "startErrors": {
+      "eval_run_in_progress": "An eval run of this agent is already in progress.",
+      "no_eval_cases": "This agent has no eval cases yet.",
+      "too_many_cases": "Too many eval cases for one run (at most 50 cases and 20 distinct inputs).",
+      "config_error": "The provider API key is missing. Add it in Settings → API Keys.",
+      "generic": "Couldn’t start the eval run. Try again."
+    },
+    "history": {
+      "title": "Recent runs",
+      "empty": "No eval runs yet.",
+      "status": {
+        "running": "running",
+        "done": "done",
+        "failed": "failed"
+      },
+      "version": "v{version}",
+      "cost": "Cost",
+      "details": "Details →",
+      "recall": "R",
+      "precision": "P",
+      "citation": "C"
+    }
   },
   "page": {
     "crumbSkillsLab": "Skills Lab",
@@ -80,5 +168,81 @@
     "crumbEvals": "Evals",
     "crumbNewCase": "New case",
     "crumbEvalCase": "Eval case"
+  },
+  "runDetail": {
+    "title": "Eval run · v{version}",
+    "subtitle": "{status} · started {date}",
+    "loadError": "Couldn’t load the eval run",
+    "close": "Close",
+    "error": "Error: {error}",
+    "metrics": "Metrics",
+    "counts": "Counts",
+    "tp": "TP",
+    "fn": "FN",
+    "fp": "FP",
+    "kept": "Kept findings",
+    "raw": "All findings (incl. dropped)",
+    "validCitations": "Valid citations",
+    "tokens": "Tokens in / out",
+    "cost": "Cost",
+    "duration": "Duration",
+    "fpReasons": "False positives by reason",
+    "fpReason": {
+      "too_wide": "too wide (> 50 lines)",
+      "duplicate": "duplicate",
+      "negative_hit": "dismissed location",
+      "unlabeled": "unlabeled"
+    },
+    "fpList": "False positives",
+    "fpListEmpty": "No false positives.",
+    "config": "Config snapshot",
+    "provider": "Provider",
+    "model": "Model",
+    "strategy": "Strategy",
+    "skills": "Skills",
+    "noSkills": "none",
+    "prompt": "System prompt",
+    "excluded": "Not passed to the engine: {list}",
+    "cases": "Case results",
+    "casesEmpty": "No case results were stored for this run.",
+    "matched": "matched {location}",
+    "overlapping": "{count, plural, one {# finding} other {# findings}} on this location",
+    "dropped": "{count, plural, one {# finding} other {# findings}} dropped by the citation gate",
+    "durationValue": "{seconds}s"
+  },
+  "compare": {
+    "title": "Compare runs · v{base} → v{head}",
+    "subtitle": "Older run → newer run · metric deltas, config changes, prompt diff and case flips",
+    "loadError": "Couldn’t compare the runs",
+    "close": "Close",
+    "cost": "Cost",
+    "differentCases": "The runs were scored on different case sets — metric deltas compare different gold sets.",
+    "samePrompt": "Both runs used the same system prompt.",
+    "configChanges": "Config changed: {list}",
+    "configHeading": "Config",
+    "base": "v{version} (old)",
+    "head": "v{version} (new)",
+    "promptSha": "Prompt sha",
+    "skillChanges": "Skill changes",
+    "skillChange": {
+      "added": "added",
+      "removed": "removed",
+      "changed": "changed"
+    },
+    "promptDiff": "System prompt diff",
+    "promptTruncated": "The prompts are long — the diff shows the first {words} words of each.",
+    "cases": "Cases",
+    "change": {
+      "fixed": "fixed",
+      "regressed": "regressed",
+      "unchanged": "unchanged",
+      "only_base": "only in old",
+      "only_head": "only in new"
+    },
+    "missing": "—",
+    "errors": {
+      "different_agents": "Only runs of the same agent can be compared.",
+      "run_not_done": "Only finished runs can be compared."
+    }
   }
 }

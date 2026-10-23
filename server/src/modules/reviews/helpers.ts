@@ -55,6 +55,8 @@ export interface ReviewDtoFinding extends Finding {
   review_id: string;
   accepted_at: string | null;
   dismissed_at: string | null;
+  /** L06: the agent eval case created from this finding, null when none. */
+  eval_case_id: string | null;
 }
 
 export interface ReviewDto {
@@ -73,7 +75,7 @@ export interface ReviewDto {
   findings: ReviewDtoFinding[];
 }
 
-export function findingRowToDto(row: FindingRow): ReviewDtoFinding {
+export function findingRowToDto(row: FindingRow, evalCaseId: string | null = null): ReviewDtoFinding {
   return {
     id: row.id,
     severity: row.severity as Finding['severity'],
@@ -91,6 +93,7 @@ export function findingRowToDto(row: FindingRow): ReviewDtoFinding {
     review_id: row.reviewId,
     accepted_at: row.acceptedAt?.toISOString() ?? null,
     dismissed_at: row.dismissedAt?.toISOString() ?? null,
+    eval_case_id: evalCaseId,
   };
 }
 
@@ -98,6 +101,7 @@ export function reviewToDto(
   review: ReviewRow,
   findings: FindingRow[],
   agentName?: string | null,
+  evalCaseIds: ReadonlyMap<string, string> = new Map(),
 ): ReviewDto {
   return {
     id: review.id,
@@ -111,7 +115,7 @@ export function reviewToDto(
     score: review.score,
     model: review.model,
     created_at: review.createdAt.toISOString(),
-    findings: findings.map(findingRowToDto),
+    findings: findings.map((f) => findingRowToDto(f, evalCaseIds.get(f.id) ?? null)),
   };
 }
 
@@ -121,7 +125,7 @@ export function reviewToDto(
  * The TRUSTED part (ours) states the task and the non-negotiable rule: review
  * the whole diff and never withhold a security/correctness finding.
  */
-export function taskLine(pull: PullRow): string {
+export function taskLine(pull: Pick<PullRow, 'number' | 'title' | 'author'>): string {
   return (
     `Review pull request #${pull.number} "${pull.title}" by ${pull.author}. ` +
     `Report only the distinct, high-value findings you can defend, each citing an exact ` +

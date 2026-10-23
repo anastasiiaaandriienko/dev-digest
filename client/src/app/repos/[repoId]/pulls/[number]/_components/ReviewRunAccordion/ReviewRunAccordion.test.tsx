@@ -63,10 +63,10 @@ function review(findings: FindingRecord[]): ReviewRecord {
   };
 }
 
-function renderAccordion(findings: FindingRecord[] = FINDINGS, defaultOpen = true) {
+function renderAccordion(findings: FindingRecord[] = FINDINGS, defaultOpen = true, over: Partial<ReviewRecord> = {}) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-      <ReviewRunAccordion review={review(findings)} prId="pr1" defaultOpen={defaultOpen} />
+      <ReviewRunAccordion review={{ ...review(findings), ...over }} prId="pr1" defaultOpen={defaultOpen} />
     </NextIntlClientProvider>,
   );
 }
@@ -151,5 +151,20 @@ describe("ReviewRunAccordion — severity pills in the expanded run card", () =>
     fireEvent.click(screen.getByRole("button", { name: messages.finding.dismiss }));
     expect(mutate).toHaveBeenCalledTimes(2);
     expect(mutate).toHaveBeenLastCalledWith({ findingId: "w1", action: "dismiss", prId: "pr1" });
+  });
+});
+
+describe("ReviewRunAccordion — eval case action (L06, D-2)", () => {
+  const decided = [{ ...FINDINGS[0]!, accepted_at: "t" }];
+  const turnInto = () => screen.queryByRole("button", { name: messages.finding.evalCase.turnInto });
+
+  it("offers Turn into eval case for a review of an existing agent", () => {
+    renderAccordion(decided);
+    expect(turnInto()).toBeTruthy();
+  });
+
+  it("hides it when the agent no longer exists (agent_id set, agent_name null)", () => {
+    renderAccordion(decided, true, { agent_name: null });
+    expect(turnInto()).toBeNull();
   });
 });

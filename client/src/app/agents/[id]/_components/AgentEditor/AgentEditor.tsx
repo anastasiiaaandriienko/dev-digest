@@ -1,5 +1,5 @@
 /* AgentEditor — the agent's Config, Skills and Context tabs (HW2 #35 as amended
-   by CTX A1: exactly these three; design: Agent Editor). Tab state lives in ?tab= (owned by the page).
+   by CTX A1; design: Agent Editor) plus Evals (L06). Tab state lives in ?tab= (owned by the page).
    Config stays mounted (hidden) while Skills or Context is shown, so switching tabs keeps
    its unsaved edits; it reports them to the page through `guardRef`. Keyed by
    agent id + version: after a save the form starts from the saved agent. */
@@ -12,6 +12,7 @@ import type { Agent } from "@devdigest/shared";
 import type { UnsavedGuard } from "@/lib/unsaved-guard";
 import { ConfigTab } from "./_components/ConfigTab";
 import { ContextTab } from "./_components/ContextTab";
+import { EvalsTab } from "./_components/EvalsTab";
 import { SkillsTab } from "./_components/SkillsTab";
 import { TABS } from "./constants";
 import { s } from "./styles";
@@ -41,6 +42,8 @@ export function AgentEditor({
         </div>
         {tab === "skills" && <SkillsTab agent={agent} />}
         {tab === "context" && <ContextTab agent={agent} />}
+        {/* Mounted only while active: opening the editor never reads eval data. */}
+        {tab === "evals" && <EvalsTab agent={agent} />}
       </div>
     </div>
   );

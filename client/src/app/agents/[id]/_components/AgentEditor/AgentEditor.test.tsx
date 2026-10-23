@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import type { Agent } from "@devdigest/shared";
 import messages from "../../../../../../messages/en/agents.json";
 import contextMessages from "../../../../../../messages/en/context.json";
+import evalMessages from "../../../../../../messages/en/eval.json";
 import { ToastProvider } from "../../../../../lib/toast";
 
 // Mock the data hooks so the editor renders without a network/query client.
@@ -28,6 +29,19 @@ vi.mock("@/lib/hooks/context", () => ({
   useAttachContextDoc: () => ({ mutate: vi.fn(), isPending: false }),
   useDetachContextDoc: () => ({ mutate: vi.fn(), isPending: false }),
   useReorderContextDocs: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+}));
+// L06 Evals tab: counts reads, so a test can prove other tabs never fetch eval data.
+const evalReads = { cases: 0, runs: 0 };
+vi.mock("@/lib/hooks/evals", () => ({
+  useAgentEvalCases: () => {
+    evalReads.cases++;
+    return { data: [], isLoading: false, isError: false, refetch: vi.fn() };
+  },
+  useAgentEvalRuns: () => {
+    evalReads.runs++;
+    return { data: [], isLoading: false, isError: false, refetch: vi.fn() };
+  },
+  useStartEvalRun: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 // Repo fixture so the Context tab does not take the no-repo branch (AC-CTX-93).
 vi.mock("@/lib/repo-context", () => ({
@@ -55,7 +69,7 @@ const AGENT: Agent = {
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ agents: messages, context: contextMessages }}>
+    <NextIntlClientProvider locale="en" messages={{ agents: messages, context: contextMessages, eval: evalMessages }}>
       <ToastProvider>{ui}</ToastProvider>
     </NextIntlClientProvider>,
   );
@@ -71,12 +85,25 @@ describe("A2 Agent Editor (smoke)", () => {
 });
 
 describe("Agent Editor tabs (HW2 #35)", () => {
-  it("AC-CTX-77 has exactly three tabs: Config, Skills, Context", () => {
+  it("AC-CTX-77 + AC-EVAL-29: Config, Skills, Context and Evals (no Stats / CI yet)", () => {
     renderWithIntl(<AgentEditor agent={AGENT} tab="config" onTab={() => {}} />);
     const tabs = ["Config", "Skills", "Context", "Evals", "Stats", "CI"].filter((name) =>
       screen.queryByRole("button", { name }),
     );
-    expect(tabs).toEqual(["Config", "Skills", "Context"]);
+    expect(tabs).toEqual(["Config", "Skills", "Context", "Evals"]);
+  });
+
+  it("tab=evals shows the Evals tab; Config stays mounted but hidden; other tabs read no eval data", () => {
+    evalReads.cases = 0;
+    evalReads.runs = 0;
+    const { unmount } = renderWithIntl(<AgentEditor agent={AGENT} tab="config" onTab={() => {}} />);
+    expect(evalReads).toEqual({ cases: 0, runs: 0 });
+    unmount();
+    renderWithIntl(<AgentEditor agent={AGENT} tab="evals" onTab={() => {}} />);
+    expect(screen.getByRole("heading", { level: 2, name: evalMessages.evalsTab.casesHeading })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save agent" })).toBeNull();
+    expect(screen.getByDisplayValue("Security Reviewer")).not.toBeVisible();
+    expect(evalReads.cases).toBeGreaterThan(0);
   });
 
   it("AC-CTX-80 tab=context hides Save agent while Config stays mounted", () => {

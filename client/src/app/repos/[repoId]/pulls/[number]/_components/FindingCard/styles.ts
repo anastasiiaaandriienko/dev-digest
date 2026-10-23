@@ -91,4 +91,28 @@ export const s = {
     gap: 10,
   } satisfies CSSProperties,
   composerActions: { display: "flex", gap: 8 } satisfies CSSProperties,
+  // L06 eval-case action (design findings.jsx ActionRow + components2.jsx EvalCaseRow pill).
+  evalGroup: { display: "inline-flex", alignItems: "center", gap: 6 } satisfies CSSProperties,
+  evalBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--accent-text)",
+    padding: "3px 8px",
+  } satisfies CSSProperties,
+  evalKindPill: (kind: "must_find" | "must_not_flag"): CSSProperties => ({
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.03em",
+    padding: "1px 7px",
+    borderRadius: 4,
+    textTransform: "uppercase",
+    borderStyle: "solid",
+    borderWidth: 1,
+    color: kind === "must_find" ? "var(--accent-text)" : "var(--text-muted)",
+    background: kind === "must_find" ? "var(--accent-bg)" : "var(--bg-hover)",
+    borderColor: kind === "must_find" ? "var(--accent)" : "var(--border-strong)",
+  }),
 } as const;
