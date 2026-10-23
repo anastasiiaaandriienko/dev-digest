@@ -107,7 +107,7 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
 - FR-1 Wizard navigation and states → AC-CI-01..08, 18, 19.
 - FR-2 Configure options → AC-CI-09..13, 79.
 - FR-3 Manifest + skills generation → AC-CI-20..22.
-- FR-4 Workflow generation. Exact files: `.devdigest/agents/<slug>.yaml` (JSON-compatible YAML), `.devdigest/skills/<skill-slug>.md` per enabled linked skill in order, `.devdigest/runner/index.js`, `.github/workflows/devdigest-review.yml` → AC-CI-23..29, 38, 78.
+- FR-4 Workflow generation. Exact files: `.devdigest/agents/<slug>.yaml` (JSON-compatible YAML), `.devdigest/skills/<skill-slug>.md` per enabled linked skill in order, `.devdigest/runner/index.js`, `.devdigest/runner/package.json` (exactly `{"type":"module"}`), `.github/workflows/devdigest-review.yml` → AC-CI-20, 23..29, 38, 78. The runner bundle is ESM (ncc output), so `.devdigest/runner/package.json` makes the runner directory an ES-module package; without it a target repo whose root `package.json` says `"type": "commonjs"` cannot load the runner.
 - FR-5 Install via PR on `devdigest/ci`, update and one-agent-per-repo rule → AC-CI-14..16, 30..32, 36, 37, 80, 86, 89..91.
 - FR-6 Zip download → AC-CI-17, 39.
 - FR-7 Scoping and validation → AC-CI-33..35.
@@ -143,7 +143,7 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
   3. **Inspect** (target and working branch): list `.devdigest/agents/`, `.devdigest/skills/`, `.devdigest/runner/` and `.github/workflows/` at `B0` and at `H0`. `M` = the union of `*.yaml|*.yml` paths under `.devdigest/agents/`. A manifest is **owned** by this agent when every copy of it (at `B0` and/or `H0`) parses as YAML into a valid `AgentManifest` whose `agent_id` equals this agent's id.
   4. **Decide** the manifest path and the files this agent may overwrite (`K`):
      - `M` empty → manifest path `.devdigest/agents/<current-slug>.yaml`; `K` = ∅.
-     - `M` = {m} and m is owned → manifest path m (kept even after a rename); `K` = {m, `.devdigest/runner/index.js`, `.github/workflows/devdigest-review.yml`} ∪ {`.devdigest/skills/<s>.md` for each slug s in the owned manifest's `skills`}.
+     - `M` = {m} and m is owned → manifest path m (kept even after a rename); `K` = {m, `.devdigest/runner/index.js`, `.devdigest/runner/package.json`, `.github/workflows/devdigest-review.yml`} ∪ {`.devdigest/skills/<s>.md` for each slug s in the owned manifest's `skills`}.
      - otherwise (a manifest that is not owned — foreign, hand-written, from a deleted agent, unparsable — or more than one) → 409 `ci_manifest_conflict` naming the files; nothing is written.
      - Every file the export would write that already exists at `B0` or `H0` must be in `K`; otherwise → 409 `ci_file_conflict` naming those paths (e.g. a hand-written `devdigest-review.yml`, or a skill slug newly linked to the agent whose `.md` already exists and is not listed in the owned manifest). Unknown files are never overwritten.
      - The export only adds or overwrites files in `K` ∪ (new paths); it never deletes or renames anything. Skill files no longer listed in the manifest stay in the repo and are harmless (the runner loads only listed slugs, §4).
@@ -213,7 +213,7 @@ Storage shape (TA2): the stored document is a valid `RunTrace` (`server/src/vend
 | AC-CI-17 | When the user installs via zip, the client shall download a zip whose entries equal the previewed files including edits. | unit + integration (approval) |
 | AC-CI-18 | When the user closes the modal (× or Esc) before Install, the client shall discard wizard state and make no write request. | unit |
 | AC-CI-19 | While an install request is pending, the client shall disable Install and Back. | unit |
-| AC-CI-20 | When preview is requested, the server shall return exactly the FR-4 file set (no `memory.jsonl`), deterministically for the same agent version and input. | unit |
+| AC-CI-20 | When preview is requested, the server shall return exactly the FR-4 file set — including `.devdigest/runner/package.json` with `{"type":"module"}` — and no `memory.jsonl`, deterministically for the same agent version and input. | unit |
 | AC-CI-21 | The generated manifest shall be JSON-compatible YAML that validates against `AgentManifest`, with name, `agent_id` = the agent's id, `version` = agent version, system_prompt, strategy, ci_fail_on, enabled skill slugs in link order, and model = `model` for openrouter agents or `<provider>/<model>` otherwise. | unit |
 | AC-CI-22 | If the agent slug (kebab-case of the name) is empty or two skill slugs collide, then the server shall respond 422 naming the conflict. | unit |
 | AC-CI-23 | The generated workflow shall trigger only on `pull_request` with the selected types and shall never contain `pull_request_target`. | unit |
@@ -322,6 +322,8 @@ Decisions (user, 2026-10-23, P0 after the development plan):
 - **TA4** atomic claim of `last_synced_at` before GitHub I/O, with the recovery rules of §7 (AC-CI-87, 88).
 
 - **Q29 = A** (G2 mechanism): the target repo is the source of truth for the manifest path — inspect `.devdigest/agents/` (and the other generated paths) on the base branch and on `devdigest/ci` at fixed head SHAs; keep the path of the single manifest owned by this agent (`agent_id` in the manifest); 409 `ci_manifest_conflict` for a foreign or more than one manifest and `ci_file_conflict` for unknown existing files, without writing; never delete or overwrite unknown files; per-repo in-process lock + compare-and-swap commit on `devdigest/ci` (409 `ci_concurrent_change`) against concurrent exports and concurrent GitHub changes (§8, AC-CI-89..91). Rejected: B fixed path `.devdigest/agents/agent.yaml` and C id-based path (both cannot detect foreign or leftover manifests; B drops per-slug paths).
+- **Runner package.json** (user, 2026-10-23, during B4): the ncc build emits an ESM `dist/index.js` (plus `dist/package.json` `{"type":"module"}` and a lazily loaded chunk used only by the OpenAI SDK's deprecated `fileFromPath`, which the runner never calls — not exported). Verified locally: with a root `package.json` `"type": "commonjs"` the runner fails to load unless `.devdigest/runner/package.json` `{"type":"module"}` is present. It is therefore part of the FR-4 file set and of the owned set `K` (§8); `.devdigest/runner/index.js` stays byte-equal to `agent-runner/dist/index.js` (AC-CI-26). Node 22 compatibility is verified in integration testing.
+- **Pinned actions** (user, 2026-10-23, during B4; AC-CI-25): `actions/checkout` v7.0.1 `3d3c42e5aac5ba805825da76410c181273ba90b1`, `actions/setup-node` v7.1.0 `949feb2413d6458794dcd2491c4babbbce0c15c1`, `actions/upload-artifact` v7.0.2 `cf430e030ddbb5b0abf93d22962f4752f3646cd9` — release-tag commits resolved via the public GitHub API, recorded in `server/src/modules/ci/constants.ts`.
 - **Installation removal:** no DB-only removal; `pending`, `active` and `error` installations keep occupying the repo; a safe removal together with the GitHub files is outside the MVP (§2). Deleting an agent does not clean the target repo (§6.4).
 
 Open questions: none (§19.2).
@@ -413,6 +415,7 @@ Neither worktree creates or edits a migration. A worktree that needs another sch
 | `.devdigest/skills/*.md` | 3 | AC-CI-20, 22 | Covered | |
 | `.devdigest/memory.jsonl` | 3 | — | Out of scope | Runner does not read it (Q4 decision) |
 | `.devdigest/runner/index.js` (absent in mockup) | 3 | AC-CI-26, 38 | Covered | Added element |
+| `.devdigest/runner/package.json` (absent in mockup) | 3 | AC-CI-20 | Covered | Added element: `{"type":"module"}` for the ESM runner |
 | `.github/workflows/devdigest-review.yml` + "editable" | 3 | AC-CI-07, 23-29, 78 | Covered | |
 | Workflow body `uses: devdigest/review-action@v1`, `OPENAI_API_KEY` | 3 | AC-CI-25, 26 | Placeholder | Replaced by bundled runner + OPENROUTER_API_KEY |
 | Back / Continue (steps 2-4) | 3-5 | AC-CI-07, 18 | Covered | |
