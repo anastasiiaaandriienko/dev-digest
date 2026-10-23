@@ -5,6 +5,7 @@ import type { Agent } from "@devdigest/shared";
 import messages from "../../../../../../messages/en/agents.json";
 import contextMessages from "../../../../../../messages/en/context.json";
 import evalMessages from "../../../../../../messages/en/eval.json";
+import ciMessages from "../../../../../../messages/en/ci.json";
 import { ToastProvider } from "../../../../../lib/toast";
 
 // Mock the data hooks so the editor renders without a network/query client.
@@ -43,6 +44,18 @@ vi.mock("@/lib/hooks/evals", () => ({
   },
   useStartEvalRun: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
+// L07 CI tab: counts reads, so a test can prove other tabs never read CI data or sync.
+const ciReads = { installations: 0, autoSync: 0 };
+vi.mock("@/lib/hooks/ci", () => ({
+  useCiInstallations: () => {
+    ciReads.installations++;
+    return { data: [], isLoading: false, isError: false, refetch: vi.fn() };
+  },
+  useCiAutoSync: () => {
+    ciReads.autoSync++;
+  },
+  useCiSync: () => ({ mutate: vi.fn() }),
+}));
 // Repo fixture so the Context tab does not take the no-repo branch (AC-CTX-93).
 vi.mock("@/lib/repo-context", () => ({
   useActiveRepo: () => ({ repoId: "r1", repos: [{ id: "r1", name: "api", full_name: "acme/api" }] }),
@@ -69,7 +82,7 @@ const AGENT: Agent = {
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ agents: messages, context: contextMessages, eval: evalMessages }}>
+    <NextIntlClientProvider locale="en" messages={{ agents: messages, context: contextMessages, eval: evalMessages, ci: ciMessages }}>
       <ToastProvider>{ui}</ToastProvider>
     </NextIntlClientProvider>,
   );
@@ -85,12 +98,31 @@ describe("A2 Agent Editor (smoke)", () => {
 });
 
 describe("Agent Editor tabs (HW2 #35)", () => {
-  it("AC-CTX-77 + AC-EVAL-29: Config, Skills, Context and Evals (no Stats / CI yet)", () => {
+  it("AC-CTX-77 + AC-EVAL-29 + AC-CI-60: Config, Skills, Context, Evals and CI (no Stats yet)", () => {
     renderWithIntl(<AgentEditor agent={AGENT} tab="config" onTab={() => {}} />);
     const tabs = ["Config", "Skills", "Context", "Evals", "Stats", "CI"].filter((name) =>
       screen.queryByRole("button", { name }),
     );
-    expect(tabs).toEqual(["Config", "Skills", "Context", "Evals"]);
+    expect(tabs).toEqual(["Config", "Skills", "Context", "Evals", "CI"]);
+  });
+
+  it("AC-CI-60 tab=ci shows the CI tab; Config stays mounted but hidden; other tabs read no CI data and never sync", () => {
+    ciReads.installations = 0;
+    ciReads.autoSync = 0;
+    for (const tab of ["config", "skills", "context", "evals"]) {
+      const { unmount } = renderWithIntl(<AgentEditor agent={AGENT} tab={tab} onTab={() => {}} />);
+      unmount();
+    }
+    expect(ciReads).toEqual({ installations: 0, autoSync: 0 });
+    const onTab = vi.fn();
+    renderWithIntl(<AgentEditor agent={AGENT} tab="ci" onTab={onTab} />);
+    expect(screen.getByRole("heading", { level: 2, name: ciMessages.ciTab.heading })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save agent" })).toBeNull();
+    expect(screen.getByDisplayValue("Security Reviewer")).not.toBeVisible();
+    expect(ciReads.installations).toBeGreaterThan(0);
+    expect(ciReads.autoSync).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Evals" }));
+    expect(onTab).toHaveBeenCalledWith("evals");
   });
 
   it("tab=evals shows the Evals tab; Config stays mounted but hidden; other tabs read no eval data", () => {

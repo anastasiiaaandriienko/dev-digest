@@ -75,13 +75,53 @@
     "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs."
   },
   "ciTab": {
-    "heading": "Continuous Integration",
-    "subtitle": "Run this agent automatically on pull requests in a target repo.",
-    "exportToCi": "Export to CI",
-    "publish": "Publish to CI",
-    "update": "Update CI",
-    "noRepo": "Connect a repository first",
-    "empty": "Not deployed to CI yet. Use “Publish to CI” to open a PR that adds the workflow + agent config.",
+    "heading": "CI deployment",
+    "subtitle": "Run this agent automatically on pull requests in a target repository.",
+    "activeIn": "Active in {count, plural, one {# repo} other {# repos}}",
+    "addToCi": "Add to CI",
+    "addRepository": "Add repository",
+    "updateConfig": "Update CI config",
+    "wizardSoon": "The export wizard is not available yet.",
+    "target": {
+      "gha": "GitHub Actions",
+      "circle": "CircleCI",
+      "jenkins": "Jenkins",
+      "cli": "Generic CLI"
+    },
+    "status": {
+      "pending": "Pending",
+      "active": "Active",
+      "error": "Error"
+    },
+    "pendingHint": "Waiting for the export PR to be merged.",
+    "errorHint": "DevDigest cannot reach this repository on GitHub. Check the token and its access, then sync again.",
+    "openPr": "Open PR",
+    "lastRun": "Last run: {status} · {time}",
+    "runStatus": {
+      "succeeded": "findings",
+      "no_findings": "no findings",
+      "failed": "failed"
+    },
+    "noRuns": "No runs yet",
+    "workflowVersion": "workflow version v{version}",
+    "outdated": "outdated — the agent is v{version}",
+    "sync": "Sync",
+    "syncLabel": "Sync CI runs of {repo}",
+    "synced": "Sync finished: {count, plural, =0 {no new runs} one {# new run} other {# new runs}}",
+    "throttled": "Synced less than a minute ago — try again shortly.",
+    "history": "History",
+    "historyLabel": "CI run history of {repo}",
+    "empty": {
+      "title": "Not deployed to CI yet",
+      "body": "Export this agent to a repository’s GitHub Actions: it then reviews every pull request there."
+    },
+    "loadError": "Could not load CI installations",
+    "failOn": {
+      "label": "Fail CI on",
+      "hint": "The repository’s copy changes only after “Update CI config”.",
+      "saved": "Fail CI on saved. Use “Update CI config” to apply it in CI.",
+      "unsavedConfig": "Save or discard the Config tab changes first."
+    },
     "installed": "installed {date}"
   },
   "publishDialog": {
