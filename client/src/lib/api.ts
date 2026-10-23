@@ -18,10 +18,10 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  let res: Response;
+/** Send a request to the engine; a network failure becomes ApiError(status 0). */
+async function send(path: string, init?: RequestInit): Promise<Response> {
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    return await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: {
         // Only declare a JSON body when one is actually sent — otherwise a
@@ -40,26 +40,38 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       e
     );
   }
+}
 
-  if (!res.ok) {
-    let code: string | undefined;
-    let message = `${res.status} ${res.statusText}`;
-    let details: unknown;
-    try {
-      const body = await res.json();
-      if (body?.error) {
-        code = body.error.code;
-        message = body.error.message ?? message;
-        details = body.error.details;
-      }
-    } catch {
-      /* non-JSON error body */
+/** The API's error envelope `{ error: { code, message, details } }` as an ApiError. */
+async function toApiError(res: Response): Promise<ApiError> {
+  let code: string | undefined;
+  let message = `${res.status} ${res.statusText}`;
+  let details: unknown;
+  try {
+    const body = await res.json();
+    if (body?.error) {
+      code = body.error.code;
+      message = body.error.message ?? message;
+      details = body.error.details;
     }
-    throw new ApiError(message, res.status, code, details);
+  } catch {
+    /* non-JSON error body */
   }
+  return new ApiError(message, res.status, code, details);
+}
 
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await send(path, init);
+  if (!res.ok) throw await toApiError(res);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/** Like apiFetch, for a binary response (e.g. a zip download); errors are the same ApiError. */
+export async function apiFetchBlob(path: string, init?: RequestInit): Promise<Blob> {
+  const res = await send(path, init);
+  if (!res.ok) throw await toApiError(res);
+  return res.blob();
 }
 
 export const api = {
@@ -71,4 +83,6 @@ export const api = {
   patch: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
+  postBlob: (path: string, body?: unknown) =>
+    apiFetchBlob(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
 };
