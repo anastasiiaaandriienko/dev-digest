@@ -106,12 +106,20 @@ export class ReviewService {
    * checkpoint AND marks the DB row cancelled + completes the bus immediately —
    * so cancel also works for ORPHANED runs (whose background process died on a
    * server restart) where signalling alone would do nothing.
+   *
+   * Only a local run of the caller's workspace is touched. A run of another
+   * workspace reads as missing (same workspace-scoped lookup as `deleteRun`), and
+   * a CI run (`source='ci'`, ingested as done/failed) has nothing to cancel: all
+   * three get `false` (→ `{ ok: false }`) with no event, bus flag or DB write.
+   * Siblings of a multi-agent run are separate runs and are never touched.
    */
-  async cancelRun(runId: string): Promise<void> {
+  async cancelRun(workspaceId: string, runId: string): Promise<boolean> {
+    if ((await this.repo.getRunSource(workspaceId, runId)) !== 'local') return false;
     this.publish(runId, 'info', 'Cancellation requested — stopping…');
     this.container.runBus.cancel(runId);
     await this.repo.cancelRunIfRunning(runId);
     this.container.runBus.complete(runId);
+    return true;
   }
 
   /** Reap runs left 'running' by a previous (now-dead) process. Called on boot. */
