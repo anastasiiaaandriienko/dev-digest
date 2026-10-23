@@ -1,33 +1,45 @@
 {
   "runs": {
-    "emptyTitle": "No CI runs yet",
-    "emptyBody": "Once you export an agent to CI, every automated review shows up here.",
     "title": "CI Runs",
-    "subtitle": "Agent reviews executed inside CI · not local runs",
-    "autoRefresh": "auto-refresh on",
-    "refresh": "Refresh",
-    "refreshing": "Refreshing…",
+    "subtitle": "Agent reviews executed in GitHub Actions — not local runs. The 50 newest runs.",
+    "sync": "Sync",
+    "syncing": "Syncing…",
+    "synced": "Sync finished: {count, plural, =0 {no new runs} one {# new run} other {# new runs}}",
+    "throttled": "Synced less than a minute ago — try again shortly.",
     "filters": {
-      "last7Days": "Last 7 days",
+      "agent": "Agent",
+      "repo": "Repository",
       "allAgents": "All agents",
-      "allRepos": "All repos",
-      "allStatuses": "All statuses"
+      "allRepos": "All repositories",
+      "clear": "Clear filters"
     },
     "table": {
-      "timestamp": "Timestamp",
-      "pullRequest": "Pull request",
-      "source": "Source",
+      "label": "CI runs",
+      "repo": "Repository",
+      "pr": "PR",
+      "agent": "Agent",
+      "verdict": "Verdict",
       "findings": "Findings",
       "cost": "Cost",
-      "status": "Status"
+      "duration": "Duration",
+      "commit": "Commit",
+      "ranAt": "Ran",
+      "job": "Job"
     },
-    "view": "View",
-    "status": {
-      "succeeded": "Succeeded",
-      "noFindings": "No findings",
-      "failed": "Failed",
-      "running": "Running"
-    }
+    "verdict": {
+      "blocked": "Blocked",
+      "passed": "Passed",
+      "failed": "Failed"
+    },
+    "viewJob": "View job",
+    "viewJobLabel": "View the GitHub Actions job of {repo} at {sha}",
+    "none": "—",
+    "emptyTitle": "No CI runs yet",
+    "emptyBody": "Export an agent to a repository’s GitHub Actions; every review it runs there shows up here.",
+    "emptyCta": "Go to Agents",
+    "noMatchTitle": "No CI runs match these filters",
+    "noMatchBody": "Clear the filters to see every CI run of this workspace.",
+    "loadError": "Could not load CI runs"
   },
   "exportWizard": {
     "title": "Export to CI",
