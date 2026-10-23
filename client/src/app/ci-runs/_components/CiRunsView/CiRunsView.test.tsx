@@ -92,7 +92,7 @@ beforeEach(() => {
   syncResult = { ingested: 0, throttled: 0, skipped: [], errors: [] };
   toasts = [];
   for (const kind of ["success", "error", "info"] as const) {
-    vi.spyOn(notify, kind).mockImplementation((msg: string) => void toasts.push({ kind, msg }));
+    vi.spyOn(notify, kind).mockImplementation((msg: string, _opts?: unknown) => void toasts.push({ kind, msg }));
   }
 });
 afterEach(() => {

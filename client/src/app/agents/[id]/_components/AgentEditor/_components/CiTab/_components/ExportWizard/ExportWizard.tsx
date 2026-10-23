@@ -13,6 +13,7 @@ import { useTranslations } from "next-intl";
 import { Button, ExportWizardSteps, Modal } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
 import { ApiError } from "@/lib/api";
+import { safeGithubUrl } from "@/lib/github-urls";
 import { useCiPreview, useExportCi, useExportCiZip, useRepoCiInstallations } from "@/lib/hooks/ci";
 import { useActiveRepo } from "@/lib/repo-context";
 import { notify } from "@/lib/toast";
@@ -123,7 +124,12 @@ export function ExportWizard({
         {
           ...settle,
           onSuccess: (res) => {
-            notify.success(t("exportWizard.prOpened", { url: res.pr_url ?? "" }));
+            // AC-CI-15: the toast links the PR, but only a github.com https URL from the API.
+            const prUrl = safeGithubUrl(res.pr_url);
+            notify.success(
+              t("exportWizard.prOpened", { repo: body.repo }),
+              prUrl ? { link: { href: prUrl, label: t("exportWizard.viewPr") } } : undefined,
+            );
             onClose();
           },
           onError: fail,

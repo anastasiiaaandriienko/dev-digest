@@ -121,7 +121,8 @@
     "zipBody": "Download the {count} files and add them to {repo} yourself.",
     "needHelp": "Need help? Using secrets in GitHub Actions",
     "waitingForFiles": "Generating the files for these settings…",
-    "prOpened": "PR ready: {url}",
+    "prOpened": "PR ready in {repo}.",
+    "viewPr": "View PR",
     "zipDownloaded": "Downloaded {filename}",
     "installFailed": "Install failed",
     "errorHint": {

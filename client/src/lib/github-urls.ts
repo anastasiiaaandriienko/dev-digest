@@ -12,6 +12,11 @@ function encPath(file: string): string {
     .join("/");
 }
 
+/** A URL received from the API, kept only when it is a github.com https link (else null). */
+export function safeGithubUrl(url: string | null | undefined): string | null {
+  return url && /^https:\/\/github\.com\//.test(url) ? url : null;
+}
+
 /** https://github.com/{owner}/{repo}/pull/{number} */
 export function githubPrUrl(repoFullName: string, number: number): string {
   return `${HOST}/${repoFullName}/pull/${number}`;

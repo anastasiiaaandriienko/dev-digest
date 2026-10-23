@@ -60,7 +60,7 @@ vi.mock("@/lib/repo-context", () => ({
 }));
 
 import { ApiError } from "@/lib/api";
-import { notify } from "@/lib/toast";
+import { notify, type ToastOptions } from "@/lib/toast";
 import { ExportWizard } from "./ExportWizard";
 import type { CiWizardRequest } from "../../helpers";
 import { MAX_WORKFLOW_BYTES, WORKFLOW_PATH } from "./constants";
@@ -123,7 +123,7 @@ const toPreview = async () => {
   await waitFor(() => expect(screen.getByRole("listbox", { name: "FILES TO CREATE" })).toBeInTheDocument());
 };
 
-let toasts: { kind: string; msg: string }[];
+let toasts: { kind: string; msg: string; link?: ToastOptions["link"] }[];
 beforeEach(() => {
   repoInstallations = {};
   previewCalls.length = 0;
@@ -134,7 +134,9 @@ beforeEach(() => {
   zipImpl = async () => ({ filename: "devdigest-ci-security-reviewer.zip", size: 4 });
   toasts = [];
   for (const kind of ["success", "error", "info"] as const) {
-    vi.spyOn(notify, kind).mockImplementation((msg: string) => void toasts.push({ kind, msg }));
+    vi.spyOn(notify, kind).mockImplementation(
+      (msg: string, opts?: ToastOptions) => void toasts.push({ kind, msg, ...(opts?.link ? { link: opts.link } : {}) }),
+    );
   }
 });
 afterEach(() => {
@@ -561,7 +563,7 @@ describe("Install (AC-CI-14..17, 19, 84)", () => {
     expect((previewCalls[1] as { body: { triggers: string[] } }).body.triggers).toEqual(["opened", "synchronize", "reopened"]);
   });
 
-  it("PR export sends the settings and the kept edit, toasts the PR URL and closes", async () => {
+  it("PR export sends the settings and the kept edit, toasts a link to the PR and closes (AC-CI-15)", async () => {
     const { onClose } = open();
     await toPreview();
     fireEvent.click(screen.getByRole("option", { name: WORKFLOW_PATH }));
@@ -583,8 +585,28 @@ describe("Install (AC-CI-14..17, 19, 84)", () => {
         },
       },
     ]);
-    expect(toasts).toEqual([{ kind: "success", msg: "PR ready: https://github.com/acme/widgets/pull/12" }]);
+    expect(toasts).toEqual([
+      {
+        kind: "success",
+        msg: "PR ready in acme/widgets.",
+        link: { href: "https://github.com/acme/widgets/pull/12", label: "View PR" },
+      },
+    ]);
     expect(zipCalls).toEqual([]);
+  });
+
+  it.each([
+    ["javascript:alert(1)"],
+    ["https://evil.example/acme/widgets/pull/12"],
+    ["http://github.com/acme/widgets/pull/12"],
+    [null],
+  ])("a pr_url that is not a github.com https URL (%s) is never linked; the PR toast still shows and the modal closes", async (prUrl) => {
+    exportImpl = async () => ({ installation: {} as CiExport["installation"], files: FILES, pr_url: prUrl });
+    const { onClose } = open();
+    await toInstall();
+    fireEvent.click(installButton());
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(toasts).toEqual([{ kind: "success", msg: "PR ready in acme/widgets." }]);
   });
 
   it("an edit made for another repo never reaches the export", async () => {
@@ -635,7 +657,9 @@ describe("Install (AC-CI-14..17, 19, 84)", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(err.message);
     expect(installButton()).toBeEnabled();
     expect(onClose).not.toHaveBeenCalled();
+    // No toast at all, so no PR link either; nothing on Install links to a PR.
     expect(toasts).toEqual([]);
+    expect(screen.queryByRole("link", { name: "View PR" })).toBeNull();
   });
 
   it("an unexpected error shows its message; a retry after fixing it succeeds", async () => {

@@ -1,4 +1,5 @@
 import type { CiRun } from "@devdigest/shared";
+import { safeGithubUrl } from "@/lib/github-urls";
 import type { CiRunsFilters } from "@/lib/hooks/ci";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -25,7 +26,7 @@ export function filtersHref(filters: CiRunsFilters): string {
 
 /** The Actions job link only when the API gave a GitHub https URL; never built from other fields. */
 export function safeJobUrl(url: string | null | undefined): string | null {
-  return url && /^https:\/\/github\.com\//.test(url) ? url : null;
+  return safeGithubUrl(url);
 }
 
 export function shortSha(sha: string | null | undefined): string | null {
