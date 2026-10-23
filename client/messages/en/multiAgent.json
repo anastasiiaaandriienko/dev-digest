@@ -27,7 +27,9 @@
     "totalNote": "Agents without past runs are not included in the estimate.",
     "noAgentsTitle": "No agents yet",
     "noAgentsBody": "Create a reviewer agent first.",
-    "goToAgents": "Go to Agents"
+    "goToAgents": "Go to Agents",
+    "unknownPr": "That pull request is not in this repository. Pick one from the list.",
+    "loadError": "Could not load the pull requests or agents."
   },
   "results": {
     "configureRun": "Configure run",
