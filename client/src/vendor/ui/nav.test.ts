@@ -31,6 +31,13 @@ describe("NAV", () => {
     expect(section("SKILLS LAB")!.items[1]).toMatchObject({ href: "/agents", gKey: "a" });
   });
 
+  it("L07 AC-MAR-48: a GLOBAL section after SKILLS LAB holds Multi-Agent Review (CI Runs is added by worktree B)", () => {
+    expect(NAV.map((g) => g.section)).toEqual(["WORKSPACE", "SKILLS LAB", "GLOBAL"]);
+    expect(section("GLOBAL")!.items).toEqual([
+      { key: "multi-agent", label: "Multi-Agent Review", icon: "Users", href: "/repos/:repoId/multi-agent" },
+    ]);
+  });
+
   it("has unique keys and g-shortcuts, each documented in SHORTCUTS", () => {
     const items = NAV.flatMap((g) => g.items);
     expect(new Set(items.map((i) => i.key)).size).toBe(items.length);

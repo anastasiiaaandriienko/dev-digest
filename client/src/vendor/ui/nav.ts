@@ -38,6 +38,15 @@ export const NAV: NavGroup[] = [
       { key: "eval", label: "Eval Dashboard", icon: "Gauge", href: "/eval" },
     ],
   },
+  {
+    // L07: cross-feature pages. Multi-Agent Review (worktree A); "CI Runs" is
+    // added here by the Export to CI work (worktree B), not by A.
+    section: "GLOBAL",
+    items: [
+      // Repo-scoped: Configure run lists the active repo's PRs.
+      { key: "multi-agent", label: "Multi-Agent Review", icon: "Users", href: "/repos/:repoId/multi-agent" },
+    ],
+  },
 ];
 
 export const SETTINGS_ITEM: NavItemDef = {
