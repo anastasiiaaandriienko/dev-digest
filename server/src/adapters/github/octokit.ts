@@ -11,7 +11,6 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
-  CommitFile,
   CommitIfUnchangedPayload,
   CommitIfUnchangedResult,
   RepoDirEntry,
@@ -20,40 +19,13 @@ import type {
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
+import { assertCommitPaths, GitHubAdapterError } from './errors.js';
+
+export { assertCommitPaths, GitHubAdapterError };
+
 const TIMEOUT = 30_000;
 
-/**
- * An adapter-raised failure with an HTTP-like `status` for the caller to map.
- * Its message never carries a token or a signed artifact URL.
- */
-export class GitHubAdapterError extends Error {
-  constructor(
-    message: string,
-    readonly status?: number,
-  ) {
-    super(message);
-    this.name = 'GitHubAdapterError';
-  }
-}
-
 const statusOf = (err: unknown): number | undefined => (err as { status?: number } | null)?.status;
-
-/**
- * Commit paths must be plain repo-relative paths, each written once: no
- * absolute paths, `.`/`..` segments, empty segments or backslashes.
- */
-export function assertCommitPaths(files: readonly CommitFile[]): void {
-  const seen = new Set<string>();
-  for (const f of files) {
-    const p = f.path;
-    const segments = p.split('/');
-    if (!p || p.includes('\\') || segments.some((s) => s === '' || s === '.' || s === '..')) {
-      throw new GitHubAdapterError(`Unsafe commit path: ${JSON.stringify(p)}`, 422);
-    }
-    if (seen.has(p)) throw new GitHubAdapterError(`Duplicate commit path: ${p}`, 422);
-    seen.add(p);
-  }
-}
 
 /** Read a response body, refusing more than `max` bytes (zip-bomb / oversize guard). */
 async function readCapped(res: Response, max: number): Promise<Uint8Array> {

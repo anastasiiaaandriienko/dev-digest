@@ -38,7 +38,7 @@ import type {
   SecretKey,
 } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
-import { assertCommitPaths, GitHubAdapterError } from './github/octokit.js';
+import { assertCommitPaths, GitHubAdapterError } from './github/errors.js';
 
 /**
  * Deterministic MOCK adapters for tests/dev — NO real network. Each mirrors the
