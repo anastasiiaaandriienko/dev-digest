@@ -309,19 +309,25 @@ Risks (planning/verification, not user questions):
 - Integration tests need Docker (Testcontainers). AC-MAR-45 has no e2e flow (S7).
 - The S-M measurement makes paid LLM calls.
 
-## 17. Measurement record (appendix, Q12) — to be filled after S-M
+## 17. Measurement record (appendix, Q12) — S-M performed 2026-10-24 (T13)
+Stack: worktree A at `fa5b298`, isolated `devdigest_multi_agent`, API :3111. PR: `anastasiiaaandriienko/sdd-consumer-demo` #4 (one new file `src/t8-unsafe-export.js`, +11). Values are taken from `GET /pulls/:id/multi-agent`, `agent_runs` and the run traces; nothing is estimated.
+
 | Field | 1 agent | 3 agents |
 |---|---|---|
-| PR id / # / head SHA / date | | |
-| Agents (name, provider/model) | | |
-| Wall-clock (`wall_clock_ms`) | | |
-| Sum of durations | | |
-| Per-agent duration / tokens in / tokens out / cost | | |
-| Total cost (+ `cost_partial`) | | |
-| Findings kept / dropped by grounding, per agent | | |
-| Groups / conflicts / locations flagged by one agent only | | |
-| Observed `GET /pulls/:id/multi-agent` latency | | |
-| Measured ratio and notes | | |
+| PR id / # / head SHA / date | `6043f121…` / #4 / `ddb02d8` (`ddb02d83f988e54385e48cd177acfd5f5e2176db`) / 2026-10-24; multi-run `bfbeed72…` | same PR and SHA (re-checked before the run) / 2026-10-24; multi-run `092a63d0…` |
+| Agents (name, provider/model) | Security Reviewer, openrouter/deepseek/deepseek-v4-flash | Security, General, Performance Reviewer, all openrouter/deepseek/deepseek-v4-flash (agent settings unchanged) |
+| Wall-clock (`wall_clock_ms`) | 10 437 ms | 15 682 ms |
+| Sum of durations | 10 437 ms | 39 977 ms |
+| Per-agent duration / tokens in / tokens out / cost | Security: 10 437 ms / 3 546 / 965 / $0.00018552688 | Security: 12 609 ms / 3 546 / 1 171 / $0.00019948544; General: 15 681 ms / 3 336 / 1 855 / $0.00023871848; Performance: 11 687 ms / 3 766 / 1 361 / $0.00021981344 |
+| Total cost (+ `cost_partial`) | $0.00018552688 (false); tokens 3 546 / 965 | $0.00065801736 (false); tokens 10 648 / 4 387 |
+| Findings kept / dropped by grounding, per agent | Security 1 / 0 (1 CRITICAL) | Security 1 / 0, General 1 / 0, Performance 2 / 0 — 3 CRITICAL + 1 WARNING |
+| Groups / conflicts / locations flagged by one agent only | 1 / 0 / — | 1 / 0 / 0 (the Performance WARNING at line 8 falls inside the shared group `src/t8-unsafe-export.js:7-9`) |
+| Observed `GET /pulls/:id/multi-agent` latency | not timed | 0.23 s |
+| Measured ratio and notes | — | wall-clock ×1.50, sum of durations ×3.83 (parallelism 2.55), cost ×3.55, tokens in ×3.00 / out ×4.55 |
+
+- Intent: generated once before the runs (527 / 175 tokens, $0.000085946, 7.4 s); every run's trace shows "intent: reused stored intent (no model call)", so it is excluded from both wall-clocks. Total spend of the measurement: **$0.00092949** (intent + both runs), matching the OpenRouter key usage delta; no retries (identical Security `tokens_in` in both runs).
+- Observations: (1) duplication — all three agents reported the same command injection as CRITICAL; the 3-agent run added one WARNING (sync `exec` per request) for ×3.55 the cost; (2) the Performance Reviewer wrote its findings in Chinese (the prompt sets no output language); (3) the Performance Reviewer went outside its specialisation and reported the injection as a `security` CRITICAL; (4) the Security finding's range moved between runs (6-10 vs 7-9) — model non-determinism.
+- Conclusion: parallel execution works as designed — three agents took ~1.5× the wall-clock of one, all columns completed, and grouping merged the overlapping findings into one group showing agreement (0 conflicts). On a one-file diff with a single obvious defect the extra agents mostly confirm the same finding, so cost and tokens grow ~linearly while new signal is small. The benefit is expected on larger, mixed diffs where personas cover different risks; that needs personas that stay in scope (and a fixed output language) and was not measured here.
 
 ## Shared with the sibling spec (L07 worktrees A + B) — identical in both specs
 
