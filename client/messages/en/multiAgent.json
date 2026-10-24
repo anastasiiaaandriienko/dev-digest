@@ -1,0 +1,75 @@
+{
+  "title": "Multi-Agent Review",
+  "picker": {
+    "trigger": "Run Review",
+    "heading": "PICK AGENTS TO RUN",
+    "clear": "Clear",
+    "disabled": "disabled",
+    "run": "Run multi-agent review ({count})",
+    "configure": "Configure agents…",
+    "noAgents": "No agents yet.",
+    "latestRun": "Multi-agent review",
+    "limit": "Up to {max} agents per run"
+  },
+  "configure": {
+    "breadcrumb": "Configure run",
+    "title": "Run a Multi-Agent Review",
+    "subtitle": "Pick a pull request and choose which agents to fan out — they run in parallel and you compare their findings side by side.",
+    "stepPullRequest": "Pull request",
+    "selectPullRequest": "Select a pull request…",
+    "stepAgents": "Agents to run",
+    "pickPrFirst": "Pick a pull request first",
+    "pickPrFirstBody": "Choose which PR to review above, then select the agents to run on it.",
+    "selectAll": "Select all",
+    "estimate": "≈ {duration} · {cost}",
+    "noEstimate": "no estimate",
+    "total": "≈ {duration} · {cost} · parallel",
+    "totalNote": "Agents without past runs are not included in the estimate.",
+    "noAgentsTitle": "No agents yet",
+    "noAgentsBody": "Create a reviewer agent first.",
+    "goToAgents": "Go to Agents",
+    "unknownPr": "That pull request is not in this repository. Pick one from the list.",
+    "loadError": "Could not load the pull requests or agents."
+  },
+  "results": {
+    "configureRun": "Configure run",
+    "selectedAgents": "{count, plural, one {# selected agent} other {# selected agents}} · parallel",
+    "summary": "{count, plural, one {# agent} other {# agents}} · parallel · {duration} total · {cost}",
+    "costPartial": "some costs unknown",
+    "viewColumns": "Columns",
+    "viewTabs": "Tabs",
+    "viewTrace": "View trace",
+    "findings": "{count, plural, one {# finding} other {# findings}}",
+    "noFindings": "No findings",
+    "startNewReview": "Start new review",
+    "emptyTitle": "No multi-agent review yet",
+    "emptyBody": "Run several agents on this pull request to compare their findings side by side.",
+    "loadError": "Could not load the multi-agent review.",
+    "retry": "Retry"
+  },
+  "status": {
+    "running": "Running",
+    "done": "Done",
+    "failed": "Failed",
+    "cancelled": "Cancelled",
+    "noError": "No error recorded"
+  },
+  "disagree": {
+    "heading": "WHERE AGENTS DISAGREE",
+    "showOnlyConflicts": "Show only conflicts",
+    "didNotFlag": "did not flag",
+    "noResult": "no result",
+    "partial": "Some agents are still running — this view is not final yet.",
+    "none": "No disagreements between agents."
+  },
+  "actions": {
+    "accept": "Accept",
+    "dismiss": "Dismiss",
+    "learn": "Learn",
+    "learnUnavailable": "Learning from findings is not available yet",
+    "turnIntoEvalCase": "Turn into eval case",
+    "suggestedFix": "SUGGESTED FIX",
+    "confidence": "{value}% conf"
+  },
+  "unknownAgent": "Unknown agent"
+}

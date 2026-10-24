@@ -36,6 +36,7 @@ export function FindingCard({
   repoFullName,
   headSha,
   canTurnIntoEvalCase,
+  extraActions,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -49,6 +50,8 @@ export function FindingCard({
   headSha?: string | null;
   /** L06: the finding belongs to an agent, so a decided one can become an eval case. */
   canTurnIntoEvalCase?: boolean;
+  /** L07: extra controls rendered in the action row, after the built-in ones. */
+  extraActions?: React.ReactNode;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
@@ -151,6 +154,7 @@ export function FindingCard({
                 </span>
               </span>
             )}
+            {extraActions}
             {decision && (
               <span role="status" aria-live="polite" style={s.decisionStatus(decision)}>
                 {t(`finding.decision.${decision}`)}

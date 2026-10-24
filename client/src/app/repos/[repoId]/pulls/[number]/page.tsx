@@ -1,6 +1,6 @@
 /* PR Detail — /repos/:repoId/pulls/:number. F2 shell extended by A2 with:
    - Findings panel (VerdictBanner + FindingCards)
-   - RunReviewDropdown (run all / a specific agent) + live SSE RunStatus
+   - RunReviewDropdown (L07 multi-agent picker → Results page) + live SSE RunStatus
    - Basic file-by-file diff viewer in the Files tab
    Tab state lives in query (?tab). */
 "use client";
@@ -156,6 +156,7 @@ export default function PRDetailPage() {
     <AppShell crumb={crumb}>
       <PrDetailHeader
         pr={pr}
+        repoId={repoId}
         prId={prId}
         tab={tab}
         findingsCount={findingsCount}

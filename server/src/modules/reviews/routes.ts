@@ -7,10 +7,15 @@ import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { ReviewService } from './service.js';
 import { IntentService } from './intent/service.js';
+import { normalizeAgentIds } from './multi-run/helpers.js';
+import { MultiRunService } from './multi-run/service.js';
 
 /**
  * reviews module.
- *   POST   /pulls/:id/review  {agentId} | {all:true}  → run review(s); returns runs
+ *   POST   /pulls/:id/review  {agentId} | {all:true} | {agentIds}
+ *                                                      → run review(s); returns runs (+ multi_agent_run_id)
+ *   GET    /pulls/:id/multi-agent                      → latest multi-run (columns, groups, conflicts, totals) or null
+ *   GET    /multi-agent/estimates                      → per-agent avg duration/cost of the last 10 done local runs
  *   GET    /runs/:id/events                            → SSE stream of RunEvent (replay-first)
  *   GET    /runs/:id/trace                             → the single-document RunTrace
  *   GET    /pulls/:id/reviews                          → persisted reviews + findings for a PR
@@ -25,16 +30,28 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
   const { container } = app;
   const service = new ReviewService(container);
   const intentService = new IntentService(container);
+  const multiRunService = new MultiRunService(container);
 
   // ---- Run a review (manual trigger) -------------------------------
   // Tight per-route limit: each call can fan out to expensive LLM runs.
-  // Body stays a tolerant manual parse (both fields optional; empty body is OK).
+  // Body stays a tolerant manual parse (all fields optional; empty body is OK).
+  // `agentIds` → one multi-agent run (L07); otherwise the legacy single/all path.
   app.post(
     '/pulls/:id/review',
     { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (req) => {
     const { workspaceId } = await getContext(container, req);
     const body = RunRequest.parse(req.body ?? {});
+    const agentIds = normalizeAgentIds(body);
+    if (agentIds) {
+      const { multiAgentRunId, runs, reviews } = await service.runMultiAgentReview(
+        workspaceId,
+        req.params.id,
+        agentIds,
+        req.log,
+      );
+      return { pr_id: req.params.id, runs, reviews, multi_agent_run_id: multiAgentRunId };
+    }
     const targets = await service.resolveTargets(workspaceId, {
       ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
       ...(body.all !== undefined ? { all: body.all } : {}),
@@ -45,7 +62,7 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
       targets,
       req.log,
     );
-    return { pr_id: req.params.id, runs, reviews };
+    return { pr_id: req.params.id, runs, reviews, multi_agent_run_id: null };
   });
 
   // ---- SSE: live run events (replay buffer first, then live; ends on done) -
@@ -96,6 +113,18 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     );
   });
 
+  // ---- Latest multi-agent run of a PR (L07; read-only, computed on read) ----
+  app.get('/pulls/:id/multi-agent', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return multiRunService.read(workspaceId, req.params.id);
+  });
+
+  // ---- Per-agent time/cost estimates from recent local runs (L07) ---------
+  app.get('/multi-agent/estimates', async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return multiRunService.estimates(workspaceId);
+  });
+
   // ---- Active (in-flight) runs for a PR (server source of truth) ----------
   app.get('/pulls/:id/runs/active', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(container, req);
@@ -117,9 +146,9 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
 
   // ---- Cancel an in-flight run --------------------------------------------
   app.post('/runs/:id/cancel', { schema: { params: IdParams } }, async (req) => {
-    await getContext(container, req);
-    await service.cancelRun(req.params.id);
-    return { ok: true };
+    const { workspaceId } = await getContext(container, req);
+    const ok = await service.cancelRun(workspaceId, req.params.id);
+    return { ok };
   });
 
   // ---- Run trace (single document; A5 enriches with multi-agent/stats) ----

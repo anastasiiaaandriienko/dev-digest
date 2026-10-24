@@ -6,7 +6,8 @@ import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
-import { RECONCILE_DEADLINE_MS, REVIEW_STRATEGY } from './constants.js';
+import { RECONCILE_DEADLINE_MS, REVIEW_CONCURRENCY, REVIEW_STRATEGY } from './constants.js';
+import { mapWithConcurrency } from './concurrency.js';
 import { appliedSkillsLine, planSkills, taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import {
@@ -80,9 +81,10 @@ export type RunOutcome = {
 
 /**
  * Owns the background execution of queued agent runs (extracted from
- * ReviewService; behaviour unchanged). Loads the diff once and (when an intent
- * resolver is wired) resolves the PR intent once, then runs each agent, streaming events over the runBus and persisting each
- * review. Per-agent failures are isolated.
+ * ReviewService). Loads the diff once and (when an intent resolver is wired)
+ * resolves the PR intent once, then runs the agents — at most
+ * REVIEW_CONCURRENCY at a time — streaming events over the runBus and
+ * persisting each review. Per-agent failures are isolated.
  */
 export class ReviewRunExecutor {
   constructor(
@@ -98,8 +100,11 @@ export class ReviewRunExecutor {
   /**
    * Background execution of the queued agent runs (NOT awaited by the route).
    * Loads the diff once and resolves the PR intent once (when wired), then runs
-   * each agent, streaming events over the runBus and persisting each review.
-   * Per-agent failures are isolated.
+   * the agents in input order with at most REVIEW_CONCURRENCY in flight,
+   * streaming events over the runBus and persisting each review. Per-agent
+   * failures are isolated; a run that waited for a slot and is no longer
+   * `running` when it gets one is settled without a model call
+   * (startIfStillRunning).
    */
   async executeRuns(
     workspaceId: string,
@@ -163,7 +168,15 @@ export class ReviewRunExecutor {
       promptIntent = await this.resolveIntent(workspaceId, pull, runLog, logger);
     }
 
-    for (const { agent, runId } of jobs) {
+    // At most REVIEW_CONCURRENCY agents at a time, started in input order. Each
+    // job narrows the shared logger to its own run (runOneAgent → forRun), and
+    // RunBus buffers are per run, so concurrent runs never mix their logs.
+    // runJob never throws, so one agent's failure cannot stop the others.
+    // The first REVIEW_CONCURRENCY jobs start at once (exactly as before); only
+    // a job that WAITED for a slot is re-checked before it may call the model.
+    const runJob = async ({ agent, runId }: { agent: AgentRow; runId: string }, index: number): Promise<void> => {
+      const waited = index >= REVIEW_CONCURRENCY;
+      if (waited && !(await this.startIfStillRunning(runId, pull, agent, runLog, logger))) return;
       const agentStart = Date.now();
       logger?.info(
         { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: pull.id },
@@ -200,7 +213,53 @@ export class ReviewRunExecutor {
           `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
         );
       }
+    };
+    await mapWithConcurrency(jobs, REVIEW_CONCURRENCY, runJob);
+  }
+
+  /**
+   * Called when a job that waited in the queue gets its slot, BEFORE any
+   * per-agent work or model call: true → run it. A run cancelled while it
+   * waited is not paid for. Two
+   * signals are checked because `cancelRun` raises the bus flag, marks the row
+   * `cancelled` and then completes the bus, which clears the flag again — so
+   * the flag alone can be gone by the time the slot frees up, and the DB row
+   * alone can still read `running` for a moment after the flag is raised.
+   * Otherwise the run is settled through the same guarded path as a failed or
+   * cancelled run (status + trace written only by the call that wins).
+   */
+  private async startIfStillRunning(
+    runId: string,
+    pull: PullRow,
+    agent: AgentRow,
+    parentLog: RunLogger,
+    logger?: Logger,
+  ): Promise<boolean> {
+    let status: string | null | undefined;
+    let checkError: Error | null = null;
+    try {
+      status = (await withDeadline(this.repo.getRunStatus(runId), RECONCILE_DEADLINE_MS))?.status;
+    } catch (err) {
+      checkError = err as Error;
     }
+    const flagged = this.container.runBus.isCancelled(runId);
+    if (!checkError && status === 'running' && !flagged) return true;
+
+    // Fail closed: when the status is unknown, skip the model call rather than
+    // pay for a review that may not be persistable.
+    const reason: Error = checkError
+      ? new Error(`Could not check the run status before starting: ${checkError.message}`)
+      : flagged || status === 'cancelled'
+        ? new RunCancelledError()
+        : new RunNotRunningError(status ?? null);
+    logger?.info(
+      { runId, agent: agent.name, status: status ?? null, reason: reason.message },
+      `review: agent "${agent.name}" not started`,
+    );
+    const runLog = parentLog.forRun(runId, { agent: agent.name });
+    await this.reconcileTerminal(runId, pull, agent, runLog, reason, 0);
+    this.container.runBus.complete(runId);
+    return false;
   }
 
   /**

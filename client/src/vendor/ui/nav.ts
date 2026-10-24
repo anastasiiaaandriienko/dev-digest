@@ -38,6 +38,16 @@ export const NAV: NavGroup[] = [
       { key: "eval", label: "Eval Dashboard", icon: "Gauge", href: "/eval" },
     ],
   },
+  {
+    // L07: cross-feature pages — Multi-Agent Review and the CI Runs history.
+    section: "GLOBAL",
+    items: [
+      // Repo-scoped: Configure run lists the active repo's PRs.
+      { key: "multi-agent", label: "Multi-Agent Review", icon: "Users", href: "/repos/:repoId/multi-agent" },
+      // Workspace-wide: runs ingested from exported GitHub Actions workflows.
+      { key: "ci-runs", label: "CI Runs", icon: "Workflow", href: "/ci-runs" },
+    ],
+  },
 ];
 
 export const SETTINGS_ITEM: NavItemDef = {

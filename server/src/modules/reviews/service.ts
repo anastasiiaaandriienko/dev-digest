@@ -2,9 +2,11 @@ import type { Container } from '../../platform/container.js';
 import type { FindingActionKind, RunEventKind, RunTrace, SmartDiff } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
-import { ReviewRepository } from './repository.js';
+import { ReviewRepository, type PullRow } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
+import { MultiRunRepository } from './multi-run/repository.js';
+import { isAgentId } from './multi-run/helpers.js';
 import { IntentService } from './intent/service.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
@@ -14,6 +16,16 @@ import { buildSmartDiff } from './smart-diff.js';
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
 export { findingRowToDto, reviewToDto } from './helpers.js';
 export type { ReviewDto, ReviewDtoFinding } from './helpers.js';
+
+/** One queued agent run handed to the executor. */
+type RunJob = { agent: AgentRow; runId: string };
+/** `runs[]` entry of POST /pulls/:id/review (ReviewRunTarget). */
+type RunTargetDto = { run_id: string; agent_id: string; agent_name: string };
+const toRunTarget = ({ agent, runId }: RunJob): RunTargetDto => ({
+  run_id: runId,
+  agent_id: agent.id,
+  agent_name: agent.name,
+});
 
 /**
  * Review service (the core). Orchestrates:
@@ -29,11 +41,13 @@ export type { ReviewDto, ReviewDtoFinding } from './helpers.js';
  */
 export class ReviewService {
   private repo: ReviewRepository;
+  private multiRuns: MultiRunRepository;
   private agents: Container['agentsRepo'];
   private executor: ReviewRunExecutor;
 
   constructor(private container: Container) {
     this.repo = new ReviewRepository(container.db);
+    this.multiRuns = new MultiRunRepository(container.db);
     this.agents = container.agentsRepo;
     this.executor = new ReviewRunExecutor(container, this.repo, this.agents, new IntentService(container), container.contextStore ?? undefined);
   }
@@ -73,8 +87,17 @@ export class ReviewService {
     return this.repo.listRunsForPull(workspaceId, prId);
   }
 
-  /** Delete one run from the history (+ its trace). */
+  /**
+   * Delete one run from the history (+ its trace). A CI run (`source='ci'`) is
+   * refused with 409 BEFORE any delete (AC-MAR-59): GitHub is its source of
+   * truth, and deleting it would cascade to `ci_runs` so the next sync would
+   * re-ingest it. The check is workspace-scoped, so a foreign run reads as
+   * missing and gets the usual `false` (→ `{ ok: false }`), never the 409.
+   */
   async deleteRun(workspaceId: string, runId: string): Promise<boolean> {
+    if ((await this.repo.getRunSource(workspaceId, runId)) === 'ci') {
+      throw new AppError('ci_run_not_deletable', 'CI runs cannot be deleted from the studio', 409);
+    }
     return this.repo.deleteAgentRun(workspaceId, runId);
   }
 
@@ -83,12 +106,20 @@ export class ReviewService {
    * checkpoint AND marks the DB row cancelled + completes the bus immediately —
    * so cancel also works for ORPHANED runs (whose background process died on a
    * server restart) where signalling alone would do nothing.
+   *
+   * Only a local run of the caller's workspace is touched. A run of another
+   * workspace reads as missing (same workspace-scoped lookup as `deleteRun`), and
+   * a CI run (`source='ci'`, ingested as done/failed) has nothing to cancel: all
+   * three get `false` (→ `{ ok: false }`) with no event, bus flag or DB write.
+   * Siblings of a multi-agent run are separate runs and are never touched.
    */
-  async cancelRun(runId: string): Promise<void> {
+  async cancelRun(workspaceId: string, runId: string): Promise<boolean> {
+    if ((await this.repo.getRunSource(workspaceId, runId)) !== 'local') return false;
     this.publish(runId, 'info', 'Cancellation requested — stopping…');
     this.container.runBus.cancel(runId);
     await this.repo.cancelRunIfRunning(runId);
     this.container.runBus.complete(runId);
+    return true;
   }
 
   /** Reap runs left 'running' by a previous (now-dead) process. Called on boot. */
@@ -107,17 +138,13 @@ export class ReviewService {
     prId: string,
     targets: AgentRow[],
     logger?: Logger,
-  ): Promise<{ runs: { run_id: string; agent_id: string; agent_name: string }[]; reviews: ReviewDto[] }> {
-    const pull = await this.repo.getPull(workspaceId, prId);
-    if (!pull) throw new NotFoundError('Pull request not found');
-    const repo = await this.repo.getRepo(pull.repoId);
-    if (!repo) throw new NotFoundError('Repo not found');
+  ): Promise<{ runs: RunTargetDto[]; reviews: ReviewDto[] }> {
+    const { pull, repo } = await this.loadPullAndRepo(workspaceId, prId);
 
     // Create the agent_run rows up front so a runId is available IMMEDIATELY —
     // the client persists these in global state and subscribes to the SSE
     // stream. The actual (slow) review runs in the background below.
-    const runs: { run_id: string; agent_id: string; agent_name: string }[] = [];
-    const jobs: { agent: AgentRow; runId: string }[] = [];
+    const jobs: RunJob[] = [];
     for (const agent of targets) {
       const runId = await this.repo.createAgentRun({
         workspaceId,
@@ -126,17 +153,70 @@ export class ReviewService {
         provider: agent.provider,
         model: agent.model,
       });
-      runs.push({ run_id: runId, agent_id: agent.id, agent_name: agent.name });
       jobs.push({ agent, runId });
     }
 
-    // Fire-and-forget: the HTTP response returns now with the runIds; reviews
-    // are persisted as each agent finishes and the client refetches on SSE done.
-    void this.executor.executeRuns(workspaceId, pull, repo, jobs, logger).catch((err) => {
-      logger?.error({ prId, err: (err as Error).message }, 'review: background execution crashed');
-    });
+    this.launch(workspaceId, pull, repo, jobs, logger);
+    return { runs: jobs.map(toRunTarget), reviews: [] };
+  }
 
-    return { runs, reviews: [] };
+  /**
+   * L07 multi-agent run (AC-MAR-01/02/53): validate every agent and the PR
+   * BEFORE any write, then create the `multi_agent_runs` parent and one child
+   * run per agent (list order) in ONE transaction, and only after it commits
+   * start the same background execution as `runReview`. `agentIds` comes from
+   * `normalizeAgentIds` (distinct, 1..8, list order kept).
+   */
+  async runMultiAgentReview(
+    workspaceId: string,
+    prId: string,
+    agentIds: readonly string[],
+    logger?: Logger,
+  ): Promise<{ multiAgentRunId: string; runs: RunTargetDto[]; reviews: ReviewDto[] }> {
+    const targets: AgentRow[] = [];
+    for (const id of agentIds) {
+      const agent = isAgentId(id) ? await this.agents.getById(workspaceId, id) : undefined;
+      if (!agent) throw new NotFoundError('Agent not found');
+      targets.push(agent);
+    }
+    const { pull, repo } = await this.loadPullAndRepo(workspaceId, prId);
+
+    // Atomic: the parent and every child, or nothing (rollback on any error).
+    const { multiAgentRunId, runIds } = await this.multiRuns.createMultiRun({
+      workspaceId,
+      prId,
+      agents: targets,
+    });
+    const jobs = targets.map((agent, i) => ({ agent, runId: runIds[i]! }));
+
+    // Committed — only now hand the runs to the executor.
+    this.launch(workspaceId, pull, repo, jobs, logger);
+    return { multiAgentRunId, runs: jobs.map(toRunTarget), reviews: [] };
+  }
+
+  /** The PR (workspace-scoped) and its repo, or 404. */
+  private async loadPullAndRepo(workspaceId: string, prId: string) {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repo = await this.repo.getRepo(pull.repoId);
+    if (!repo) throw new NotFoundError('Repo not found');
+    return { pull, repo };
+  }
+
+  /**
+   * Fire-and-forget: the HTTP response returns now with the runIds; reviews
+   * are persisted as each agent finishes and the client refetches on SSE done.
+   */
+  private launch(
+    workspaceId: string,
+    pull: PullRow,
+    repo: NonNullable<Awaited<ReturnType<ReviewRepository['getRepo']>>>,
+    jobs: RunJob[],
+    logger?: Logger,
+  ): void {
+    void this.executor.executeRuns(workspaceId, pull, repo, jobs, logger).catch((err) => {
+      logger?.error({ prId: pull.id, err: (err as Error).message }, 'review: background execution crashed');
+    });
   }
 
   private publish(runId: string, kind: RunEventKind, msg: string, data?: unknown) {

@@ -40,8 +40,10 @@ export async function activeRunsForPull(
   }));
 }
 
-/** All runs for a PR (any status), newest first — the PR run history. Cost is
- *  extracted from each run's trace in the same query (LEFT JOIN, no N+1). */
+/** All local runs for a PR (any status), newest first — the PR run history. Cost is
+ *  extracted from each run's trace in the same query (LEFT JOIN, no N+1).
+ *  Ingested CI runs (source='ci') may carry the PR's id but belong to /ci-runs,
+ *  not to this history (specs/export-to-ci.md §6.4). */
 export async function listRunsForPull(
   db: Db,
   workspaceId: string,
@@ -52,7 +54,13 @@ export async function listRunsForPull(
     .from(t.agentRuns)
     .leftJoin(t.agents, eq(t.agents.id, t.agentRuns.agentId))
     .leftJoin(t.runTraces, eq(t.runTraces.runId, t.agentRuns.id))
-    .where(and(eq(t.agentRuns.workspaceId, workspaceId), eq(t.agentRuns.prId, prId)))
+    .where(
+      and(
+        eq(t.agentRuns.workspaceId, workspaceId),
+        eq(t.agentRuns.prId, prId),
+        eq(t.agentRuns.source, 'local'),
+      ),
+    )
     .orderBy(desc(t.agentRuns.ranAt));
   return rows.map(({ run, agentName, costUsd }) => ({
     run_id: run.id,
@@ -73,6 +81,28 @@ export async function listRunsForPull(
     // null = unknown (no trace yet, old trace without the key, or unknown cost).
     cost_usd: toCostUsd(costUsd),
   }));
+}
+
+/**
+ * `source` of a run in the caller's workspace — the delete guard's input
+ * (AC-MAR-59). Read-only. A run of another workspace reads as missing, so the
+ * guard can never reveal that it exists. Exposed for `.toSQL()` checks.
+ */
+export function runSourceQuery(db: Db, workspaceId: string, runId: string) {
+  return db
+    .select({ source: t.agentRuns.source })
+    .from(t.agentRuns)
+    .where(and(eq(t.agentRuns.id, runId), eq(t.agentRuns.workspaceId, workspaceId)))
+    .limit(1);
+}
+
+export async function getRunSource(
+  db: Db,
+  workspaceId: string,
+  runId: string,
+): Promise<'local' | 'ci' | undefined> {
+  const [row] = await runSourceQuery(db, workspaceId, runId);
+  return row?.source;
 }
 
 /**

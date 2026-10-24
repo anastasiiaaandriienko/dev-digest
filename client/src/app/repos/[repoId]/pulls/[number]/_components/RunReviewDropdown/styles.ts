@@ -1,6 +1,52 @@
 import type { CSSProperties } from "react";
+import { AGENT_LIST_MAX_HEIGHT, DROPDOWN_WIDTH } from "./constants";
 
-/** Co-located styles for RunReviewDropdown. This component renders only library
-   primitives (Button/Dropdown) and has no inline styles; the map is kept for
-   convention parity and future use. */
-export const s = {} satisfies Record<string, CSSProperties>;
+/** Co-located styles for RunReviewDropdown (the multi-agent picker popover). */
+export const s = {
+  root: { position: "relative", display: "inline-block" },
+  panel: {
+    position: "absolute",
+    top: "calc(100% + 6px)",
+    right: 0,
+    width: DROPDOWN_WIDTH,
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border-strong)",
+    borderRadius: 9,
+    boxShadow: "var(--shadow-modal)",
+    padding: 10,
+    zIndex: 40,
+    animation: "ddpop .12s ease",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 2px" },
+  heading: { fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-muted)" },
+  clear: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 12,
+    color: "var(--accent-text)",
+    cursor: "pointer",
+  },
+  list: { display: "flex", flexDirection: "column", gap: 2, maxHeight: AGENT_LIST_MAX_HEIGHT, overflowY: "auto" },
+  row: { padding: "6px 4px", borderRadius: 6 },
+  rowMuted: { padding: "6px 4px", borderRadius: 6, opacity: 0.5 },
+  agentLabel: { display: "flex", flexDirection: "column", minWidth: 0 },
+  agentName: { fontSize: 13, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  agentHint: { fontSize: 11, color: "var(--text-muted)" },
+  note: { fontSize: 11, color: "var(--text-muted)", padding: "0 2px" },
+  warning: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--warn)", padding: "0 2px" },
+  empty: { fontSize: 13, color: "var(--text-muted)", padding: "6px 2px", display: "flex", flexDirection: "column", gap: 6 },
+  divider: { height: 1, background: "var(--border)", margin: "2px 0" },
+  link: {
+    background: "none",
+    border: "none",
+    padding: "2px",
+    fontSize: 12,
+    color: "var(--text-secondary)",
+    cursor: "pointer",
+    textAlign: "left",
+  },
+} satisfies Record<string, CSSProperties>;

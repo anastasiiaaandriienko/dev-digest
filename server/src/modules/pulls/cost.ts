@@ -23,9 +23,11 @@ export function toPrCost(row: { costUsd: unknown; doneRuns: number; pricedRuns: 
 }
 
 /**
- * Spend per PR over its SUCCESSFUL runs (every agent, every run in history).
- * Failed, cancelled, reaped and running runs are excluded. One grouped query
- * over all `prIds`, next to the list's latest-score query.
+ * Spend per PR over its SUCCESSFUL local runs (every agent, every run in history).
+ * Failed, cancelled, reaped and running runs are excluded, and so are ingested
+ * CI runs (source='ci'): their spend is reported on /ci-runs, not here
+ * (specs/export-to-ci.md §6.4). One grouped query over all `prIds`, next to the
+ * list's latest-score query.
  */
 export async function costByPullRequest(
   db: Db,
@@ -49,6 +51,7 @@ export async function costByPullRequest(
         eq(t.agentRuns.workspaceId, workspaceId),
         inArray(t.agentRuns.prId, prIds),
         eq(t.agentRuns.status, 'done'),
+        eq(t.agentRuns.source, 'local'),
       ),
     )
     .groupBy(t.agentRuns.prId);

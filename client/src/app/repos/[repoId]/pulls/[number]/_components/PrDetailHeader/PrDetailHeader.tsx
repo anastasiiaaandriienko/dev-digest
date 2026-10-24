@@ -1,13 +1,18 @@
 "use client";
 
 import React, { useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, Button, Tabs } from "@devdigest/ui";
 import { RunReviewDropdown } from "../RunReviewDropdown";
+import { useMultiAgentRun } from "@/lib/hooks/multi-agent";
+import { multiAgentResultsHref } from "@/lib/multi-agent";
 import { s } from "./styles";
 import type { PrDetail } from "@/lib/types";
 
 interface PrDetailHeaderProps {
   pr: PrDetail;
+  repoId: string;
   prId: string | null;
   tab: string;
   findingsCount: number;
@@ -20,6 +25,7 @@ interface PrDetailHeaderProps {
 
 export function PrDetailHeader({
   pr,
+  repoId,
   prId,
   tab,
   findingsCount,
@@ -28,6 +34,12 @@ export function PrDetailHeader({
   onRunStart,
   onRunsStarted,
 }: PrDetailHeaderProps) {
+  const t = useTranslations("multiAgent");
+  const router = useRouter();
+  // L07 AC-MAR-27: link to the latest multi-run's Results page, only when one exists.
+  const { data: multiAgent } = useMultiAgentRun(prId);
+  const hasMultiRun = !!multiAgent?.multi_run;
+
   const handleRunStart = useCallback(() => {
     onRunStart();
   }, [onRunStart]);
@@ -89,9 +101,21 @@ export function PrDetailHeader({
           >
             View on GitHub
           </Button>
+          {hasMultiRun && (
+            <Button
+              kind="ghost"
+              size="sm"
+              icon="Users"
+              onClick={() => router.push(multiAgentResultsHref(repoId, pr.number))}
+            >
+              {t("picker.latestRun")}
+            </Button>
+          )}
           {prId && (
             <RunReviewDropdown
               prId={prId}
+              repoId={repoId}
+              prNumber={pr.number}
               warnMerged={pr.status === "merged" || pr.status === "closed"}
               onRunStart={handleRunStart}
               onRunsStarted={handleRunsStarted}

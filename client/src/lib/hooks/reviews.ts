@@ -73,6 +73,8 @@ export function useDeleteRun(prId: string | null | undefined, repoId?: string | 
       qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
       qc.invalidateQueries({ queryKey: pullsKey(repoId) });
+      // L07: a deleted child run drops out of the multi-agent results (AC-MAR-57).
+      qc.invalidateQueries({ queryKey: ["multi-agent", prId] });
     },
   });
 }
@@ -277,6 +279,8 @@ export function useFindingAction() {
     },
     onSettled: (_d, _e, { prId }) => {
       if (prId) qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      // L07: the multi-agent results carry the same findings (AC-MAR-38).
+      if (prId) qc.invalidateQueries({ queryKey: ["multi-agent", prId] });
     },
   });
 }

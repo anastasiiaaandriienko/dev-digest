@@ -389,9 +389,14 @@ export const ContextUsage = z.object({ repo_id: z.string(), items: z.array(Conte
 export type ContextUsage = z.infer<typeof ContextUsage>;
 
 // ---- Run request (review trigger; owned by A2, contract lives here) ----
+// Exactly one of `agentId` | `all` | `agentIds` per request. `agentIds` (L07
+// multi-agent run: 1..8 distinct ids, duplicates dropped keeping the first)
+// is checked by the service, so a bad list is a 400 `invalid_run_request`,
+// not a schema 422.
 export const RunRequest = z.object({
   agentId: z.string().optional(),
   all: z.boolean().optional(),
+  agentIds: z.array(z.string()).optional(),
 });
 export type RunRequest = z.infer<typeof RunRequest>;
 

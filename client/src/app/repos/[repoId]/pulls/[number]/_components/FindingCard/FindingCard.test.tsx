@@ -156,3 +156,15 @@ describe("FindingCard — Turn into eval case (L06)", () => {
     expect(reject()).toBeDisabled();
   });
 });
+
+describe("FindingCard — extra actions slot (L07)", () => {
+  it("renders extra controls in the action row and nothing extra by default", () => {
+    const { unmount } = renderWithIntl(
+      <FindingCard f={FINDING} defaultExpanded onAction={() => {}} extraActions={<button type="button">Learn</button>} />,
+    );
+    expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
+    unmount();
+    renderWithIntl(<FindingCard f={FINDING} defaultExpanded onAction={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Learn" })).not.toBeInTheDocument();
+  });
+});

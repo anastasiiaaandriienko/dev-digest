@@ -2,6 +2,10 @@ import 'dotenv/config';
 import { z } from 'zod';
 import { homedir } from 'node:os';
 import { join, isAbsolute, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** Repository root, from this file's location (server/src/platform) — not process.cwd(). */
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 /**
  * Central, zod-validated environment config. Loaded once at startup.
@@ -29,6 +33,8 @@ const EnvSchema = z.object({
   API_PORT: z.coerce.number().int().default(3001),
   WEB_PORT: z.coerce.number().int().default(3000),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
+  // Export to CI (L07, TA1): the built agent-runner bundle copied into exports.
+  DEVDIGEST_RUNNER_BUNDLE: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   // `.env` (and .env.example) ship `LOG_LEVEL=` empty; an empty string is not a
   // valid enum member, so coerce '' → undefined to fall through to the default.
@@ -59,6 +65,12 @@ export type AppConfig = {
    * EXACTLY like the ripgrep-only baseline.
    */
   repoIntelEnabled: boolean;
+  /**
+   * Absolute path of the built runner bundle for Export to CI. DEVDIGEST_RUNNER_BUNDLE
+   * (absolute, or relative to the working directory like DEVDIGEST_CLONE_DIR);
+   * default `<repo root>/agent-runner/dist/index.js`, independent of the cwd.
+   */
+  ciRunnerBundlePath: string;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -66,6 +78,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const cloneDirRaw =
     parsed.DEVDIGEST_CLONE_DIR ?? join(homedir(), '.devdigest', 'workspace');
   const cloneDir = isAbsolute(cloneDirRaw) ? cloneDirRaw : resolve(process.cwd(), cloneDirRaw);
+  const bundleRaw = parsed.DEVDIGEST_RUNNER_BUNDLE;
+  const ciRunnerBundlePath = bundleRaw
+    ? isAbsolute(bundleRaw)
+      ? bundleRaw
+      : resolve(process.cwd(), bundleRaw)
+    : resolve(REPO_ROOT, 'agent-runner', 'dist', 'index.js');
   return {
     databaseUrl: parsed.DATABASE_URL,
     apiPort: parsed.API_PORT,
@@ -77,5 +95,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webOrigin: `http://localhost:${parsed.WEB_PORT}`,
     embeddingsEnabled: parsed.EMBEDDINGS_ENABLED === 'true',
     repoIntelEnabled: parsed.REPO_INTEL_ENABLED !== 'false',
+    ciRunnerBundlePath,
   };
 }

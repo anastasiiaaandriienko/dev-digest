@@ -1,0 +1,41 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for ConfigureRun. */
+export const s = {
+  page: { maxWidth: 760, margin: "0 auto", padding: "32px 32px 48px", display: "flex", flexDirection: "column", gap: 22 },
+  title: { fontSize: 22, fontWeight: 700, margin: 0, color: "var(--text-primary)" },
+  subtitle: { fontSize: 14, color: "var(--text-muted)", margin: "6px 0 0" },
+  step: { display: "flex", flexDirection: "column", gap: 10 },
+  stepHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  stepLabel: { display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" },
+  stepNum: {
+    width: 20,
+    height: 20,
+    borderRadius: 99,
+    display: "grid",
+    placeItems: "center",
+    fontSize: 11,
+    fontWeight: 700,
+    background: "var(--bg-elevated)",
+    color: "var(--text-secondary)",
+  },
+  selectWrap: { maxWidth: 420 },
+  notice: { fontSize: 12, color: "var(--warn)" },
+  placeholder: {
+    border: "1px dashed var(--border-strong)",
+    borderRadius: 9,
+    padding: "28px 20px",
+    textAlign: "center",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 6,
+  },
+  placeholderTitle: { fontSize: 14, fontWeight: 600, color: "var(--text-primary)" },
+  placeholderBody: { fontSize: 13, color: "var(--text-muted)" },
+  selectAll: { background: "none", border: "none", padding: 0, fontSize: 13, color: "var(--accent-text)", cursor: "pointer" },
+  cards: { display: "flex", flexDirection: "column", gap: 8 },
+  footer: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
+  total: { fontSize: 13, color: "var(--text-muted)" },
+  note: { fontSize: 12, color: "var(--text-muted)" },
+} satisfies Record<string, CSSProperties>;

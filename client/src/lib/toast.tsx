@@ -6,17 +6,35 @@
 import React from "react";
 
 type ToastKind = "success" | "error" | "info";
+/** An optional link in a toast, opened in a new tab (e.g. the PR an export just opened). */
+export interface ToastLink {
+  href: string;
+  label: string;
+}
+export interface ToastOptions {
+  link?: ToastLink;
+}
 interface Toast {
   id: number;
   kind: ToastKind;
   message: string;
+  link?: ToastLink;
+}
+
+/** Plain toasts auto-dismiss after 4 s; a toast with a link stays 8 s so it can be clicked. */
+export const TOAST_MS = 4000;
+export const LINK_TOAST_MS = 8000;
+
+/** Only http(s) links are rendered: never `javascript:`, `data:` or a relative URL. */
+function safeLink(link: ToastLink | undefined): ToastLink | undefined {
+  return link && /^https?:\/\//i.test(link.href) ? link : undefined;
 }
 
 interface ToastApi {
-  toast: (message: string, kind?: ToastKind) => void;
-  success: (m: string) => void;
-  error: (m: string) => void;
-  info: (m: string) => void;
+  toast: (message: string, kind?: ToastKind, opts?: ToastOptions) => void;
+  success: (m: string, opts?: ToastOptions) => void;
+  error: (m: string, opts?: ToastOptions) => void;
+  info: (m: string, opts?: ToastOptions) => void;
 }
 
 const ToastCtx = React.createContext<ToastApi | null>(null);
@@ -29,13 +47,13 @@ export function useToast(): ToastApi {
 
 /* Module-level bridge so non-React code (e.g. the React Query cache) can raise
    toasts without the hook. The mounted <ToastProvider> registers its pusher. */
-type Pusher = (message: string, kind?: ToastKind) => void;
+type Pusher = (message: string, kind?: ToastKind, opts?: ToastOptions) => void;
 let activePusher: Pusher | null = null;
 export const notify = {
-  toast: (m: string, k?: ToastKind) => activePusher?.(m, k),
-  success: (m: string) => activePusher?.(m, "success"),
-  error: (m: string) => activePusher?.(m, "error"),
-  info: (m: string) => activePusher?.(m, "info"),
+  toast: (m: string, k?: ToastKind, o?: ToastOptions) => activePusher?.(m, k, o),
+  success: (m: string, o?: ToastOptions) => activePusher?.(m, "success", o),
+  error: (m: string, o?: ToastOptions) => activePusher?.(m, "error", o),
+  info: (m: string, o?: ToastOptions) => activePusher?.(m, "info", o),
 };
 
 const COLORS: Record<ToastKind, { bg: string; border: string; icon: string }> = {
@@ -48,19 +66,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = React.useState<Toast[]>([]);
   const seq = React.useRef(1);
 
-  const push = React.useCallback((message: string, kind: ToastKind = "info") => {
+  const push = React.useCallback((message: string, kind: ToastKind = "info", opts?: ToastOptions) => {
     const id = seq.current++;
-    setItems((prev) => [...prev, { id, kind, message }]);
-    // auto-dismiss after 4s
-    setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), 4000);
+    const link = safeLink(opts?.link);
+    setItems((prev) => [...prev, { id, kind, message, link }]);
+    setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), link ? LINK_TOAST_MS : TOAST_MS);
   }, []);
 
   const api = React.useMemo<ToastApi>(
     () => ({
       toast: push,
-      success: (m) => push(m, "success"),
-      error: (m) => push(m, "error"),
-      info: (m) => push(m, "info"),
+      success: (m, o) => push(m, "success", o),
+      error: (m, o) => push(m, "error", o),
+      info: (m, o) => push(m, "info", o),
     }),
     [push],
   );
@@ -110,7 +128,22 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               }}
             >
               <span style={{ color: c.border, fontWeight: 700 }}>{c.icon}</span>
-              <span style={{ flex: 1 }}>{t.message}</span>
+              <span style={{ flex: 1 }}>
+                {t.message}
+                {t.link && (
+                  <>
+                    {" "}
+                    <a
+                      href={t.link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "var(--accent-text)", fontWeight: 600, textDecoration: "underline" }}
+                    >
+                      {t.link.label}
+                    </a>
+                  </>
+                )}
+              </span>
               <button
                 onClick={() => setItems((prev) => prev.filter((x) => x.id !== t.id))}
                 style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 16 }}
